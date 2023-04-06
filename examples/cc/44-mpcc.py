@@ -5,7 +5,6 @@
 import numpy as np
 from pyscf import gto, scf, mp, cc
 
-
 def get_t_int(t2, eps = 0.9):
 
     max_val = np.max(np.abs(t2))
@@ -13,16 +12,14 @@ def get_t_int(t2, eps = 0.9):
     idx = np.asarray(idx)
     return [idx[:,i] for i in range(len(idx[0,:]))]
 
-def ex_h2(basis):
+def ex(basis):
     
     
     mol = gto.M()
     mol.basis = basis
-    mol.atom  = [['H', [0,0,0]] , ['H', [1,0,0]]]
-    mol.unit  = 'bohr'
+    mol.atom  = [['N', [0,0,0]] , ['N', [1.098,0,0]]]
     mol.verbose = 3
     mol.build()
-
 
     mf = mol.RHF().run()
     mymp = mp.MP2(mf).run()
@@ -34,5 +31,4 @@ if __name__ == "__main__":
 
 
     # Run example H2
-    ex_h2('ccpvtz')
-
+    ex('631g')
