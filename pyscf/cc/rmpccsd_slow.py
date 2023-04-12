@@ -38,35 +38,43 @@ einsum = lib.einsum
 
 def get_index_tuples(act_hole, act_particle, nocc, nvir):
 
-    inact_part = np.delete(np.arange(nocc), act_particle)
-    inact_hole = np.delete(np.arange(nvirt), act_hole)
+    print(np.arange(nocc))
+    print(act_hole)
+    print(np.delete(np.arange(nvir), act_particle))
+    print(np.arange(nvir))
+    print(act_particle)    
+    print(np.delete(np.arange(nocc), act_hole))
+    
+
+    inact_particle = np.delete(np.arange(nvir), act_particle)
+    inact_hole = np.delete(np.arange(nocc), act_hole)
 
     singles = []
-    singles.append(np.ix_(inact_particle, act_hole))
-    singles.append(np.ix_(act_particle, inact_hole))
-    singles.append(np.ix_(inact_particle, inact_hole))
-    singles.append(np.ix_(act_particle, act_hole))
+    singles.append(np.ix_(act_hole, inact_particle))
+    singles.append(np.ix_(inact_hole, act_particle))
+    singles.append(np.ix_(inact_hole, inact_particle))
+    singles.append(np.ix_(act_hole, act_particle))
     
     doubles = []
-    doubles.append(np.ix_(inact_particle, act_particle, act_hole, act_hole))
-    doubles.append(np.ix_(inact_particle, act_particle, inact_hole, act_hole))
-    doubles.append(np.ix_(inact_particle, act_particle, act_hole, inact_hole))
-    doubles.append(np.ix_(inact_particle, act_particle, inact_hole, inact_hole))
+    doubles.append(np.ix_(act_hole, act_hole, inact_particle, act_particle))
+    doubles.append(np.ix_(inact_hole, act_hole, inact_particle, act_particle))
+    doubles.append(np.ix_(act_hole, inact_hole, inact_particle, act_particle))
+    doubles.append(np.ix_(inact_hole, inact_hole, inact_particle, act_particle))
     
-    doubles.append(np.ix_(act_particle, inact_particle, act_hole, act_hole))
-    doubles.append(np.ix_(act_particle, inact_particle, inact_hole, act_hole))
-    doubles.append(np.ix_(act_particle, inact_particle, act_hole, inact_hole))
-    doubles.append(np.ix_(act_particle, inact_particle, inact_hole, inact_hole))
+    doubles.append(np.ix_(act_hole, act_hole, act_particle, inact_particle))
+    doubles.append(np.ix_(inact_hole, act_hole, act_particle, inact_particle))
+    doubles.append(np.ix_(act_hole, inact_hole, act_particle, inact_particle))
+    doubles.append(np.ix_(inact_hole, inact_hole, act_particle, inact_particle))
     
-    doubles.append(np.ix_(inact_particle, inact_particle, act_hole, act_hole))
-    doubles.append(np.ix_(inact_particle, inact_particle, inact_hole, act_hole))
-    doubles.append(np.ix_(inact_particle, inact_particle, act_hole, inact_hole))
-    doubles.append(np.ix_(inact_particle, inact_particle, inact_hole, inact_hole))
+    doubles.append(np.ix_(act_hole, act_hole, inact_particle, inact_particle))
+    doubles.append(np.ix_(inact_hole, act_hole, inact_particle, inact_particle))
+    doubles.append(np.ix_(act_hole, inact_hole, inact_particle, inact_particle))
+    doubles.append(np.ix_(inact_hole, inact_hole, inact_particle, inact_particle))
  
-    doubles.append(np.ix_(act_particle, act_particle, inact_hole, act_hole))
-    doubles.append(np.ix_(act_particle, act_particle, act_hole, inact_hole))
-    doubles.append(np.ix_(act_particle, act_particle, inact_hole, inact_hole))
-    doubles.append(np.ix_(act_particle, act_particle, act_hole, act_hole))
+    doubles.append(np.ix_(inact_hole, act_hole, act_particle, act_particle))
+    doubles.append(np.ix_(act_hole, inact_hole, act_particle, act_particle))
+    doubles.append(np.ix_(inact_hole, inact_hole, act_particle, act_particle))
+    doubles.append(np.ix_(act_hole, act_hole, act_particle, act_particle))
 
     return singles, doubles
 
@@ -170,10 +178,12 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle):
     t2new /= eijab
 
     # overwriting amplitudes
-    for s in idx_s[:-1]:
-        t1new[s] = t1[s]
-    for d in idx_d[:-1]:
-        t2new[d] = t2[d]  
+    idx_s_update = [2]
+    idx_d_update = [1,2,3,5,6,7,8,9,10,11,14]
+    for s in idx_s_update:
+        t1new[idx_s[s]] = t1[idx_s[s]]
+    for d in idx_d_update:
+        t2new[idx_d[d]] = t2[idx_d[d]]  
 
     return t1new, t2new
 
@@ -190,7 +200,7 @@ def energy(cc, t1, t2, eris):
     return e.real
 
 
-class RCCSD(ccsd.CCSD):
+class RMPCCSD(ccsd.CCSD):
 
     def __init__(self, mf, frozen=None, mo_coeff=None, mo_occ=None):
         ccsd.CCSD.__init__(self, mf, frozen, mo_coeff, mo_occ)
@@ -214,9 +224,9 @@ class RCCSD(ccsd.CCSD):
         return self.emp2, t1, t2
 
 
-    def kernel(self, act_particle, act_hole, t1=None, t2=None, eris=None, mbpt2=False, cc2=False):
-        return self.ccsd(act_particle, act_hole, t1, t2, eris, mbpt2, cc2)
-    def ccsd(self, act_particle, act_hole, t1=None, t2=None, eris=None, mbpt2=False, cc2=False):
+    def kernel(self, act_hole, act_particle, t1=None, t2=None, eris=None, mbpt2=False, cc2=False):
+        return self.ccsd(act_hole, act_particle, t1, t2, eris, mbpt2, cc2)
+    def ccsd(self, act_hole, act_particle, t1=None, t2=None, eris=None, mbpt2=False, cc2=False):
         '''Ground-state CCSD.
 
         Kwargs:
@@ -245,8 +255,8 @@ class RCCSD(ccsd.CCSD):
                     ccsd.kernel(self, eris, t1, t2, max_cycle=self.max_cycle,
                                 tol=self.conv_tol, tolnormt=self.conv_tol_normt,
                                 verbose=self.verbose, callback=None,
-                                act_particle=act_particle, 
-                                act_hole=act_hole)
+                                act_hole=act_hole,
+                                act_particle=act_particle) 
             if self.converged:
                 logger.info(self, '%s converged', cctyp)
             else:

@@ -25,6 +25,11 @@ def ex(basis):
     mymp = mp.MP2(mf).run()
     
     t_int = get_t_int(mymp.t2)
+   
+    mycc = cc.rmpccsd_slow.RMPCCSD(mf)
+    act_hole = np.array([5, 6])
+    act_particle = np.array([0, 1])
+    res = mycc.kernel(act_hole , act_particle)
     breakpoint()
 
 if __name__ == "__main__":

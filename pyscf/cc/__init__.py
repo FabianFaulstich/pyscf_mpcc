@@ -76,6 +76,7 @@ from pyscf.cc import eom_uccsd
 from pyscf.cc import eom_gccsd
 from pyscf.cc import qcisd
 from pyscf import scf
+from pyscf.cc import rmpccsd_slow
 
 def CCSD(mf, frozen=None, mo_coeff=None, mo_occ=None):
     if isinstance(mf, scf.uhf.UHF):
