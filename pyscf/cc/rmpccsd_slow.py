@@ -38,14 +38,6 @@ einsum = lib.einsum
 
 def get_index_tuples(act_hole, act_particle, nocc, nvir):
 
-    print(np.arange(nocc))
-    print(act_hole)
-    print(np.delete(np.arange(nvir), act_particle))
-    print(np.arange(nvir))
-    print(act_particle)    
-    print(np.delete(np.arange(nocc), act_hole))
-    
-
     inact_particle = np.delete(np.arange(nvir), act_particle)
     inact_hole = np.delete(np.arange(nocc), act_hole)
 
@@ -78,7 +70,7 @@ def get_index_tuples(act_hole, act_particle, nocc, nvir):
 
     return singles, doubles
 
-def update_amps(cc, t1, t2, eris, act_hole, act_particle):
+def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles):
     # Ref: Hirata et al., J. Chem. Phys. 120, 2581 (2004) Eqs.(35)-(36)
     
 
@@ -178,8 +170,8 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle):
     t2new /= eijab
 
     # overwriting amplitudes
-    idx_s_update = [2]
-    idx_d_update = [1,2,3,5,6,7,8,9,10,11,14]
+    idx_s_update = idx_singles
+    idx_d_update = idx_doubles
     for s in idx_s_update:
         t1new[idx_s[s]] = t1[idx_s[s]]
     for d in idx_d_update:
@@ -224,9 +216,9 @@ class RMPCCSD(ccsd.CCSD):
         return self.emp2, t1, t2
 
 
-    def kernel(self, act_hole, act_particle, t1=None, t2=None, eris=None, mbpt2=False, cc2=False):
-        return self.ccsd(act_hole, act_particle, t1, t2, eris, mbpt2, cc2)
-    def ccsd(self, act_hole, act_particle, t1=None, t2=None, eris=None, mbpt2=False, cc2=False):
+    def kernel(self, act_hole, act_particle, idx_s, idx_d, t1=None, t2=None, eris=None, mbpt2=False, cc2=False):
+        return self.ccsd(act_hole, act_particle, idx_s, idx_d, t1, t2, eris, mbpt2, cc2)
+    def ccsd(self, act_hole, act_particle, idx_s, idx_d, t1=None, t2=None, eris=None, mbpt2=False, cc2=False):
         '''Ground-state CCSD.
 
         Kwargs:
@@ -255,8 +247,10 @@ class RMPCCSD(ccsd.CCSD):
                     ccsd.kernel(self, eris, t1, t2, max_cycle=self.max_cycle,
                                 tol=self.conv_tol, tolnormt=self.conv_tol_normt,
                                 verbose=self.verbose, callback=None,
-                                act_hole=act_hole,
-                                act_particle=act_particle) 
+                                act_hole = act_hole,
+                                act_particle = act_particle,
+                                idx_s = idx_s, 
+                                idx_d = idx_d) 
             if self.converged:
                 logger.info(self, '%s converged', cctyp)
             else:

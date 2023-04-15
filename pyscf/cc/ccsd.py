@@ -42,7 +42,7 @@ MEMORYMIN = getattr(__config__, 'cc_ccsd_memorymin', 2000)
 # t1: ia
 # t2: ijab
 def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
-           tolnormt=1e-6, verbose=None, callback=None, act_particle=None, act_hole=None):
+           tolnormt=1e-6, verbose=None, callback=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None):
     log = logger.new_logger(mycc, verbose)
     if eris is None:
         eris = mycc.ao2mo(mycc.mo_coeff)
@@ -67,7 +67,7 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
     conv = False
     for istep in range(max_cycle):
         if act_particle is not None:
-            t1new, t2new = mycc.update_amps(t1, t2, eris,  act_hole, act_particle)
+            t1new, t2new = mycc.update_amps(t1, t2, eris,  act_hole, act_particle, idx_s, idx_d)
         else:
             t1new, t2new = mycc.update_amps(t1, t2, eris)
         if callback is not None:
