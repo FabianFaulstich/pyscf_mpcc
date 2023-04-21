@@ -3,7 +3,9 @@
 '''
 
 import numpy as np
-from pyscf import gto, scf, mp, cc
+from pyscf import ao2mo, gto, scf, mp, cc, lo
+from pyscf.tools import ring
+import matplotlib.pyplot as plt
 
 def get_t_int(t2, eps = 0.9):
 
@@ -40,6 +42,62 @@ def ex(basis, bd, idx_s, idx_d):
 
     return mf.e_tot, mymp.e_corr, mycc_reg.e_corr,  mycc.e_corr
 
+
+def test_ring(N, bd, atom, basis, idx_s, idx_d):
+    
+    structure = ring.make(N, bd)
+    atom = [(atom +' %f %f %f' % xyz) for xyz in structure]
+    
+    mol = gto.M()
+    mol.basis = basis
+    mol.atom  = atom
+    mol.verbose = 3
+    mol.build()
+
+    mf = mol.RHF().run()
+    C = lo.orth_ao(mf, 'lowdin')    
+   
+    mymp = mp.MP2(mf)
+    lmo_coeff = C @ mf.mo_coeff @ C.T
+    eris = mymp.ao2mo(lmo_coeff)
+
+    print('Running iterative MP2:')
+    mymp.max_cycle = 200
+    lo_mp = mp.mp2._iterative_kernel(mymp, eris, verbose=5) 
+    
+    mymp = mp.MP2(mf).run()
+
+    mycc_reg = cc.CCSD(mf).run() 
+
+    nocc = mymp.t2.shape[0]
+    nvirt = mymp.t2.shape[-1]
+
+    mp_amp_oo_vv = mymp.t2.reshape((nocc**2, nvirt**2))
+    cc_amp_oo_vv = mycc_reg.t2.reshape((nocc**2, nvirt**2))
+
+    amp_diff = cc_amp_oo_vv - mp_amp_oo_vv
+
+    print(f"MP2 corr. energy          : {mymp.e_corr}")   
+    print(f"Localized MP2 corr. energy: {lo_mp[1]}")
+    print(f"CCSD corr. energy         : {mycc_reg.e_corr}")
+    breakpoint()  
+
+    #t_int = get_t_int(mymp.t2)
+   
+    mycc = cc.rmpccsd_slow.RMPCCSD(mf)
+    
+    # NOTE this is for H10
+    #act_hole = np.array([3, 4])
+    act_hole = np.array([1, 2, 3, 4])
+    #act_particle = np.array([0, 1])
+    act_particle = np.array([0, 1, 2, 3]) 
+
+    res = mycc.kernel(act_hole , act_particle, idx_s, idx_d, t1 = np.zeros((nocc, nocc)), t2 = lo_mp[2])
+    
+    print(f"MPCCSD corr. energy {mycc.e_corr}")
+
+    breakpoint()
+
 if __name__ == "__main__":
 
 
@@ -49,6 +107,13 @@ if __name__ == "__main__":
              [3,7,9,10,11],
              [11]
             ]
+
+    for elem_d in idx_d:
+            for elem_s in idx_s:
+                test_ring(10, 1.4, 'H', 'sto6g', elem_s, elem_d)    
+                print()
+
+    exit()
 
     bds = [1.098, 1.2, 1.3]
 

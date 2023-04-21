@@ -119,7 +119,7 @@ def energy(mp, t2, eris):
 
 def update_amps(mp, t2, eris):
     '''Update non-canonical MP2 amplitudes'''
-    #assert (isinstance(eris, _ChemistsERIs))
+    assert (isinstance(eris, _ChemistsERIs))
     nocc, nvir = t2.shape[1:3]
     fock = eris.fock
     mo_e_o = eris.mo_energy[:nocc]
