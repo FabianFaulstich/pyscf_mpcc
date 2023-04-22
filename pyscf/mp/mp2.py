@@ -77,12 +77,15 @@ def _iterative_kernel(mp, eris, verbose=None):
     log = logger.new_logger(mp, verbose)
 
     emp2, t2 = mp.init_amps(eris=eris)
+    t2 = 0 * t2
+    emp2 = 0
     log.info('Init E(MP2) = %.15g', emp2)
 
     adiis = lib.diis.DIIS(mp)
 
     conv = False
     for istep in range(mp.max_cycle):
+        print(numpy.linalg.norm(t2))
         t2new = mp.update_amps(t2, eris)
 
         if isinstance(t2new, numpy.ndarray):
@@ -657,11 +660,11 @@ class _ChemistsERIs:
             self.mo_energy = _mo_energy_without_core(mp, mp._scf.mo_energy)
             self.fock = numpy.diag(self.mo_energy)
         else:
-            dm = mp._scf.make_rdm1(mo_coeff, mp.mo_occ)
+            dm = mp._scf.make_rdm1(mp.mo_coeff, mp.mo_occ)
             vhf = mp._scf.get_veff(mp.mol, dm)
             fockao = mp._scf.get_fock(vhf=vhf, dm=dm)
             self.fock = self.mo_coeff.conj().T.dot(fockao).dot(self.mo_coeff)
-            self.mo_energy = self.fock.diagonal().real
+            self.mo_energy, _ = numpy.linalg.eigh(self.fock)
         return self
 
 def _make_eris(mp, mo_coeff=None, ao2mofn=None, verbose=None):

@@ -55,32 +55,70 @@ def test_ring(N, bd, atom, basis, idx_s, idx_d):
     mol.build()
 
     mf = mol.RHF().run()
-    C = lo.orth_ao(mf, 'lowdin')    
-   
-    mymp = mp.MP2(mf)
-    lmo_coeff = C @ mf.mo_coeff @ C.T
-    eris = mymp.ao2mo(lmo_coeff)
 
-    print('Running iterative MP2:')
-    mymp.max_cycle = 200
-    lo_mp = mp.mp2._iterative_kernel(mymp, eris, verbose=5) 
+    orbitals = mf.mo_coeff
+    pm = lo.PM(mol, orbitals, mf)
+    pm.pop_method = 'iao'  
+    C = pm.kernel()
     
+    # comparison objects
+    dm = mf.make_rdm1()
+    vhf = mf.get_veff(mol, dm)
+    fock_ao = mf.get_fock(vhf=vhf, dm=dm)
+    fock_lo = C.T @ fock_ao @ C
+    fock_mo = mf.mo_coeff.T @ fock_ao @ mf.mo_coeff
+ 
+    '''
+    # running localized computations
+    norb = mol.nao_nr() 
+    h1e0 = mol.intor("int1e_nuc_sph") + mol.intor("int1e_kin_sph")
+    eri0 = mol.intor("int2e_sph")
+ 
+    mf_lo = scf.RHF(mol)
+    h1e = C.T @ h1e0 @ C
+    eri = ao2mo.incore.full(eri0, C)
+    
+    mf_lo.get_hcore = lambda *args: h1e
+    mf_lo.get_ovlp = lambda *args: np.eye(norb)
+    mf_lo._eri = ao2mo.restore(8, eri, norb)
+    mf_lo.kernel()
+
+    dm_lo = mf_lo.make_rdm1()
+    vhf_lo = mf_lo.get_veff(mol, dm_lo)
+    fock_ao_lo = mf.get_fock(vhf=vhf_lo, dm=dm_lo)
+    fock_lo_lo = mf_lo.mo_coeff.T @ fock_ao_lo @ mf_lo.mo_coeff
+    '''
+
+    # Building MP2 objects for the _make_eris routine
+    mymp = mp.MP2(mf)
+    mymp.max_cycle = 200
+    
+    #Running local MP2 should be conceptually very easy!
+    eris = mp.mp2._make_eris(mymp, mo_coeff= C)
+    breakpoint()
+    lo_mp = mp.mp2._iterative_kernel(mymp, eris, verbose=5) 
+
+    # Running regular Mp2 and CCSD 
     mymp = mp.MP2(mf).run()
-
     mycc_reg = cc.CCSD(mf).run() 
-
-    nocc = mymp.t2.shape[0]
-    nvirt = mymp.t2.shape[-1]
-
-    mp_amp_oo_vv = mymp.t2.reshape((nocc**2, nvirt**2))
-    cc_amp_oo_vv = mycc_reg.t2.reshape((nocc**2, nvirt**2))
-
-    amp_diff = cc_amp_oo_vv - mp_amp_oo_vv
 
     print(f"MP2 corr. energy          : {mymp.e_corr}")   
     print(f"Localized MP2 corr. energy: {lo_mp[1]}")
     print(f"CCSD corr. energy         : {mycc_reg.e_corr}")
     breakpoint()  
+
+    # Visualizing T2
+    viz = False
+    if viz:
+        nocc = mymp.t2.shape[0]
+        nvirt = mymp.t2.shape[-1]
+
+        mp_amp_oo_vv = mymp.t2.reshape((nocc**2, nvirt**2))
+        cc_amp_oo_vv = mycc_reg.t2.reshape((nocc**2, nvirt**2))
+
+        amp_diff = cc_amp_oo_vv - mp_amp_oo_vv
+
+        breakpoint()
 
     #t_int = get_t_int(mymp.t2)
    
@@ -100,7 +138,7 @@ def test_ring(N, bd, atom, basis, idx_s, idx_d):
 
 if __name__ == "__main__":
 
-
+    np.set_printoptions(linewidth = 280, suppress = True)
     idx_s = [[0,1,2], [2], []]
     idx_d = [[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14],
              [1,2,3,5,6,7,8,9,10,11,14],
