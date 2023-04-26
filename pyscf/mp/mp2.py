@@ -89,6 +89,7 @@ def _iterative_kernel(mp, eris, verbose=None):
         t2new = mp.update_amps(t2, eris)
 
         if isinstance(t2new, numpy.ndarray):
+            error = t2new - t2
             normt = numpy.linalg.norm(t2new - t2)
             t2 = None
             t2new = adiis.update(t2new)
@@ -128,8 +129,8 @@ def update_amps(mp, t2, eris):
     mo_e_o = eris.mo_energy[:nocc]
     mo_e_v = eris.mo_energy[nocc:] + mp.level_shift
 
-    foo = fock[:nocc,:nocc] - numpy.diag(mo_e_o)
-    fvv = fock[nocc:,nocc:] - numpy.diag(mo_e_v)
+    foo = fock[:nocc,:nocc] #- numpy.diag(mo_e_o)
+    fvv = fock[nocc:,nocc:] #- numpy.diag(mo_e_v)
     t2new  = lib.einsum('ijac,bc->ijab', t2, fvv)
     t2new -= lib.einsum('ki,kjab->ijab', foo, t2)
     t2new = t2new + t2new.transpose(1,0,3,2)
@@ -140,7 +141,7 @@ def update_amps(mp, t2, eris):
 
     eia = mo_e_o[:,None] - mo_e_v
     t2new /= lib.direct_sum('ia,jb->ijab', eia, eia)
-    return t2new
+    return t2+t2new
 
 
 def make_rdm1(mp, t2=None, eris=None, ao_repr=False):
@@ -660,11 +661,13 @@ class _ChemistsERIs:
             self.mo_energy = _mo_energy_without_core(mp, mp._scf.mo_energy)
             self.fock = numpy.diag(self.mo_energy)
         else:
-            dm = mp._scf.make_rdm1(mp.mo_coeff, mp.mo_occ)
+#            dm = mp._scf.make_rdm1(mp.mo_coeff, mp.mo_occ)
+            dm = mp._scf.make_rdm1(mo_coeff, mp.mo_occ)
             vhf = mp._scf.get_veff(mp.mol, dm)
             fockao = mp._scf.get_fock(vhf=vhf, dm=dm)
             self.fock = self.mo_coeff.conj().T.dot(fockao).dot(self.mo_coeff)
-            self.mo_energy, _ = numpy.linalg.eigh(self.fock)
+#            self.mo_energy, _ = numpy.linalg.eigh(self.fock)
+            self.mo_energy = self.fock.diagonal().real 
         return self
 
 def _make_eris(mp, mo_coeff=None, ao2mofn=None, verbose=None):
