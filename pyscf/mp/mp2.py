@@ -85,7 +85,6 @@ def _iterative_kernel(mp, eris, verbose=None):
 
     conv = False
     for istep in range(mp.max_cycle):
-        print(numpy.linalg.norm(t2))
         t2new = mp.update_amps(t2, eris)
 
         if isinstance(t2new, numpy.ndarray):

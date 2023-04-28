@@ -3,7 +3,7 @@
 '''
 
 import numpy as np
-from pyscf import ao2mo, gto, scf, mp, cc, lo
+from pyscf import ao2mo, gto, scf, mp, cc, lo, fci
 from pyscf.tools import ring
 import matplotlib.pyplot as plt
 
@@ -14,9 +14,8 @@ def get_t_int(t2, eps = 0.9):
     idx = np.asarray(idx)
     return [idx[:,i] for i in range(len(idx[0,:]))]
 
-def ex(basis, bd, idx_s, idx_d):
-    
-    
+def get_N2_references(basis, bd):
+
     mol = gto.M()
     mol.basis = basis
     mol.atom  = [['N', [0,0,0]] , ['N', [bd,0,0]]]
@@ -24,24 +23,70 @@ def ex(basis, bd, idx_s, idx_d):
     mol.build()
 
     mf = mol.RHF().run()
-    mymp = mp.MP2(mf).run()
-    mycc_reg = cc.CCSD(mf).run() 
 
-    print(f"MP2 corr. energy  {mymp.e_corr}")   
-    print(f"CCSD corr. energy {mycc_reg.e_corr}")
+    orbitals = mf.mo_coeff
+    nocc = mol.nelectron//2
+    nvirt = len(mf.mo_occ) - nocc
+    c_mo = np.zeros((orbitals.shape),orbitals.dtype)
+
+    #orbitals = mf.mo_coeff[:,mf.mo_occ>0]
+    pm_occ = lo.PM(mol, mf.mo_coeff[:,:nocc] , mf)
+    pm_occ.pop_method = 'meta-lowdin'  
+    C = pm_occ.kernel()
+    c_mo[:, :nocc] = C
+
+    pm_vir = lo.PM(mol, mf.mo_coeff[:,nocc:] , mf)
+    pm_vir.pop_method = 'meta-lowdin'  
+    C = pm_vir.kernel()
+    c_mo[:, nocc:] = C
+
+    # Building MP2 objects for the _make_eris routine
+    mymp = mp.MP2(mf)#, mo_coeff=c_mo)
+    mymp.max_cycle = 30
+    mymp.diis_space = 8
+    mymp.verbose = 0
+    #Running local MP2 should be conceptually very easy!
     
-    #t_int = get_t_int(mymp.t2)
+    eris = mp.mp2._make_eris(mymp, mo_coeff=c_mo)
+    #breakpoint()
+    lo_mp = mp.mp2._iterative_kernel(mymp, eris, verbose=0) 
+
+    # Running regular Mp2 and CCSD 
+    mymp = mp.MP2(mf).run()
+    mycc_reg = cc.CCSD(mf).run(verbose = 5)
+    #cisolver = fci.FCI(mf) 
+    #fci_res = cisolver.kernel()
+
+    print(f"MP2 corr. energy             : {mymp.e_corr}")   
+    print(f"Localized MP2 corr. energy   : {lo_mp[1]}")
+    print(f"CCSD corr. energy            : {mycc_reg.e_corr}")
+    #print(f"FCI corr. energy             : {fci_res[0]-mf.e_tot}")
+
+    localized = True
+    if localized:
+        return mf, c_mo, mymp, lo_mp[2], mf.e_tot, mymp.e_corr, mycc_reg.e_corr
+    else:
+        return mf, mf.mo_coeff, mymp, mymp.t2, mf.e_tot, mymp.e_corr, mycc_reg.e_corr
+
+
+
+def ex(mf, mo_coeff, mymp, mp_t2, idx_s, idx_d):
    
-    mycc = cc.rmpccsd_slow.RMPCCSD(mf)
+    nocc = np.sum(mf.mo_occ > 0)
+    nvirt = len(mf.mo_occ) - nocc
+
     act_hole = np.array([4, 5, 6])
-    act_particle = np.array([0, 1, 2])
+    act_particle = np.array([0, 1, 2, 3])
+   
+    #mycc = cc.rmpccsd_slow.RMPCCSD(mf, mo_coeff=c_mo)
+    #res = mycc.kernel(act_hole , act_particle, idx_s, idx_d, t1 = np.zeros((nocc, nvirt)), t2 = lo_mp[2])
     
-    res = mycc.kernel(act_hole , act_particle, idx_s, idx_d)
-    
+    mycc = cc.rmpccsd_slow.RMPCCSD(mf, mo_coeff=mo_coeff)
+    res = mycc.kernel(act_hole , act_particle, idx_s, idx_d, t1 = np.zeros((nocc, nvirt)), t2 = mp_t2)
+
     print(f"MPCCSD corr. energy {mycc.e_corr}")
 
-    return mf.e_tot, mymp.e_corr, mycc_reg.e_corr,  mycc.e_corr
-
+    return mycc.e_corr
 
 def test_ring(N, bd, atom, basis, idx_s, idx_d):
     
@@ -57,55 +102,39 @@ def test_ring(N, bd, atom, basis, idx_s, idx_d):
     mf = mol.RHF().run()
 
     orbitals = mf.mo_coeff
-    pm = lo.PM(mol, orbitals, mf)
-    pm.pop_method = 'iao'  
-    C = pm.kernel()
-    
-    # comparison objects
-    dm = mf.make_rdm1()
-    vhf = mf.get_veff(mol, dm)
-    fock_ao = mf.get_fock(vhf=vhf, dm=dm)
-    fock_lo = C.T @ fock_ao @ C
-    fock_mo = mf.mo_coeff.T @ fock_ao @ mf.mo_coeff
- 
-    '''
-    # running localized computations
-    norb = mol.nao_nr() 
-    h1e0 = mol.intor("int1e_nuc_sph") + mol.intor("int1e_kin_sph")
-    eri0 = mol.intor("int2e_sph")
- 
-    mf_lo = scf.RHF(mol)
-    h1e = C.T @ h1e0 @ C
-    eri = ao2mo.incore.full(eri0, C)
-    
-    mf_lo.get_hcore = lambda *args: h1e
-    mf_lo.get_ovlp = lambda *args: np.eye(norb)
-    mf_lo._eri = ao2mo.restore(8, eri, norb)
-    mf_lo.kernel()
+    nocc = mol.nelectron//2
+    c_mo = np.zeros((orbitals.shape),orbitals.dtype)
 
-    dm_lo = mf_lo.make_rdm1()
-    vhf_lo = mf_lo.get_veff(mol, dm_lo)
-    fock_ao_lo = mf.get_fock(vhf=vhf_lo, dm=dm_lo)
-    fock_lo_lo = mf_lo.mo_coeff.T @ fock_ao_lo @ mf_lo.mo_coeff
-    '''
+    #orbitals = mf.mo_coeff[:,mf.mo_occ>0]
+    pm_occ = lo.PM(mol, mf.mo_coeff[:,:nocc] , mf)
+    pm_occ.pop_method = 'meta-lowdin'  
+    C = pm_occ.kernel()
+    c_mo[:, :nocc] = C
+
+    pm_vir = lo.PM(mol, mf.mo_coeff[:,nocc:] , mf)
+    pm_vir.pop_method = 'meta-lowdin'  
+    C = pm_vir.kernel()
+    c_mo[:, nocc:] = C
 
     # Building MP2 objects for the _make_eris routine
-    mymp = mp.MP2(mf)
-    mymp.max_cycle = 200
-    
+    mymp = mp.MP2(mf)#, mo_coeff=c_mo)
+    mymp.max_cycle = 30
+
+    mymp.diis_space = 8
     #Running local MP2 should be conceptually very easy!
-    eris = mp.mp2._make_eris(mymp, mo_coeff= C)
-    breakpoint()
+    
+    eris = mp.mp2._make_eris(mymp, mo_coeff=c_mo)
+    #breakpoint()
     lo_mp = mp.mp2._iterative_kernel(mymp, eris, verbose=5) 
 
     # Running regular Mp2 and CCSD 
     mymp = mp.MP2(mf).run()
     mycc_reg = cc.CCSD(mf).run() 
 
-    print(f"MP2 corr. energy          : {mymp.e_corr}")   
-    print(f"Localized MP2 corr. energy: {lo_mp[1]}")
-    print(f"CCSD corr. energy         : {mycc_reg.e_corr}")
-    breakpoint()  
+    print(f"MP2 corr. energy             : {mymp.e_corr}")   
+    print(f"MP2 corr. energy (localized) : {lo_mp[1]}") 
+    print(f"Localized MP2 corr. energy   : {lo_mp[1]}")
+    print(f"CCSD corr. energy            : {mycc_reg.e_corr}")
 
     # Visualizing T2
     viz = False
@@ -119,19 +148,18 @@ def test_ring(N, bd, atom, basis, idx_s, idx_d):
         amp_diff = cc_amp_oo_vv - mp_amp_oo_vv
 
         breakpoint()
-
-    #t_int = get_t_int(mymp.t2)
    
     mycc = cc.rmpccsd_slow.RMPCCSD(mf)
     
     # NOTE this is for H10
-    #act_hole = np.array([3, 4])
-    act_hole = np.array([1, 2, 3, 4])
-    #act_particle = np.array([0, 1])
-    act_particle = np.array([0, 1, 2, 3]) 
+    act_hole = np.array([3, 4])
+    #act_hole = np.array([1, 2, 3, 4])
+    act_particle = np.array([0, 1])
+    #act_particle = np.array([0, 1, 2, 3]) 
 
-    res = mycc.kernel(act_hole , act_particle, idx_s, idx_d, t1 = np.zeros((nocc, nocc)), t2 = lo_mp[2])
-    
+    #res = mycc.kernel(act_hole , act_particle, idx_s, idx_d, t1 = np.zeros((nocc, nocc)), t2 = lo_mp[2])
+    res = mycc.kernel(act_hole , act_particle, idx_s, idx_d, t1 = np.zeros((nocc, nocc)), t2 = mymp.t2)   
+ 
     print(f"MPCCSD corr. energy {mycc.e_corr}")
 
     breakpoint()
@@ -146,15 +174,16 @@ if __name__ == "__main__":
              [11]
             ]
 
-    for elem_d in idx_d:
-            for elem_s in idx_s:
-                test_ring(10, 1.4, 'H', 'sto6g', elem_s, elem_d)    
-                print()
+    #for elem_d in idx_d:
+    #        for elem_s in idx_s:
+    #            test_ring(10, 1.4, 'H', 'sto6g', elem_s, elem_d)    
+    #            print()
+    #exit()
 
-    exit()
-
-    bds = [1.098, 1.2, 1.3]
-
+    bds = [1.098, 1.2, 1.3, 1.4]
+    #bds = [1.8]
+    bds = np.linspace(1.0, 2.5, num=16)
+    
     res_hf = []
     res_mp = []
     res_cc = []
@@ -164,7 +193,8 @@ if __name__ == "__main__":
         res_hf_d = []
         res_mp_d = []
         res_cc_d = []
- 
+
+        mf, mo_coeff, mymp, mp_t2, e_mf, e_mp, e_cc = get_N2_references('ccpvdz', bd)
         for elem_b in idx_d:
             res_mpcc_s = []
             res_hf_s = []
@@ -172,11 +202,11 @@ if __name__ == "__main__":
             res_cc_s = []
      
             for elem_s in idx_s:
-                output = ex('ccpvdz', bd, elem_s, elem_b)
-                res_mpcc_s.append(output[3])
-                res_hf_s.append(output[0])
-                res_mp_s.append(output[1])
-                res_cc_s.append(output[2])
+                output = ex(mf, mo_coeff, mymp, mp_t2, elem_s, elem_b)
+                res_mpcc_s.append(output)
+                res_hf_s.append(e_mf)
+                res_mp_s.append(e_mp)
+                res_cc_s.append(e_cc)
      
             res_mpcc_d.append(res_mpcc_s)
             res_hf_d.append(res_hf_s)
