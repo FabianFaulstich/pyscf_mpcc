@@ -14,6 +14,7 @@ def get_t_int(t2, eps = 0.9):
     idx = np.asarray(idx)
     return [idx[:,i] for i in range(len(idx[0,:]))]
 
+
 def get_N2_references(basis, bd):
 
     mol = gto.M()
@@ -48,11 +49,35 @@ def get_N2_references(basis, bd):
     #Running local MP2 should be conceptually very easy!
     
     eris = mp.mp2._make_eris(mymp, mo_coeff=c_mo)
-    #breakpoint()
     lo_mp = mp.mp2._iterative_kernel(mymp, eris, verbose=0) 
 
     # Running regular Mp2 and CCSD 
     mymp = mp.MP2(mf).run()
+
+    # constructing MP2 NOs
+    dm_mp = mymp.make_rdm1()
+    vals, nos = np.linalg.eigh(dm_mp)
+    vals = vals[::-1]
+    nos = nos[:, ::-1]
+    no_coeff = mf.mo_coeff.dot(nos)
+
+    # localize the MP2-NOs
+    c_mo = np.zeros((orbitals.shape),orbitals.dtype) 
+    c_mo = no_coeff
+    pm_occ = lo.PM(mol, no_coeff[:,:nocc] , mf)
+    pm_occ.pop_method = 'meta-lowdin'  
+    C = pm_occ.kernel()
+    c_mo[:, :nocc] = C
+
+    pm_vir = lo.PM(mol, no_coeff[:,nocc:nocc+3] , mf)
+    pm_vir.pop_method = 'meta-lowdin'  
+    C = pm_vir.kernel()
+    #c_mo[:, nocc:nocc+3] = C
+
+    # Running MP2 in NO basis
+    eris = mp.mp2._make_eris(mymp, mo_coeff=c_mo)
+    no_mp = mp.mp2._iterative_kernel(mymp, eris, verbose=0) 
+
     mycc_reg = cc.CCSD(mf).run(verbose = 5)
     #cisolver = fci.FCI(mf) 
     #fci_res = cisolver.kernel()
@@ -62,9 +87,11 @@ def get_N2_references(basis, bd):
     print(f"CCSD corr. energy            : {mycc_reg.e_corr}")
     #print(f"FCI corr. energy             : {fci_res[0]-mf.e_tot}")
 
-    localized = True
-    if localized:
+    orbs = 'MP-NO' # 'localized'
+    if orbs == 'localized':
         return mf, c_mo, mymp, lo_mp[2], mf.e_tot, mymp.e_corr, mycc_reg.e_corr
+    elif orbs == 'MP-NO':
+        return mf, no_coeff, mymp, no_mp[2], mf.e_tot, mymp.e_corr, mycc_reg.e_corr
     else:
         return mf, mf.mo_coeff, mymp, mymp.t2, mf.e_tot, mymp.e_corr, mycc_reg.e_corr
 
@@ -76,7 +103,7 @@ def ex(mf, mo_coeff, mymp, mp_t2, idx_s, idx_d):
     nvirt = len(mf.mo_occ) - nocc
 
     act_hole = np.array([4, 5, 6])
-    act_particle = np.array([0, 1, 2, 3])
+    act_particle = np.array([0, 1, 2])
    
     #mycc = cc.rmpccsd_slow.RMPCCSD(mf, mo_coeff=c_mo)
     #res = mycc.kernel(act_hole , act_particle, idx_s, idx_d, t1 = np.zeros((nocc, nvirt)), t2 = lo_mp[2])
@@ -180,10 +207,11 @@ if __name__ == "__main__":
     #            print()
     #exit()
 
-    bds = [1.098, 1.2, 1.3, 1.4]
-    #bds = [1.8]
+    #bds = [1.098, 1.2, 1.3, 1.4]
     bds = np.linspace(1.0, 2.5, num=16)
-    
+    #bds = [1.8]
+    #bds = [2]
+ 
     res_hf = []
     res_mp = []
     res_cc = []
@@ -193,6 +221,8 @@ if __name__ == "__main__":
         res_hf_d = []
         res_mp_d = []
         res_cc_d = []
+
+        print('Bond length :', bd)
 
         mf, mo_coeff, mymp, mp_t2, e_mf, e_mp, e_cc = get_N2_references('ccpvdz', bd)
         for elem_b in idx_d:
@@ -222,6 +252,15 @@ if __name__ == "__main__":
     res_mp = np.array(res_mp)
     res_cc = np.array(res_cc)
     res_mpcc = np.array(res_mpcc)
+
+    # plot results
+    plt.plot(bds, res_hf[:,0,0],label = 'HF' )
+    plt.plot(bds, res_hf[:,0,0] + res_mp[:,0,0],label = 'MP2' )
+    plt.plot(bds, res_hf[:,0,0] + res_cc[:,0,0],label = 'CCSD' )
+    plt.plot(bds, res_hf[:,0,0] + res_mpcc[:,0,0],label = '(4,2)' )
+    plt.plot(bds, res_hf[:,0,0] + res_mpcc[:,3,1],label = '(1,1)' )
+    plt.legend()
+    plt.show()
  
     breakpoint()
 
