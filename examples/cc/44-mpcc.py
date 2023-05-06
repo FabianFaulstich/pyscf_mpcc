@@ -3,7 +3,7 @@
 '''
 
 import numpy as np
-from pyscf import ao2mo, gto, scf, mp, cc, lo, fci
+from pyscf import ao2mo, lib, gto, scf, mp, cc, lo, fci
 from pyscf.tools import ring
 import matplotlib.pyplot as plt
 
@@ -13,6 +13,91 @@ def get_t_int(t2, eps = 0.9):
     idx = np.where(np.abs(t2)> eps * max_val)
     idx = np.asarray(idx)
     return [idx[:,i] for i in range(len(idx[0,:]))]
+
+
+def get_N2_references_PNO(basis, bd):
+
+    mol = gto.M()
+    mol.basis = basis
+    mol.atom  = [['N', [0,0,0]] , ['N', [bd,0,0]]]
+    mol.verbose = 3
+    mol.build()
+
+    mf = mol.RHF().run()
+
+    orbitals = mf.mo_coeff
+    
+    nocc = mol.nelectron//2
+    nvirt = len(mf.mo_occ) - mol.nelectron//2  
+    # nao x nocc+nvirt
+    # NOTE this is hard-coded for now
+    nactiv = 3
+    
+    # NOTE rename c_mo ...
+    c_mo = np.zeros((len(mf.mo_occ), nactiv + nvirt),orbitals.dtype)
+
+    pm_occ = lo.PM(mol, mf.mo_coeff[:,:nocc] , mf)
+    pm_occ.pop_method = 'iao'  
+    C = pm_occ.kernel()
+    c_mo[:, :nactiv] = C[:, nocc-nactiv:nocc]
+    c_mo[:, nactiv:] = mf.mo_coeff[:,nocc:]
+
+    occupation = mf.mo_occ[nocc-nactiv:]
+    mymp = mp.MP2(mf, mo_coeff=c_mo, mo_occ = occupation)
+    mymp.max_cycle = 30
+    mymp.diis_space = 8
+    mymp.verbose = 0
+
+    eris = mp.mp2._make_eris(mymp, mo_coeff=c_mo)
+    eris_ovov = np.asarray(eris.ovov).reshape(nactiv,nvirt,nactiv,nvirt)
+
+    dm = mf.make_rdm1(mf.mo_coeff, mf.mo_occ)
+    vhf = mf.get_veff(mol, dm)
+    fockao = mf.get_fock(vhf=vhf, dm=dm)
+    fock = c_mo.conj().T.dot(fockao).dot(c_mo)
+    mo_e_o = np.diag(fock)[:nactiv]
+    mo_e_v = np.diag(fock)[nactiv:]
+    eia = mo_e_o[:,None] - mo_e_v
+    
+    t2 = eris_ovov.conj().transpose(0,2,1,3)
+    t2 /= lib.direct_sum('ia,jb->ijab', eia, eia) 
+
+    dm1vir = np.zeros((nvirt,nvirt), dtype=t2.dtype)
+    for i in range(nactiv):
+        t2i = t2[i]
+        l2i = t2i.conj()
+        dm1vir += lib.einsum('jca,jcb->ba', l2i, t2i) * 2 \
+                - lib.einsum('jca,jbc->ba', l2i, t2i)
+
+    gamma_ao = c_mo[:,nactiv:] @ dm1vir @ c_mo[:,nactiv:].T
+    u, s, _ = np.linalg.svd(gamma_ao)
+    
+    tol = 1e-3
+    
+    # NOTE rename orbs to c_act_virt
+    orbs = u[:,s > tol]
+
+    P = np.eye(len(mf.mo_occ)) - orbs @ orbs.T
+    proj = P @ c_mo[:, nactiv:]
+    u_mat, val, _ = np.linalg.svd(proj)
+    idx = np.where(val>1e-3)[0]
+    proj_virt = u_mat[:,idx]
+    
+    occupation = np.hstack((mf.mo_occ[:nactiv+1], mf.mo_occ[-len(idx):]))
+    c_inact = np.hstack((C[:, :nocc-nactiv], proj_virt))
+    
+    mymp = mp.MP2(mf, mo_coeff = c_inact, mo_occ = occupation)
+    mymp.max_cycle = 30
+    mymp.diis_space = 8
+    mymp.verbose = 0
+
+    # NOTE this is not running yet, 
+    # We have to rebuilt eris.fock !!!
+
+    eris = mp.mp2._make_eris(mymp, mo_coeff=c_inact)
+    mp_inact = mp.mp2._iterative_kernel(mymp, eris, verbose=0) 
+    breakpoint()
+
 
 
 def get_N2_references(basis, bd):
@@ -224,7 +309,7 @@ if __name__ == "__main__":
 
         print('Bond length :', bd)
 
-        mf, mo_coeff, mymp, mp_t2, e_mf, e_mp, e_cc = get_N2_references('ccpvdz', bd)
+        mf, mo_coeff, mymp, mp_t2, e_mf, e_mp, e_cc = get_N2_references_PNO('ccpvdz', bd)
         for elem_b in idx_d:
             res_mpcc_s = []
             res_hf_s = []
