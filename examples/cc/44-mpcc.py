@@ -20,13 +20,15 @@ def get_N2_references_PNO(basis, bd):
     mol = gto.M()
     mol.basis = basis
     mol.atom  = [['N', [0,0,0]] , ['N', [bd,0,0]]]
+    #mol.atom = [['Li', [0,0,0]],['H', [bd,0,0]]]
     mol.verbose = 3
     mol.build()
 
     mf = mol.RHF().run()
 
+    # NOTE orthogonalize these!
     orbitals = mf.mo_coeff
-    
+
     nocc = mol.nelectron//2
     nvirt = len(mf.mo_occ) - mol.nelectron//2  
     # nao x nocc+nvirt
@@ -69,20 +71,36 @@ def get_N2_references_PNO(basis, bd):
         dm1vir += lib.einsum('jca,jcb->ba', l2i, t2i) * 2 \
                 - lib.einsum('jca,jbc->ba', l2i, t2i)
 
-    gamma_ao = c_mo[:,nactiv:] @ dm1vir @ c_mo[:,nactiv:].T
-    u, s, _ = np.linalg.svd(gamma_ao)
+    #gamma_ao = c_mo[:,nactiv:] @ dm1vir @ c_mo[:,nactiv:].T
+    #u, s, _ = np.linalg.svd(gamma_ao)    
     
+    Uu, Ss, _ = np.linalg.svd(dm1vir)
     tol = 1e-3
     
     # NOTE rename orbs to c_act_virt
-    orbs = u[:,s > tol]
+    
+
+    orbs = c_mo[:,nactiv:] @ Uu[:,Ss > tol]
 
     P = np.eye(len(mf.mo_occ)) - orbs @ orbs.T
     proj = P @ c_mo[:, nactiv:]
     u_mat, val, _ = np.linalg.svd(proj)
     idx = np.where(val>1e-3)[0]
     proj_virt = u_mat[:,idx]
+ 
+    breakpoint()
+    coeffs = np.hstack((C,orbs,proj_virt))
     
+    mymp = mp.MP2(mf, mo_coeff = coeffs)
+    mymp.max_cycle = 30
+    mymp.diis_space = 8
+    mymp.verbose = 0
+
+    eris = mp.mp2._make_eris(mymp, mo_coeff=coeffs) 
+    pno_mp = mp.mp2._iterative_kernel(mymp, eris)
+
+    breakpoint()
+    '''
     occupation = np.hstack((mf.mo_occ[:nactiv+1], mf.mo_occ[-len(idx):]))
     c_inact = np.hstack((C[:, :nocc-nactiv], proj_virt))
     
@@ -93,10 +111,22 @@ def get_N2_references_PNO(basis, bd):
 
     # NOTE this is not running yet, 
     # We have to rebuilt eris.fock !!!
+    fock = c_inact.conj().T.dot(fockao).dot(c_inact)
+
 
     eris = mp.mp2._make_eris(mymp, mo_coeff=c_inact)
     mp_inact = mp.mp2._iterative_kernel(mymp, eris, verbose=0) 
+    '''
+
     breakpoint()
+
+
+
+
+
+
+
+
 
 
 
@@ -292,8 +322,8 @@ if __name__ == "__main__":
     #            print()
     #exit()
 
-    #bds = [1.098, 1.2, 1.3, 1.4]
-    bds = np.linspace(1.0, 2.5, num=16)
+    bds = [1.098, 1.2, 1.3, 1.4]
+    #bds = np.linspace(1.0, 2.5, num=16)
     #bds = [1.8]
     #bds = [2]
  
