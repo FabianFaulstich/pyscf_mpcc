@@ -20,18 +20,59 @@ def get_t_int(t2, eps = 0.9):
     return [idx[:,i] for i in range(len(idx[0,:]))]
 
 
-def get_N2_references_PNO_avas(basis, bd):
+def get_hring_references_PNO_avas(natom, basis, bd):
 
-    mol = gto.M()
+    structure = ring.make(natom, bd)
+    atom = [('H %f %f %f' % xyz) for xyz in structure]
+    mol = gto.Mole()
+    mol.atom = atom
     mol.basis = basis
-    mol.atom  = [['N', [0,0,0]] , ['N', [bd,0,0]]]
-    #mol.atom = [['Li', [0,0,0]],['H', [bd,0,0]]]
-    mol.verbose = 3
+    mol.verbose = 5
     mol.build()
 
     mf = mol.RHF().run()
 
-    ao_labels = ['N 2p', 'N 2s'] 
+    ao_labels = ['H 1s'] 
+
+    avas_obj = avas.AVAS(mf, ao_labels, with_iao = True)
+    avas_obj.kernel()
+    name= f"molden/molden_h10_{basis}_{bd}"
+
+    write_molden = True
+    if write_molden:
+        with open(name + 'mo.molden', 'w') as f1:
+            molden.header(mol, f1)
+            molden.orbital_coeff(mol, f1, mf.mo_coeff, ene=mf.mo_energy, 
+                                 occ=mf.mo_occ)
+            print('Wrote molden file: \n', f1)
+
+        with open(name + 'avas.molden', 'w') as f1:
+            molden.header(mol, f1)
+            molden.orbital_coeff(mol, f1, avas_obj.mo_coeff, ene=mf.mo_energy, 
+                                 occ=mf.mo_occ)
+            print('Wrote molden file: \n', f1)
+
+    breakpoint()
+
+
+def get_N2_references_PNO_avas(basis, bd):
+
+    mol = gto.M()
+    mol.basis = basis
+    #mol.atom  = [['N', [0,0,0]] , ['N', [bd,0,0]]]
+    #mol.atom = [['F', [0,0,0]],['F', [bd,0,0]]]
+    mol.atom = [['Cl', [0,0,0]],['Cl', [bd,0,0]]]
+    
+    mol.verbose = 0
+    mol.build()
+
+    mf = mol.RHF().run()
+
+    #ao_labels = ['N 2p', 'N 2s'] 
+    #ao_labels = ['F 2p', 'F 2s'] 
+    ao_labels = ['Cl 3p'] 
+   
+
     avas_obj = avas.AVAS(mf, ao_labels)
     avas_obj.kernel()
     name= f"molden/molden_{basis}_{bd}"
@@ -71,8 +112,9 @@ def get_N2_references_PNO(basis, bd):
 
     mol = gto.M()
     mol.basis = basis
-    mol.atom  = [['N', [0,0,0]] , ['N', [bd,0,0]]]
-    #mol.atom = [['Li', [0,0,0]],['H', [bd,0,0]]]
+    #mol.atom  = [['N', [0,0,0]] , ['N', [bd,0,0]]]
+    #mol.atom = [['F', [0,0,0]],['F', [bd,0,0]]]
+    mol.atom = [['Cl', [0,0,0]],['Cl', [bd,0,0]]]
     mol.verbose = 3
     mol.build()
 
@@ -89,7 +131,7 @@ def get_N2_references_PNO(basis, bd):
     nvirt = len(mf.mo_occ) - mol.nelectron//2  
     # nao x nocc+nvirt
     # NOTE this is hard-coded for now
-    nactiv = 3
+    nactiv = 5
     
     # NOTE rename c_mo ...
     c_mo = np.zeros((len(mf.mo_occ), nactiv + nvirt),orbitals.dtype)
@@ -131,7 +173,7 @@ def get_N2_references_PNO(basis, bd):
     #u, s, _ = np.linalg.svd(gamma_ao)    
     
     Uu, Ss, _ = np.linalg.svd(dm1vir)
-    tol = 1e-4
+    tol = 1e-3
     
     # NOTE rename orbs to c_act_virt
     
@@ -157,14 +199,16 @@ def get_N2_references_PNO(basis, bd):
 
     mycc_reg = cc.CCSD(mf).run(verbose = 5)
   
-    return n_act_virt, mf, coeffs, mymp, pno_mp[2], mf.e_tot, pno_mp[1], mycc_reg.e_corr
+    return nactiv, n_act_virt, mf, coeffs, mymp, pno_mp[2], mf.e_tot, pno_mp[1], mycc_reg.e_corr
 
 
 def get_N2_references(basis, bd):
 
     mol = gto.M()
     mol.basis = basis
-    mol.atom  = [['N', [0,0,0]] , ['N', [bd,0,0]]]
+    #mol.atom  = [['N', [0,0,0]] , ['N', [bd,0,0]]]
+    #mol.atom  = [['F', [0,0,0]] , ['F', [bd,0,0]]]
+    mol.atom  = [['Cl', [0,0,0]] , ['Cl', [bd,0,0]]]
     mol.verbose = 3
     mol.build()
 
@@ -232,17 +276,17 @@ def get_N2_references(basis, bd):
     print(f"CCSD corr. energy            : {mycc_reg.e_corr}")
     #print(f"FCI corr. energy             : {fci_res[0]-mf.e_tot}")
 
-    orbs = 'localized' # 'localized'
+    orbs = 'MP-NO'# 'localize' # 'localized'
     if orbs == 'localized':
         return 3, 3, mf, c_lo, mymp, lo_mp[2], mf.e_tot, mymp.e_corr, mycc_reg.e_corr
     elif orbs == 'MP-NO':
-        return mf, no_coeff, mymp, no_mp[2], mf.e_tot, mymp.e_corr, mycc_reg.e_corr
+        return 3, 3, mf, no_coeff, mymp, no_mp[2], mf.e_tot, mymp.e_corr, mycc_reg.e_corr
     else:
-        return mf, mf.mo_coeff, mymp, mymp.t2, mf.e_tot, mymp.e_corr, mycc_reg.e_corr
+        return 3, 3, mf, mf.mo_coeff, mymp, mymp.t2, mf.e_tot, mymp.e_corr, mycc_reg.e_corr
 
 
 
-def ex(n_act_occ, n_act_virt, mf, mo_coeff, mymp, mp_t2, idx_s, idx_d):
+def ex(n_act_occ, n_act_virt, mf, mo_coeff, mp_t2, idx_s, idx_d):
    
     nocc = np.sum(mf.mo_occ > 0)
     nvirt = len(mf.mo_occ) - nocc
@@ -358,9 +402,9 @@ if __name__ == "__main__":
     #exit()
 
     #bds = [1.098, 1.2, 1.3, 1.4]
-    bds = np.linspace(1.0, 2.5, num=16)
-    bds = np.linspace(1.0, 3.0, num=21)
-    #bds = [1.8]
+    #bds = np.linspace(1.0, 2.5, num=16)
+    bds = np.linspace(1.0, 2.7, num=18)
+    bds = [1.8]
     #bds = [2]
  
     res_hf = []
@@ -375,8 +419,17 @@ if __name__ == "__main__":
 
         print('Bond length :', bd)
 
+
+        get_hring_references_PNO_avas(10, 'ccpvdz', bd)
+
         #n_act_occ, n_act_virt, mf, mo_coeff, mymp, mp_t2, e_mf, e_mp, e_cc = get_N2_references_PNO_avas('ccpvdz', bd)
-        n_act_occ, n_act_virt, mf, mo_coeff, mymp, mp_t2, e_mf, e_mp, e_cc = get_N2_references('ccpvdz', bd)
+
+        #n_act_occ, n_act_virt, mf, mo_coeff, mymp, mp_t2, e_mf, e_mp, e_cc = get_N2_references_PNO('ccpvdz', bd)
+
+        #n_act_occ, n_act_virt, mf, mo_coeff, mymp, mp_t2, e_mf, e_mp, e_cc = get_N2_references('ccpvdz', bd)
+
+
+
         for elem_b in idx_d:
             res_mpcc_s = []
             res_hf_s = []
@@ -384,7 +437,7 @@ if __name__ == "__main__":
             res_cc_s = []
      
             for elem_s in idx_s:
-                output = ex(n_act_occ, n_act_virt, mf, mo_coeff, mymp, mp_t2, elem_s, elem_b)
+                output = ex(n_act_occ, n_act_virt, mf, mo_coeff, mp_t2, elem_s, elem_b)
                 res_mpcc_s.append(output)
                 res_hf_s.append(e_mf)
                 res_mp_s.append(e_mp)
@@ -410,6 +463,7 @@ if __name__ == "__main__":
     plt.plot(bds, res_hf[:,0,0] + res_mp[:,0,0],label = 'MP2' )
     plt.plot(bds, res_hf[:,0,0] + res_cc[:,0,0],label = 'CCSD' )
     plt.plot(bds, res_hf[:,0,0] + res_mpcc[:,0,0],label = '(4,2)' )
+    #plt.plot(bds, res_hf[:,0,0] + res_mpcc[:,2,1],label = '(2,1)' )
     #plt.plot(bds, res_hf[:,0,0] + res_mpcc[:,3,1],label = '(1,1)' )
     plt.legend()
     plt.show()
