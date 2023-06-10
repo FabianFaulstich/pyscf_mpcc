@@ -1075,9 +1075,9 @@ http://sunqm.net/pyscf/code-rule.html#api-rules for the details of API conventio
     _add_vvvv = _add_vvvv
     update_amps = update_amps
 
-    def kernel(self, t1=None, t2=None, eris=None):
-        return self.ccsd(t1, t2, eris)
-    def ccsd(self, t1=None, t2=None, eris=None):
+    def kernel(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None):
+        return self.ccsd(t1, t2, eris, act_particle, act_hole, idx_s, idx_d)
+    def ccsd(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None):
         assert (self.mo_coeff is not None)
         assert (self.mo_occ is not None)
 
@@ -1093,7 +1093,7 @@ http://sunqm.net/pyscf/code-rule.html#api-rules for the details of API conventio
         self.converged, self.e_corr, self.t1, self.t2 = \
                 kernel(self, eris, t1, t2, max_cycle=self.max_cycle,
                        tol=self.conv_tol, tolnormt=self.conv_tol_normt,
-                       verbose=self.verbose, callback=self.callback)
+                       verbose=self.verbose, callback=self.callback, act_particle=act_particle, act_hole=act_hole, idx_s=idx_s, idx_d=idx_d)
         self._finalize()
         return self.e_corr, self.t1, self.t2
 

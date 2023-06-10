@@ -40,23 +40,130 @@ def get_reference_values(system, **kwargs):
         else:
             localization = None
 
-        if localization == 'AVAS':
+        if localization == "AVAS":
             if "ao_labels" in kwargs:
-                ao_labels = kwargs['ao_labels']
+                ao_labels = kwargs["ao_labels"]
             else:
-                print('did not provide ao labels for AVAS')
+                print("did not provide ao labels for AVAS")
                 exit()
         else:
             ao_labels = None
 
-        get_h8_reference_value(basis, bond_length, dist, localization, ao_labels)
+        return get_h8_reference_value(basis, bond_length, dist, localization, ao_labels)
+    elif system == "Be-ring":
+        # Fetching basis
+        if "basis" in kwargs:
+            basis = kwargs["basis"]
+        else:
+            basis = "sto6g"
+
+        # Fetching number of Atoms
+        if "num_atoms" in kwargs:
+            num_atoms = kwargs["num_atoms"]
+        else:
+            num_atoms = 10
+
+        # Fetching bond_length
+        if "bond_length" in kwargs:
+            bond_length = kwargs["bond_length"]
+        else:
+            bond_length = 0.741  # AA
+        
+        if "localization" in kwargs:
+            localization = kwargs["localization"]
+        else:
+            localization = None
+
+        if localization == "AVAS" or localization == "AVAS-DMET":
+            if "ao_labels" in kwargs:
+                ao_labels = kwargs["ao_labels"]
+            else:
+                print("did not provide ao labels for AVAS")
+                exit()
+        else:
+            ao_labels = None
+
+        return get_Be_ring_reference_value(
+            num_atoms, basis, bond_length, localization, ao_labels
+        )
+
+    elif system == "NO":
+        # Fetching basis
+        if "basis" in kwargs:
+            basis = kwargs["basis"]
+        else:
+            basis = "sto6g"
+
+        # Fetching bond_length
+        if "bond_length" in kwargs:
+            bond_length = kwargs["bond_length"]
+        else:
+            bond_length = 1.098 # AA
+        
+        if "localization" in kwargs:
+            localization = kwargs["localization"]
+        else:
+            localization = None
+
+        if localization == "AVAS":
+            if "ao_labels" in kwargs:
+                ao_labels = kwargs["ao_labels"]
+            else:
+                print("did not provide ao labels for AVAS")
+                exit()
+        else:
+            ao_labels = None
+        
+        if "spin_restricted" in kwargs:
+            spin_restricted = kwargs["spin_restricted"]
+        else:
+            spin_restricted = False
+
+        return get_NO_reference_value(
+            basis, bond_length, localization, ao_labels, spin_restricted
+        )
+    elif system == "Cl2":
+        # Fetching basis
+        if "basis" in kwargs:
+            basis = kwargs["basis"]
+        else:
+            basis = "sto6g"
+
+        # Fetching bond_length
+        if "bond_length" in kwargs:
+            bond_length = kwargs["bond_length"]
+        else:
+            bond_length = 1.988 # AA
+        
+        if "localization" in kwargs:
+            localization = kwargs["localization"]
+        else:
+            localization = None
+
+        if localization == "AVAS" or localization == "AVAS-DMET":
+            if "ao_labels" in kwargs:
+                ao_labels = kwargs["ao_labels"]
+            else:
+                print("did not provide ao labels for AVAS")
+                exit()
+        else:
+            ao_labels = None
+        
+        if "spin_restricted" in kwargs:
+            spin_restricted = kwargs["spin_restricted"]
+        else:
+            spin_restricted = False
+
+        return get_Cl2_reference_value(
+            basis, bond_length, localization, ao_labels, spin_restricted
+        )
+
 
 
 def rotate(angle, vec):
 
     rot = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
     return rot @ vec
-
 
 def get_h8_atoms(bond_length, dist, visualize=False):
 
@@ -88,52 +195,340 @@ def get_h8_atoms(bond_length, dist, visualize=False):
     return [["H", [0, elem[0], elem[1]]] for elem in xy_pos]
 
 
-def get_localizaed_orbs(mol, mf, localization, ao_labels, molden_bool = False, name = None):
-    
-    if localization == 'IAO':
+def get_localized_orbs(mol, mf, localization, ao_labels, molden_bool=False, name=None):
+
+    if localization == "IAO":
+
+        if isinstance(mf, scf.uhf.UHF):
+            c_lo_a = np.zeros((mf.mo_coeff[0].shape), mf.mo_coeff[0].dtype)
+            c_lo_b = np.zeros((mf.mo_coeff[0].shape), mf.mo_coeff[0].dtype)
+
+            # localizing occuppied orbitals
+            pm_occ_a = lo.PM(mol, mf.mo_coeff[0][:, mf.mo_occ[0] > 0], mf)
+            pm_occ_a.pop_method = "iao"
+            C = pm_occ_a.kernel()
+            c_lo_a[:, mf.mo_occ[0] > 0] = C
+
+            pm_occ_b = lo.PM(mol, mf.mo_coeff[1][:, mf.mo_occ[1] > 0], mf)
+            pm_occ_b.pop_method = "iao"
+            C = pm_occ_b.kernel()
+            c_lo_b[:, mf.mo_occ[1] > 0] = C
+
+            # localizing virtual orbitals
+            pm_vir_a = lo.PM(mol, mf.mo_coeff[0][:, mf.mo_occ[0] < 1e-12], mf)
+            pm_vir_a.pop_method = "iao"
+            C = pm_vir_a.kernel()
+            c_lo_a[:, mf.mo_occ[0] < 1e-12] = C
+
+            pm_vir_b = lo.PM(mol, mf.mo_coeff[1][:, mf.mo_occ[1] < 1e-12], mf)
+            pm_vir_b.pop_method = "iao"
+            C = pm_vir_b.kernel()
+            c_lo_b[:, mf.mo_occ[1] < 1e-12] = C
+
+            c_lo = [c_lo_a, c_lo_b]
+
+        else:
+            c_lo = np.zeros((mf.mo_coeff.shape), mf.mo_coeff.dtype)
+
+            # localizing occuppied orbitals
+            pm_occ = lo.PM(mol, mf.mo_coeff[:, mf.mo_occ > 0], mf)
+            pm_occ.pop_method = "iao"
+            C = pm_occ.kernel()
+            c_lo[:, mf.mo_occ > 0] = C
+
+            # localizing virtual orbitals
+            pm_vir = lo.PM(mol, mf.mo_coeff[:, mf.mo_occ < 1e-12], mf)
+            pm_vir.pop_method = "iao"
+            C = pm_vir.kernel()
+            c_lo[:, mf.mo_occ < 1e-12] = C
+
+    elif localization == "AVAS":
+
+        avas_obj = avas.AVAS(mf, ao_labels)
+        avas_obj.kernel()
+
+        c_lo = avas_obj.mo_coeff
+
+    elif localization == "meta-lowdin":
 
         c_lo = np.zeros((mf.mo_coeff.shape), mf.mo_coeff.dtype)
 
         # localizing occuppied orbitals
-        pm_occ = lo.PM(mol, mf.mo_coeff[:, mf.mo_occ>0], mf)
-        pm_occ.pop_method = "iao"
+        pm_occ = lo.PM(mol, mf.mo_coeff[:, mf.mo_occ > 0], mf)
+        pm_occ.pop_method = "meta-lowdin"
         C = pm_occ.kernel()
-        c_lo[:, mf.mo_occ>0] = C
+        c_lo[:, mf.mo_occ > 0] = C
 
         # localizing virtual orbitals
-        pm_vir = lo.PM(mol, mf.mo_coeff[:, mf.mo_occ<1e-12], mf)
-        pm_vir.pop_method = "iao"
+        pm_vir = lo.PM(mol, mf.mo_coeff[:, mf.mo_occ < 1e-12], mf)
+        pm_vir.pop_method = "meta-lowdin"
         C = pm_vir.kernel()
-        c_lo[:, mf.mo_occ<1e-12] = C
-    
-    elif localization == "AVAS":
-         
-        avas_obj = avas.AVAS(mf, ao_labels)
+        c_lo[:, mf.mo_occ < 1e-12] = C
+
+    elif localization == "MO":
+        c_lo = mf.mo_coeff
+
+    elif localization == "AVAS-DMET":
+        '''
+        AVAS localization + DMET bath
+        NOTE only works for spin restricted formulation atm
+        '''
+
+        avas_obj = avas.AVAS(mf, ao_labels, canonicalize = False)
         avas_obj.kernel()
-        
+
         c_lo = avas_obj.mo_coeff
 
-    elif localization == 'meta-lowdin':
+        # Constructing DMET bath 
+        ovlp = mf.mol.get_ovlp()
+        shalf = fractional_matrix_power(ovlp, 0.5)
+        shalf_inv = fractional_matrix_power(ovlp, -0.5)
+
+        dm = mf.make_rdm1()
+        dm_lo = c_lo.T @ dm @ c_lo        
+    
+        idx_core = np.where(avas_obj.occ_weights < 1e-10)[0]
+        idx_act_occ = np.where(avas_obj.occ_weights > 1e-10)[0]
+        idx_frag = np.append(idx_act_occ, np.where(avas_obj.vir_weights >avas_obj. threshold)[0] + mf.mol.nelectron//2 )
+        
+        env_idx = np.delete(np.arange(len(mf.mo_occ)), idx_frag) 
+        
+        d21 = dm[np.ix_(env_idx, idx_frag)]
+
+        U_mat, s_val, _ = np.linalg.svd(d21, full_matrices=False)
+        bath = np.where(s_val > 1e-6)[0]
+        U_bath = U_mat[:,bath]
+        U_bath = np.vstack((U_bath[idx_core, :], np.eye(len(bath)), U_bath[idx_core[-1]+1:, :]))
+
+        c_lo_bath = c_lo @ U_bath
+
         breakpoint()
+
+
+    else:
+        print("Localization not defined")
+        exit()
 
     if molden_bool:
         if name is None:
-            print('Did not provide name for molden file')
+            print("Did not provide name for molden file")
             exit()
         
-        with open(name + "_mo.molden", "w") as f1:
-            molden.header(mol, f1)
-            molden.orbital_coeff(mol, f1, mf.mo_coeff, ene=mf.mo_energy, occ=mf.mo_occ)
-            print("Wrote molden file: \n", f1)
+        if isinstance(mf, scf.uhf.UHF):
+            with open(name + "_mo.molden", "w") as f1:
+                molden.header(mol, f1)
+                molden.orbital_coeff(mol, f1, mf.mo_coeff[0], ene=mf.mo_energy[0], occ=mf.mo_occ[0])
+                molden.header(mol, f1)
+                molden.orbital_coeff(mol, f1, mf.mo_coeff[1], ene=mf.mo_energy[1], occ=mf.mo_occ[1])
+                
+                print("Wrote molden file: \n", f1)
 
-        with open(name + f"_{localization}.molden", "w") as f1:
-            molden.header(mol, f1)
-            molden.orbital_coeff(
-                mol, f1, c_lo, ene=mf.mo_energy, occ=mf.mo_occ
-            )
-            print("Wrote molden file: \n", f1)
+            with open(name + f"_{localization}.molden", "w") as f1:
+                molden.header(mol, f1)
+                molden.orbital_coeff(mol, f1, c_lo[0], ene=mf.mo_energy[0], occ=mf.mo_occ[0])
+                
+                molden.header(mol, f1)
+                molden.orbital_coeff(mol, f1, c_lo[1], ene=mf.mo_energy[1], occ=mf.mo_occ[1])
+                print("Wrote molden file: \n", f1)
+        else:
+            with open(name + "_mo.molden", "w") as f1:
+                molden.header(mol, f1)
+                molden.orbital_coeff(mol, f1, mf.mo_coeff, ene=mf.mo_energy, occ=mf.mo_occ)
+                print("Wrote molden file: \n", f1)
+
+            with open(name + f"_{localization}.molden", "w") as f1:
+                molden.header(mol, f1)
+                molden.orbital_coeff(mol, f1, c_lo, ene=mf.mo_energy, occ=mf.mo_occ)
+                print("Wrote molden file: \n", f1)
+        
+
+        return c_lo
+
+
+def flattening(t2, nocc, nvirt):
+
+    return t2.reshape((nocc ** 2, nvirt ** 2))
+
+def get_Cl2_reference_value(basis, bond_length, localization, ao_labels, spin_restricted):
+
+    mol = gto.M()
+    mol.basis = basis
+    mol.atom = [['Cl', [0,0,0]] , ['Cl', [bond_length,0,0]]]
+    mol.verbose = 3
+    mol.unit = "angstrom"
+    mol.build()
+
+    if spin_restricted:
+        mf = mol.RHF().run()
+    else:
+        mf = mol.UHF().run()
+
+    # localization
+    name = f"molden/molden_Cl2_{basis}_{bond_length}"
+    c_lo = get_localized_orbs(
+        mol, mf, localization, ao_labels, molden_bool=True, name=name
+    )
+
+    if spin_restricted:
+        # Running regular MP2 and CCSD
+        mymp = mp.MP2(mf).run(verbose=0)
+        mycc = cc.CCSD(mf).run(verbose=0)
+
+        # Running localized MP2
+        eris = mp.mp2._make_eris(mymp, mo_coeff=c_lo)
+        mp_lo = mp.mp2._iterative_kernel(mymp, eris, verbose=0)
+    else:
+        # Running regular MP2 and CCSD
+        mymp = mp.UMP2(mf).run()
+        mycc = cc.UCCSD(mf).run()
 
         breakpoint()
+        # Running localized MP2
+        eris = mp.mp2._make_eris(mymp, mo_coeff=c_lo)
+        mp_lo = mp.mp2._iterative_kernel(mymp, eris, verbose=0)
+
+    print(f"MP2 corr. energy             : {mymp.e_corr}")
+    print(f"Localized MP2 corr. energy   : {mp_lo[1]}")
+    print(f"CCSD corr. energy            : {mycc.e_corr}")
+    # print(f"FCI corr. energy             : {fci_res[0] - mf.e_tot}")
+
+    breakpoint()
+    return mf, c_lo, mp_lo[2], mf.e_tot, mymp.e_corr, mycc.e_corr
+
+
+
+
+
+def get_NO_reference_value(basis, bond_length, localization, ao_labels, spin_restricted):
+
+    mol = gto.M()
+    mol.basis = basis
+    mol.atom = [['N', [0,0,0]] , ['O', [bond_length,0,0]]]
+    mol.verbose = 3
+    mol.spin = 1
+    mol.unit = "angstrom"
+    mol.build()
+
+    if spin_restricted:
+        mf = mol.RHF().run()
+    else:
+        mf = mol.UHF().run()
+
+    # localization
+    name = f"molden/molden_NO_{basis}_{bond_length}"
+    c_lo = get_localized_orbs(
+        mol, mf, localization, ao_labels, molden_bool=True, name=name
+    )
+
+    if spin_restricted:
+        # Running regular MP2 and CCSD
+        mymp = mp.MP2(mf).run(verbose=0)
+        mycc = cc.CCSD(mf).run(verbose=0)
+
+        # Running localized MP2
+        eris = mp.mp2._make_eris(mymp, mo_coeff=c_lo)
+        mp_lo = mp.mp2._iterative_kernel(mymp, eris, verbose=0)
+    else:
+        # Running regular MP2 and CCSD
+        mymp = mp.UMP2(mf).run()
+        mycc = cc.UCCSD(mf).run()
+
+        breakpoint()
+        # Running localized MP2
+        eris = mp.mp2._make_eris(mymp, mo_coeff=c_lo)
+        mp_lo = mp.mp2._iterative_kernel(mymp, eris, verbose=0)
+
+    print(f"MP2 corr. energy             : {mymp.e_corr}")
+    print(f"Localized MP2 corr. energy   : {mp_lo[1]}")
+    print(f"CCSD corr. energy            : {mycc.e_corr}")
+    # print(f"FCI corr. energy             : {fci_res[0] - mf.e_tot}")
+
+    breakpoint()
+    return mf, c_lo, mp_lo[2], mf.e_tot, mymp.e_corr, mycc.e_corr
+
+
+
+
+
+
+
+
+def get_Be_ring_reference_value(num, basis, bond_length, localization, ao_labels):
+
+    structure = ring.make(num, bond_length)
+    atom = [("Be %f %f %f" % xyz) for xyz in structure]
+
+    mol = gto.M()
+    mol.basis = basis
+    mol.atom = atom
+    mol.verbose = 3
+    mol.unit = "angstrom"
+    mol.build()
+
+    mf = mol.RHF().run()
+
+    # localization
+    name = f"molden/molden_Be_ring_{num}_{basis}_{bond_length}"
+    c_lo = get_localized_orbs(
+        mol, mf, localization, ao_labels, molden_bool=True, name=name
+    )
+
+    # Running regular MP2 and CCSD
+    mymp = mp.MP2(mf).run(verbose=0)
+    mycc = cc.CCSD(mf).run(verbose=0)
+
+    # Running localized MP2
+    eris = mp.mp2._make_eris(mymp, mo_coeff=c_lo)
+    mp_lo = mp.mp2._iterative_kernel(mymp, eris, verbose=0)
+
+    print(f"MP2 corr. energy             : {mymp.e_corr}")
+    print(f"Localized MP2 corr. energy   : {mp_lo[1]}")
+    print(f"CCSD corr. energy            : {mycc.e_corr}")
+    # print(f"FCI corr. energy             : {fci_res[0] - mf.e_tot}")
+
+    return mf, c_lo, mp_lo[2], mf.e_tot, mymp.e_corr, mycc.e_corr
+
+
+def check_compressibility(mycc, basis, title):
+
+    t2 = mycc.t2
+    t2_mat = t2.reshape((t2.shape[0] ** 2, t2.shape[-1] ** 2))
+
+    u, s, v = np.linalg.svd(t2_mat, full_matrices=False)
+
+    vec = np.zeros_like(s)
+    energies = []
+    differences = []
+
+    for i in range(len(s)):
+        vec[: i + 1] = s[: i + 1]
+
+        t2_approx = u @ np.diag(vec) @ v
+        t2_approx = t2_approx.reshape(t2.shape)
+
+        energies.append(mycc.energy(mycc.t1, t2_approx) / mycc.e_corr)
+        differences.append(np.linalg.norm(t2_approx - mycc.t2))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+
+    ax1.plot(1 + np.arange(len(s)), energies, "b-", label="Corr. energy %")
+    ax1.plot(0.9 * np.ones(len(s)), "--", label="90%")
+    ax1.plot(0.8 * np.ones(len(s)), "--", label="80%")
+    ax1.plot(0.7 * np.ones(len(s)), "--", label="70%")
+    ax1.plot(0.6 * np.ones(len(s)), "--", label="60%")
+    ax1.set_title(f"Correlation energy recovery ({basis})")
+    ax1.set_xlabel("T2 approximation rank")
+    ax1.legend()
+
+    ax2.semilogy(1 + np.arange(len(s)), differences)
+    ax2.set_title("Error in T2 tensor")
+    ax2.set_ylim((1e-4, 1))
+
+    fig.suptitle(title)
+    plt.show()
+
+    exit()
+
 
 def get_h8_reference_value(basis, bond_length, dist, localization, ao_labels):
 
@@ -143,14 +538,36 @@ def get_h8_reference_value(basis, bond_length, dist, localization, ao_labels):
     mol.basis = basis
     mol.atom = atoms
     mol.verbose = 3
-    mol.unit = 'angstrom'
+    mol.unit = "angstrom"
     mol.build()
 
     mf = mol.RHF().run()
 
+    # cisolver = fci.FCI(mf)
+    # fci_res = cisolver.kernel()
+
     # localization
     name = f"molden/molden_H8_{basis}_{bond_length}_{dist}"
-    get_localizaed_orbs(mol, mf, localization, ao_labels, molden_bool = True, name=name)
+    c_lo = get_localized_orbs(
+        mol, mf, localization, ao_labels, molden_bool=True, name=name
+    )
+
+    # Running regular MP2 and CCSD
+    mymp = mp.MP2(mf).run(verbose=0)
+    mycc = cc.CCSD(mf).run(verbose=0)
+
+    # check_compressibility(mycc, basis, f'Testing H-8 system ({bond_length}, {dist})')
+
+    # Running localized MP2
+    eris = mp.mp2._make_eris(mymp, mo_coeff=c_lo)
+    mp_lo = mp.mp2._iterative_kernel(mymp, eris, verbose=0)
+
+    print(f"MP2 corr. energy             : {mymp.e_corr}")
+    print(f"Localized MP2 corr. energy   : {mp_lo[1]}")
+    print(f"CCSD corr. energy            : {mycc.e_corr}")
+    # print(f"FCI corr. energy             : {fci_res[0] - mf.e_tot}")
+
+    return mf, c_lo, mp_lo[2], mf.e_tot, mymp.e_corr, mycc.e_corr
 
 
 def get_t_int(t2, eps=0.9):
@@ -487,6 +904,54 @@ def ex(n_act_occ, n_act_virt, mf, mo_coeff, mp_t2, idx_s, idx_d):
     return mycc.e_corr
 
 
+def fragmented_mpcc(frags, mf, mo_coeff, mp_t2, idx_s, idx_d):
+
+    nocc = np.sum(mf.mo_occ > 0)
+    nvirt = len(mf.mo_occ) - nocc
+
+    t1 = np.zeros((nocc, nvirt))
+    t2 = np.copy(mp_t2)
+
+    for frag in frags:
+        act_hole, act_particle = frag[0], frag[1] - nocc
+        mycc = cc.rmpccsd_slow.RMPCCSD(mf, mo_coeff=mo_coeff)
+        mycc.verbose = 5
+        res = mycc.kernel(act_hole, act_particle, idx_s, idx_d, t1=t1, t2=t2)
+
+        t2 = mycc.t2
+        t1 = mycc.t1
+
+    # mymp = mp.MP2(mf).run(verbose = 0)
+    # eris = mp.mp2._make_eris(mymp, mo_coeff=mo_coeff)
+    # mp_lo = mp.mp2._iterative_kernel(mymp, eris, verbose=0)
+
+    # mp2_ref = mp.MP2(mf, mo_coeff = mo_coeff)
+    cc_ref = cc.CCSD(mf, mo_coeff=mo_coeff)
+    cc_ref.kernel()
+
+    t2_new = np.copy(mp_t2)
+    t2_new[
+        np.ix_(frags[0][0], frags[0][0], frags[0][1] - nocc, frags[0][1] - nocc)
+    ] = cc_ref.t2[
+        np.ix_(frags[0][0], frags[0][0], frags[0][1] - nocc, frags[0][1] - nocc)
+    ]
+    t2_new[
+            np.ix_(frags[1][0], frags[1][0], frags[1][1] - nocc, frags[1][1] - nocc)] = cc_ref.t2[
+        np.ix_(frags[1][0], frags[1][0], frags[1][1] - nocc, frags[1][1] - nocc)
+    ]
+
+    t1_new = np.zeros((nocc, nvirt))
+    t1_new[np.ix_(frags[0][0], frags[0][1] - nocc)] = cc_ref.t1[
+        np.ix_(frags[0][0], frags[0][1] - nocc)
+    ]
+    t1_new[np.ix_(frags[1][0], frags[1][1] - nocc)] = cc_ref.t1[
+        np.ix_(frags[1][0], frags[1][1] - nocc)
+    ]
+
+    print(cc_ref.energy(t1_new, t2_new))
+    breakpoint()
+
+
 def test_ring(N, bd, atom, basis, idx_s, idx_d):
 
     structure = ring.make(N, bd)
@@ -577,8 +1042,13 @@ if __name__ == "__main__":
         [11],
     ]
 
+    # (4,2)
     idx_s = [[0, 1, 2]]
     idx_d = [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]]
+
+    # (2,1)
+    # idx_s = [[2]]
+    # idx_d = [[3, 7, 9, 10, 11]]
 
     # for elem_d in idx_d:
     #        for elem_s in idx_s:
@@ -604,7 +1074,57 @@ if __name__ == "__main__":
 
         print("Bond length :", bd)
 
-        get_reference_values("H8", basis="ccpvdz", bond_length=0.741, dist=3, localization = 'IAO')
+        # mf, lo_coeff, mp_t2, e_mf, e_mp, e_cc = get_reference_values("Be-ring", num_atoms = 10, basis="sto6g", bond_length=2.9, localization = 'AVAS', ao_labels = ['Be 2s'])
+
+        # H8 model
+        '''
+        mf, lo_coeff, mp_t2, e_mf, e_mp, e_cc = get_reference_values(
+            "H8",
+            basis="ccpvdz",
+            bond_length=0.741,
+            dist=3,
+            localization="AVAS",
+            ao_labels=["H 1s"],
+        )
+        '''
+
+        # N2 spin unrestricted
+        mf, lo_coeff, mp_t2, e_mf, e_mp, e_cc = get_reference_values(
+            "Cl2",
+            basis="ccpvtz",
+            bond_length=1.988,
+            localization="AVAS-DMET",
+            ao_labels = ["Cl 3p"],
+            spin_restricted = True
+        )
+
+        # define fragmentation
+        # fragments for MOs
+        """
+        act_hole_1 = [0,3]
+        act_hole_2 = [1,2]
+        act_part_1 = [4,7]
+        act_part_2 = [5,6]
+        """
+
+        # fragments for IAO
+        """
+        act_hole_1 = [0,2]
+        act_hole_2 = [1,3]
+        act_part_1 = [5,7]
+        act_part_2 = [4,6]
+        """
+
+        # fragments for AVAS ['H 1s']
+        act_hole_1 = [0, 3]
+        act_hole_2 = [1, 2]
+        act_part_1 = [4, 7]
+        act_part_2 = [5, 6]
+
+        frags = [[act_hole_1, act_part_1], [act_hole_2, act_part_2]]
+
+        # frags = [[act_hole_1 + act_hole_2 , act_part_1 + act_part_2]]
+
         # get_hring_references_PNO_avas(10, 'ccpvdz', bd)
 
         # n_act_occ, n_act_virt, mf, mo_coeff, mymp, mp_t2, e_mf, e_mp, e_cc = get_N2_references_PNO_avas('ccpvdz', bd)
@@ -620,7 +1140,8 @@ if __name__ == "__main__":
             res_cc_s = []
 
             for elem_s in idx_s:
-                output = ex(n_act_occ, n_act_virt, mf, mo_coeff, mp_t2, elem_s, elem_b)
+                # output = ex(n_act_occ, n_act_virt, mf, mo_coeff, mp_t2, elem_s, elem_b)
+                output = fragmented_mpcc(frags, mf, lo_coeff, mp_t2, elem_s, elem_b)
                 res_mpcc_s.append(output)
                 res_hf_s.append(e_mf)
                 res_mp_s.append(e_mp)
