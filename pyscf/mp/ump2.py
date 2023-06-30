@@ -19,6 +19,7 @@ UMP2 with spatial integals
 
 
 import numpy
+import scipy
 from pyscf import lib
 from pyscf import gto
 from pyscf import ao2mo
@@ -108,10 +109,15 @@ def kernel(mp, mo_energy=None, mo_coeff=None, eris=None, with_t2=WITH_T2, verbos
 
     return emp2, t2
 
-def energy(mp, t2, eris):
+def energy(mp, t2, eris, t1=None):
     '''MP2 energy'''
     t2aa, t2ab, t2bb = t2
     nocca, noccb, nvira, nvirb = t2ab.shape
+
+    focka, fockb = eris.fock
+    fova = focka[:nocca,nocca:]
+    fovb = fockb[:noccb,noccb:]
+
     eris_ovov = numpy.asarray(eris.ovov).reshape(nocca,nvira,nocca,nvira)
     eris_OVOV = numpy.asarray(eris.OVOV).reshape(noccb,nvirb,noccb,nvirb)
     eris_ovOV = numpy.asarray(eris.ovOV).reshape(nocca,nvira,noccb,nvirb)
@@ -121,6 +127,13 @@ def energy(mp, t2, eris):
     ess -= 0.25 * numpy.einsum('ijab,ibja->', t2bb, eris_OVOV)
     eos  =        numpy.einsum('iJaB,iaJB->', t2ab, eris_ovOV)
     e    = ess + eos
+    if (t1 is not None):
+       t1a, t1b = t1
+       et1 = numpy.einsum('ia,ia', fova, t1a)
+       et1 += numpy.einsum('ia,ia', fovb, t1b)
+       print("t1 contribution to energy", et1)
+       e += et1 
+
     if abs(e.imag) > 1e-4:
         logger.warn(mp, 'Non-zero imaginary part found in UMP2 energy %s', e)
     e = lib.tag_array(e.real, e_corr_ss=ess.real, e_corr_os=eos.real)
@@ -146,17 +159,20 @@ def update_amps(mp, t2, eris):
     u2bb  = lib.einsum('ijae,be->ijab', t2bb, fvvb)
     u2ab  = lib.einsum('iJaE,BE->iJaB', t2ab, fvvb)
     u2ab += lib.einsum('iJeA,be->iJbA', t2ab, fvva)
+
     u2aa -= lib.einsum('imab,mj->ijab', t2aa, fooa)
     u2bb -= lib.einsum('imab,mj->ijab', t2bb, foob)
     u2ab -= lib.einsum('iMaB,MJ->iJaB', t2ab, foob)
     u2ab -= lib.einsum('mIaB,mj->jIaB', t2ab, fooa)
 
-    eris_ovov = numpy.asarray(eris.ovov).reshape(nocca,nvira,nocca,nvira).conj() * .5
-    eris_OVOV = numpy.asarray(eris.OVOV).reshape(noccb,nvirb,noccb,nvirb).conj() * .5
+    eris_ovov = numpy.asarray(eris.ovov).reshape(nocca,nvira,nocca,nvira).conj() * 0.5
+    eris_OVOV = numpy.asarray(eris.OVOV).reshape(noccb,nvirb,noccb,nvirb).conj() * 0.5
     eris_ovOV = numpy.asarray(eris.ovOV).reshape(nocca,nvira,noccb,nvirb).conj().copy()
-    u2aa = eris_ovov.transpose(0,2,1,3) - eris_ovov.transpose(0,2,3,1)
-    u2bb = eris_OVOV.transpose(0,2,1,3) - eris_OVOV.transpose(0,2,3,1)
-    u2ab = eris_ovOV.transpose(0,2,1,3)
+
+    u2aa += eris_ovov.transpose(0,2,1,3) - eris_ovov.transpose(0,2,3,1)
+    u2bb += eris_OVOV.transpose(0,2,1,3) - eris_OVOV.transpose(0,2,3,1)
+    u2ab += eris_ovOV.transpose(0,2,1,3)
+
     u2aa = u2aa + u2aa.transpose(1,0,3,2)
     u2bb = u2bb + u2bb.transpose(1,0,3,2)
 
@@ -165,7 +181,86 @@ def update_amps(mp, t2, eris):
     u2aa /= lib.direct_sum('ia+jb->ijab', eia_a, eia_a)
     u2ab /= lib.direct_sum('ia+jb->ijab', eia_a, eia_b)
     u2bb /= lib.direct_sum('ia+jb->ijab', eia_b, eia_b)
-    return u2aa, u2ab, u2bb
+
+    u2 = u2aa, u2ab, u2bb
+
+    return u2
+
+
+def get_t1(mp, eris, t2):
+
+    t2aa, t2ab, t2bb = t2
+    nocca, noccb, nvira, nvirb = t2ab.shape
+
+    mo_ea_o = eris.mo_energy[0][:nocca]
+    mo_ea_v = eris.mo_energy[0][nocca:] + mp.level_shift
+    mo_eb_o = eris.mo_energy[1][:noccb]
+    mo_eb_v = eris.mo_energy[1][noccb:] + mp.level_shift
+
+    eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
+    eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+
+    focka, fockb = eris.fock
+    fooa = focka[:nocca,:nocca] 
+    foob = fockb[:noccb,:noccb] 
+    fvva = focka[nocca:,nocca:] 
+    fvvb = fockb[noccb:,noccb:] 
+
+    fova = focka[:nocca,nocca:]
+    fovb = fockb[:noccb,noccb:]
+
+    u1a = scipy.linalg.solve_sylvester(-fooa, fvva, fova)
+    u1b = scipy.linalg.solve_sylvester(-foob, fvvb, fovb)
+
+#    u1a = -fova/eia_a
+#    u1b = -fovb/eia_b
+
+    u1 = u1a, u1b
+
+    return u1
+
+
+# Iteratively solve MP2 if non-canonical HF is provided
+def _iterative_kernel(mp, eris, verbose=None):
+    cput1 = cput0 = (logger.process_clock(), logger.perf_counter())
+    log = logger.new_logger(mp, verbose)
+
+    emp2, t2 = mp.init_amps(eris=eris)
+    t1 = mp.get_t1(eris, t2)
+#    t2 = 0 * t2
+#    emp2 = 0
+    log.info('Init E(MP2) = %.15g', emp2)
+
+    adiis = lib.diis.DIIS(mp)
+
+    conv = False
+    for istep in range(mp.max_cycle):
+        t2new = mp.update_amps(t2, eris)
+
+        if isinstance(t2new, numpy.ndarray):
+            error = t2new - t2
+            normt = numpy.linalg.norm(t2new - t2)
+            t2 = None
+            t2new = adiis.update(t2new)
+        else: # UMP2
+            normt = numpy.linalg.norm([numpy.linalg.norm(t2new[i] - t2[i])
+                                       for i in range(3)])
+            t2 = None
+            t2shape = [x.shape for x in t2new]
+            t2new = numpy.hstack([x.ravel() for x in t2new])
+            t2new = adiis.update(t2new)
+            t2new = lib.split_reshape(t2new, t2shape)
+
+        t2, t2new = t2new, None
+        emp2, e_last = mp.energy(t2, eris, t1), emp2
+        log.info('cycle = %d  E_corr(MP2) = %.15g  dE = %.9g  norm(t2) = %.6g',
+                 istep+1, emp2, emp2 - e_last, normt)
+        cput1 = log.timer('MP2 iter', *cput1)
+        if abs(emp2-e_last) < mp.conv_tol and normt < mp.conv_tol_normt:
+            conv = True
+            break
+    log.timer('MP2', *cput0)
+    return conv, emp2, t2
 
 
 def get_nocc(mp):
@@ -447,6 +542,8 @@ class UMP2(mp2.MP2):
     # For non-canonical MP2
     energy = energy
     update_amps = update_amps
+    _iterative_kernel = _iterative_kernel
+    get_t1 = get_t1 
     def init_amps(self, mo_energy=None, mo_coeff=None, eris=None, with_t2=WITH_T2):
         return kernel(self, mo_energy, mo_coeff, eris, with_t2)
 
@@ -713,7 +810,7 @@ if __name__ == '__main__':
     mol.atom = [['O', (0.,   0., 0.)],
                 ['O', (1.21, 0., 0.)]]
     mol.basis = 'cc-pvdz'
-    mol.spin = 2
+    mol.spin = 0
     mol.build()
     mf = scf.UHF(mol).run()
     frozen = [[0,1],[0,1]]
