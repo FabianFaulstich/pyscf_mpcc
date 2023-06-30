@@ -82,9 +82,13 @@ def get_localized_orbs(mol, mf, localization, ao_labels, molden_bool=False, name
         pm_vir.pop_method = "meta-lowdin"
         C = pm_vir.kernel()
         c_lo[:, mf.mo_occ < 1e-12] = C
+        act_hole = 3
+        act_part = 3
 
     elif localization == "MO":
         c_lo = mf.mo_coeff
+        act_hole = 3
+        act_part = 3
 
     elif localization == "AVAS-DMET":
         '''
@@ -170,18 +174,26 @@ def get_reference_values(basis, bond_length, localization, ao_labels, spin_restr
     mol.atom = [['N', [0,0,0]] , ['N', [bond_length,0,0]]]
     mol.verbose = 3
     mol.unit = "angstrom"
+    mol.spin = 2
     mol.build()
 
     if spin_restricted:
         mf = mol.RHF().run()
     else:
-        mf = mol.UHF().run()
+#        mf = mol.UHF().run()
+        mf = mol.ROHF().run()
 
     # localization
     name = f"molden/molden_N2_{basis}_{bond_length}"
     c_lo, act_hole, act_part = get_localized_orbs(
         mol, mf, localization, ao_labels, molden_bool=True, name=name
     )
+    act_hole = [np.array([3,4,5,6,7]),np.array([3,4,5])]
+    act_part = [np.array([8]),np.array([6,7,8])]
+
+#   c_lo = mf.mo_coeff
+#   act_hole = 3
+#   act_part = 3
 
     if spin_restricted:
         # Running regular MP2 and CCSD
@@ -193,13 +205,16 @@ def get_reference_values(basis, bond_length, localization, ao_labels, spin_restr
         mp_lo = mp.mp2._iterative_kernel(mymp, eris, verbose=0)
 
     else:
+        mf1 = scf.addons.convert_to_uhf(mf)
+
         # Running regular MP2 and CCSD
-        mymp = mp.UMP2(mf).run()
-        mycc = cc.UCCSD(mf).run()
+        mymp = mp.UMP2(mf1).run()
+        mycc = cc.UCCSD(mf1).run()
 
         # Running localized MP2
-        eris = mp.mp2._make_eris(mymp, mo_coeff=c_lo)
-        mp_lo = mp.mp2._iterative_kernel(mymp, eris, verbose=0)
+        eris = mp.ump2._make_eris(mymp, mo_coeff=(c_lo,c_lo))
+#        eris = mp.ump2._make_eris(mymp)
+        mp_lo = mp.ump2._iterative_kernel(mymp, eris, verbose=0)
 
        
     print(f"MP2 corr. energy             : {mymp.e_corr}")
@@ -207,7 +222,7 @@ def get_reference_values(basis, bond_length, localization, ao_labels, spin_restr
     print(f"CCSD corr. energy            : {mycc.e_corr}")
     # print(f"FCI corr. energy             : {fci_res[0] - mf.e_tot}")
 
-    return mf, c_lo, act_hole, act_part, mp_lo[2], mf.e_tot, mymp.e_corr, mycc.e_corr
+    return mf1, c_lo, act_hole, act_part, mp_lo[2], mf.e_tot, mymp.e_corr, mycc.e_corr
 
 
 def fragmented_mpcc(frags, mf, mo_coeff, mp_t2, idx_s, idx_d):
@@ -218,11 +233,60 @@ def fragmented_mpcc(frags, mf, mo_coeff, mp_t2, idx_s, idx_d):
     t1 = np.zeros((nocc, nvirt))
     t2 = np.copy(mp_t2)
 
-
     
     for frag in frags:
         act_hole, act_particle = frag[0], frag[1] - nocc
-        mycc = cc.rmpccsd_slow.RMPCCSD(mf, mo_coeff=mo_coeff)
+#        mycc = cc.rmpccsd_slow.RMPCCSD(mf, mo_coeff=mo_coeff)
+        mycc = cc.umpccsd.CCSD(mf, mo_coeff=mo_coeff)
+        mycc.verbose = 5
+        res = mycc.kernel(act_hole, act_particle, idx_s, idx_d, t1=t1, t2=t2)
+
+        t2 = mycc.t2
+        t1 = mycc.t1
+
+    # mymp = mp.MP2(mf).run(verbose = 0)
+    # eris = mp.mp2._make_eris(mymp, mo_coeff=mo_coeff)
+    # mp_lo = mp.mp2._iterative_kernel(mymp, eris, verbose=0)
+
+    # mp2_ref = mp.MP2(mf, mo_coeff = mo_coeff)
+    cc_ref = cc.CCSD(mf, mo_coeff=mo_coeff)
+    cc_ref.verbose = 0
+    cc_ref.kernel()
+    print('Global CCSD :', cc_ref.e_corr)
+
+    t2_new = np.copy(mp_t2)
+    t2_new[
+        np.ix_(frags[0][0], frags[0][0], frags[0][1] - nocc, frags[0][1] - nocc)
+    ] = cc_ref.t2[
+        np.ix_(frags[0][0], frags[0][0], frags[0][1] - nocc, frags[0][1] - nocc)
+    ]
+
+    t1_new = np.zeros((nocc, nvirt))
+    t1_new[np.ix_(frags[0][0], frags[0][1] - nocc)] = cc_ref.t1[
+        np.ix_(frags[0][0], frags[0][1] - nocc)
+    ]
+
+    e_ccsd_lo = cc_ref.energy(t1_new, t2_new)
+    print('Exact localized CCSD in MPCCSD (4,2) :', e_ccsd_lo)
+
+    return res[0], cc_ref.e_corr, e_ccsd_lo 
+
+
+def fragmented_mpcc_unrestricted(frags, mf, mo_coeff, mp_t2, idx_s, idx_d):
+
+    t2aa, t2ab, t2bb = mp_t2
+
+    nocca, noccb, nvira, nvirb = t2ab.shape
+
+    t1a = np.zeros((nocca, nvira))
+    t1b = np.zeros((noccb, nvirb))
+    t2 = np.copy(mp_t2)
+    t1 = t1a, t1b 
+    
+    for frag in frags:
+        act_hole = [frag[0][0],  frag[0][1]]
+        act_particle = [frag[1][0] - nocca, frag[1][1] - noccb]
+        mycc = cc.umpccsd.CCSD(mf, mo_coeff=(mo_coeff, mo_coeff))
         mycc.verbose = 5
         res = mycc.kernel(act_hole, act_particle, idx_s, idx_d, t1=t1, t2=t2)
 
@@ -270,14 +334,15 @@ if __name__ == "__main__":
     ]
 
     # (4,2)
-    idx_s = [0, 1, 2]
-    idx_d = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    # this shold be just one entry
+    idx_s = [[0, 1, 2],[0, 1, 2]]
+    idx_d = [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]]
 
     # (2,1)
     # idx_s = [[2]]
     # idx_d = [[3, 7, 9, 10, 11]]
 
-    bds = np.linspace(1, 2.5, num=16)
+    bds = np.linspace(1.8, 3.5, num=16)
     
     res_hf = []
     res_mp = []
@@ -287,19 +352,22 @@ if __name__ == "__main__":
     for bd in bds:
 
         print("Bond length :", bd)
-        basis = "ccpvtz"
+        basis = "ccpvdz"
         ao_labels = ["N 2p"]
 
         mf, lo_coeff, act_hole, act_part, mp_t2, e_mf, e_mp, e_cc = get_reference_values(
             basis=basis,
             bond_length=bd,
             localization="AVAS",
+#            localization="meta-lowdin",
+#            localization="MO",
             ao_labels = ao_labels,
-            spin_restricted = True
+            spin_restricted = False
         )
 
         frag = [[act_hole, act_part]]
-        e_mpcc, e_ccsd, e_ccsd_lo = fragmented_mpcc(frag, mf, lo_coeff, mp_t2, idx_s, idx_d)
+
+        e_mpcc, e_ccsd, e_ccsd_lo = fragmented_mpcc_unrestricted(frag, mf, lo_coeff, mp_t2, idx_s, idx_d)
 
         res_hf.append(e_mf)
         res_mp.append(e_mp)
