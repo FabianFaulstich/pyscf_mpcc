@@ -209,8 +209,8 @@ def get_t1(mp, eris, t2):
     fova = focka[:nocca,nocca:]
     fovb = fockb[:noccb,noccb:]
 
-    u1a = scipy.linalg.solve_sylvester(-fooa, fvva, fova)
-    u1b = scipy.linalg.solve_sylvester(-foob, fvvb, fovb)
+    u1a = scipy.linalg.solve_sylvester(-fooa, fvva, -fova)
+    u1b = scipy.linalg.solve_sylvester(-foob, fvvb, -fovb)
 
 #    u1a = -fova/eia_a
 #    u1b = -fovb/eia_b
@@ -260,8 +260,7 @@ def _iterative_kernel(mp, eris, verbose=None):
             conv = True
             break
     log.timer('MP2', *cput0)
-    return conv, emp2, t2
-
+    return conv, emp2, t2, t1
 
 def get_nocc(mp):
     frozen = mp.frozen
