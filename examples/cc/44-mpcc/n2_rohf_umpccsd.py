@@ -57,14 +57,16 @@ def get_localized_orbs(mol, mf, localization, ao_labels, molden_bool=False, name
             c_lo[:, mf.mo_occ < 1e-12] = C
 
     elif localization == "AVAS":
-        avas_obj = avas.AVAS(mf, ao_labels, minao="dzp",openshell_option=4)
-#       avas_obj = avas.AVAS(mf, ao_labels, minao="6-31g")
-#        avas_obj = avas.AVAS(mf, ao_labels, openshell_option=4)
+
+        avas_obj = avas.AVAS(mf, ao_labels, openshell_option=3)
         avas_obj.with_iao = True
         ncas, nelecas, mocas = avas_obj.kernel()
+ 
+#        act_hole = np.where(avas_obj.occ_weights > 1e-10)[0]
+#        act_part = np.where(avas_obj.vir_weights >avas_obj. threshold)[0] + mf.mol.nelectron//2
 
-        act_hole = (np.where(avas_obj.occ_weights[0] > avas_obj.threshold)[0], np.where(avas_obj.occ_weights[1] > avas_obj.threshold)[0])
-        act_part = (np.where(avas_obj.vir_weights[0] >avas_obj.threshold)[0] + mf.mol.nelec[0], np.where(avas_obj.vir_weights[1] >avas_obj.threshold)[0] + mf.mol.nelec[1])
+        act_hole = np.where(avas_obj.occ_weights > avas_obj.threshold)[0]
+        act_part = np.where(avas_obj.vir_weights >avas_obj.threshold)[0] + mf.mol.nelec[0]
        
 #       c_lo = avas_obj.mo_coeff
         c_lo = mocas
@@ -166,42 +168,52 @@ def get_localized_orbs(mol, mf, localization, ao_labels, molden_bool=False, name
                 print("Wrote molden file: \n", f1)
         
 
-    return c_lo, act_hole, act_part
+        return c_lo, act_hole, act_part
 
 
-def get_reference_values(basis, bond_length, localization, ao_labels, spin_restricted, spin, dm0=None):
+def get_reference_values(basis, bond_length, localization, ao_labels, spin_restricted):
 
     mol = gto.M()
     mol.basis = basis
     mol.atom = [['N', [0,0,0]] , ['N', [bond_length,0,0]]]
     mol.verbose = 3
     mol.unit = "angstrom"
-    mol.spin = spin
+    mol.spin = 0
     mol.build()
 
     if spin_restricted:
         mf = mol.RHF().run()
     else:
-        mf = mol.UHF().newton()
-        mf = mf.run(dm0)
-        mo1 = mf.stability()[0]
+#       mf = mol.UHF().run()
+        mf = mol.ROHF().run()
 
-        dm1 = mf.make_rdm1(mo1, mf.mo_occ)
-        mf = mf.run(dm1)
-        mo1 = mf.stability()[0]
-
-        mf = mf.newton().run(mo1, mf.mo_occ)
-        mf.stability()
-
-#        nocc = np.sum(mf.mo_occ > 0)
-#        ndocc = np.sum(mf.mo_occ > 1)
-#        nsocc = nocc - ndocc
+        nocc = np.sum(mf.mo_occ > 0)
+        ndocc = np.sum(mf.mo_occ > 1)
+        nsocc = nocc - ndocc
 
     # localization
     name = f"molden/molden_N2_{basis}_{bond_length}"
-    c_lo, act_hole, act_part = get_localized_orbs(
-        mol, mf, localization, ao_labels, molden_bool=False, name=name
+    c_lo, act_hole_alpha, act_part_alpha = get_localized_orbs(
+        mol, mf, localization, ao_labels, molden_bool=True, name=name
     )
+
+    act = np.hstack((act_hole_alpha, act_part_alpha))
+
+    print("active")
+    print(act)
+    print(len(act))
+    
+
+    act_hole_beta = []
+    act_part_beta = []
+    for i in range(len(act)):
+        if mf.mo_occ[act[i]] > 1:
+           act_hole_beta.append(act[i])
+        else:
+           act_part_beta.append(act[i])
+ 
+    act_hole = [act_hole_alpha, np.array(act_hole_beta)]
+    act_part = [act_part_alpha, np.array(act_part_beta)]
 
     print("active hole", act_hole)
     print("active particle", act_part)
@@ -220,26 +232,24 @@ def get_reference_values(basis, bond_length, localization, ao_labels, spin_restr
         mp_lo = mp.mp2._iterative_kernel(mymp, eris, verbose=0)
 
     else:
-        mult, sz = mf.spin_square()
-        print("spin multiplicity", sz)
+        mf1 = scf.addons.convert_to_uhf(mf)
         # Running regular MP2 and CCSD
-        mymp = mp.UMP2(mf).run()
-        mycc = cc.UCCSD(mf).run()
-        mycc.diis = 12
-        mycc.max_cycle = 80
+        mymp = mp.UMP2(mf1).run()
+        mycc = cc.UCCSD(mf1).run()
 
         # Running localized MP2
-        eris = mp.ump2._make_eris(mymp, mo_coeff=c_lo)
-#        eris = mp.ump2._make_eris(mymp)
+        eris = mp.ump2._make_eris(mymp, mo_coeff=(c_lo,c_lo))
+#       eris = mp.ump2._make_eris(mymp)
         mp_lo = mp.ump2._iterative_kernel(mymp, eris, verbose=0)
+
        
     print(f"MP2 corr. energy             : {mymp.e_corr}")
     print(f"Localized MP2 corr. energy   : {mp_lo[1]}")
     print(f"CCSD corr. energy            : {mycc.e_corr}")
     # print(f"FCI corr. energy             : {fci_res[0] - mf.e_tot}")
 
-#    return mf1, (c_lo,c_lo), act_hole, act_part, mp_lo[2], mp_lo[3], mf.e_tot, mymp.e_corr, mycc.e_corr
-    return mf, c_lo, act_hole, act_part, mp_lo[2], mp_lo[3], mf.e_tot, mymp.e_corr, mycc.e_corr
+    return mf, c_lo, act_hole, act_part, mp_lo[2], mf.e_tot, mymp.e_corr, mycc.e_corr
+
 
 def fragmented_mpcc(frags, mf, mo_coeff, mp_t2, idx_s, idx_d):
 
@@ -286,26 +296,24 @@ def fragmented_mpcc(frags, mf, mo_coeff, mp_t2, idx_s, idx_d):
 
     return res[0], cc_ref.e_corr, e_ccsd_lo 
 
-def fragmented_mpcc_unrestricted(frags, mf, mo_coeff, mp_t2, mp_t1, idx_s, idx_d):
+
+def fragmented_mpcc_unrestricted(frags, mf, mo_coeff, mp_t2, idx_s, idx_d):
 
     t2aa, t2ab, t2bb = mp_t2
 
     nocca, noccb, nvira, nvirb = t2ab.shape
 
-    t1a, t1b = mp_t1 
+    t1a = np.zeros((nocca, nvira))
+    t1b = np.zeros((noccb, nvirb))
     t2 = np.copy(mp_t2)
     t1 = t1a, t1b 
-
+    
     for frag in frags:
         act_hole = [frag[0][0],  frag[0][1]]
         act_particle = [frag[1][0] - nocca, frag[1][1] - noccb]
-        mycc = cc.umpccsd.CCSD(mf, mo_coeff=mo_coeff)
+        mycc = cc.umpccsd.CCSD(mf, mo_coeff=(mo_coeff, mo_coeff))
         mycc.verbose = 5
-        mycc.max_cycle = 80
-        mycc.diis_space = 14
-        mycc.level_shift = .5
         res = mycc.kernel(act_hole, act_particle, idx_s, idx_d, t1=t1, t2=t2)
-        print('Exact Exact localized CCSD in MPCCSD (4,2) :', res[0])
 
         t2 = mycc.t2
         t1 = mycc.t1
@@ -315,18 +323,27 @@ def fragmented_mpcc_unrestricted(frags, mf, mo_coeff, mp_t2, mp_t1, idx_s, idx_d
     # mp_lo = mp.mp2._iterative_kernel(mymp, eris, verbose=0)
 
     # mp2_ref = mp.MP2(mf, mo_coeff = mo_coeff)
+    cc_ref = cc.CCSD(mf, mo_coeff=mo_coeff)
+    cc_ref.verbose = 0
+    cc_ref.kernel()
+    print('Global CCSD :', cc_ref.e_corr)
 
-#   t2_new = np.copy(mp_t2)
-#   t2_new[
-#       np.ix_(frags[0][0], frags[0][0], frags[0][1] - nocc, frags[0][1] - nocc)
-#   ] = cc_ref.t2[
-#       np.ix_(frags[0][0], frags[0][0], frags[0][1] - nocc, frags[0][1] - nocc)
-#   ]
-#   t1_new = np.zeros((nocc, nvirt))
-#   t1_new[np.ix_(frags[0][0], frags[0][1] - nocc)] = cc_ref.t1[
-#       np.ix_(frags[0][0], frags[0][1] - nocc)
-#   ]
-    return res[0] 
+    t2_new = np.copy(mp_t2)
+    t2_new[
+        np.ix_(frags[0][0], frags[0][0], frags[0][1] - nocc, frags[0][1] - nocc)
+    ] = cc_ref.t2[
+        np.ix_(frags[0][0], frags[0][0], frags[0][1] - nocc, frags[0][1] - nocc)
+    ]
+
+    t1_new = np.zeros((nocc, nvirt))
+    t1_new[np.ix_(frags[0][0], frags[0][1] - nocc)] = cc_ref.t1[
+        np.ix_(frags[0][0], frags[0][1] - nocc)
+    ]
+
+    e_ccsd_lo = cc_ref.energy(t1_new, t2_new)
+    print('Exact localized CCSD in MPCCSD (4,2) :', e_ccsd_lo)
+
+    return res[0], cc_ref.e_corr, e_ccsd_lo 
 
 
 if __name__ == "__main__":
@@ -343,23 +360,20 @@ if __name__ == "__main__":
 
     # (4,2)
     # this shold be just one entry
-    idx_s = [[0, 1, 2],[0, 1, 2]]
-    idx_d = [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]]
+#    idx_s = [[0, 1, 2],[0, 1, 2]]
+#    idx_d = [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]]
+
+
+    idx_s = [0, 1, 2]
+    idx_d = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+
+
 
     # (2,1)
     # idx_s = [[2]]
     # idx_d = [[3, 7, 9, 10, 11]]
 
-#    bds = np.linspace(1.2, 3.8, num=10)
-#    bds = np.arange(3.8, 1.2, -0.2)
-
-    bds = np.arange(2.2,1.2,-0.05)
-#    bds = np.arange(2.2,1.0,-0.05)
-#    bds = [1.2]
-    spin = 0 
-    basis = "aug-ccpvdz"
-    ao_labels = ["N 2p", "N 2s", "N 3p", "N 3s", "N 3d"]
-#    ao_labels = ["N 2p", "N 2s"]
+    bds = np.linspace(1.4, 3.5, num=16)
     
     res_hf = []
     res_mp = []
@@ -367,69 +381,66 @@ if __name__ == "__main__":
     res_mpcc = []
     res_cclo = []
     for bd in bds:
+
         print("Bond length :", bd)
-#        ao_labels = ["N 2p"]
+        basis = "ccpvdz"
+#        ao_labels = ["N 2p", "N 2s"]
+        ao_labels = ["N 2p"]
 
-        if bd == bds[0]:
-           mf, lo_coeff, act_hole, act_part, mp_t2, mp_t1, e_mf, e_mp, e_cc = get_reference_values(
+        mf, lo_coeff, act_hole, act_part, mp_t2, e_mf, e_mp, e_cc = get_reference_values(
             basis=basis,
             bond_length=bd,
             localization="AVAS",
 #            localization="meta-lowdin",
 #            localization="MO",
             ao_labels = ao_labels,
-            spin_restricted = False,
-            spin = spin
-           )
-        else:
-           mf, lo_coeff, act_hole, act_part, mp_t2, mp_t1, e_mf, e_mp, e_cc = get_reference_values(
-            basis=basis,
-            bond_length=bd,
-            localization="AVAS",
-#            localization="meta-lowdin",
-#            localization="MO",
-            ao_labels = ao_labels,
-            spin_restricted = False,
-            spin = spin,
-            dm0 = dm0 
-           )
-         
-        dm0 = mf.make_rdm1()
+            spin_restricted = True
+        )
 
-        frag = [[act_hole, act_part]]
+#        frag = [[act_hole, act_part]]
+        frag = [act_hole, act_part]
 
-        e_mpcc = fragmented_mpcc_unrestricted(frag, mf, lo_coeff, mp_t2, mp_t1, idx_s, idx_d)
+#        e_mpcc, e_ccsd, e_ccsd_lo = fragmented_mpcc_unrestricted(frag, mf, lo_coeff, mp_t2, idx_s, idx_d)
+        e_mpcc, e_ccsd, e_ccsd_lo = fragmented_mpcc(frag, mf, lo_coeff, mp_t2, idx_s, idx_d)
 
         res_hf.append(e_mf)
         res_mp.append(e_mp)
-        res_cc.append(e_cc)
+        res_cc.append(e_ccsd)
         res_mpcc.append(e_mpcc)
+        res_cclo.append(e_ccsd_lo)
 
     res_hf = np.array(res_hf)
     res_mp  = np.array(res_mp)
     res_cc = np.array(res_cc)
     res_mpcc = np.array(res_mpcc)
+    res_cclo =  np.array(res_cclo)
 
-#    breakpoint()
-
-    fig, (ax1) = plt.subplots(1, 1, figsize=(16, 6))
-    ax1.plot(bds, res_hf, label= 'UHF')
-    ax1.plot(bds, res_hf + res_mp, label= 'UMP2')
-    ax1.plot(bds, res_hf + res_cc, label= 'UCCSD')
-    ax1.plot(bds, res_hf + res_mpcc, label= 'UMP-CCSD (4,2)')
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    ax1.plot(bds, res_hf, label= 'RHF')
+    ax1.plot(bds, res_hf + res_mp, label= 'MP2')
+    ax1.plot(bds, res_hf + res_cc, label= 'CCSD')
+    ax1.plot(bds, res_hf + res_mpcc, label= 'MP-CCSD (4,2)')
+    ax1.plot(bds, res_hf + res_cclo, label= 'Glob. CCSD in (4,2)')
 
     ax1.legend()
-    ax1.set_title(f'Absolute energies ({basis}, {ao_labels}, spin = {spin})', pad=20)
+    ax1.set_title(f'Absolute energies ({basis}, {ao_labels})', pad=20)
     ax1.set_xlabel('Bond length')
 
-    name = f"abs_energies_{basis}_test"
-#    for elem in ao_labels:
-#        name += f"_{elem}"
-    name += f"_{spin}"
+    ax2.plot(bds, res_hf- np.min(res_hf), label= 'RHF')
+    #ax2.plot(bds, res_hf + res_mp - np.min(res_hf + res_mp), label= 'MP2')
+    ax2.plot(bds, res_hf + res_cc - np.min(res_hf + res_cc), label= 'CCSD')
+    ax2.plot(bds, res_hf + res_mpcc - np.min(res_hf + res_mpcc ), label= 'MP-CCSD (4,2)')
+    ax2.plot(bds, res_hf + res_cclo - np.min(res_hf + res_cclo), label= 'Glob. CCSD in (4,2)')
+
+    ax2.legend()
+    ax2.set_title(f'Relative energies ({basis}, {ao_labels})', pad=20)
+    ax2.set_xlabel('Bond length')
+
+
+    name = f"plots/N2/abs_energies_{basis}"
+    for elem in ao_labels:
+        name += f"_{elem}"
     name += ".png"
-
-    print(name)
-
     fig.savefig(name,
                 bbox_inches="tight",
                 dpi= 150,
@@ -439,18 +450,18 @@ if __name__ == "__main__":
                 orientation ='landscape')
 
     fig, (ax1) = plt.subplots(1, 1, figsize=(8, 6))
-    ax1.plot(bds, res_cc - res_mp, label= 'UMP2')
-    ax1.plot(bds, res_cc - res_mpcc, label= 'UMP-CCSD (4,2)')
+    ax1.plot(bds, res_cc - res_mp, label= 'MP2')
+    ax1.plot(bds, res_cc - res_mpcc, label= 'MP-CCSD (4,2)')
+    ax1.plot(bds, res_cc - res_cclo, label= 'Glob. CCSD in (4,2)')
 
     ax1.legend()
-    ax1.set_title(f'Corr. energy diff. ({basis}, {ao_labels}, spin = {spin})', pad=20)
+    ax1.set_title(f'Corr. energy diff. ({basis}, {ao_labels})', pad=20)
     ax1.set_xlabel('Bond length')
 
 
-    name = f"corr_energy_diff_{basis}_test"
-   # for elem in ao_labels:
-    #    name += f"_{elem}"
-    name += f"_{spin}"
+    name = f"plots/N2/corr_energy_diff_{basis}"
+    for elem in ao_labels:
+        name += f"_{elem}"
     name += ".png"
 
     fig.savefig(name,
@@ -464,6 +475,6 @@ if __name__ == "__main__":
     plt.show()
 
 
-#    breakpoint()
+    breakpoint()
 
 
