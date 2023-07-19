@@ -95,10 +95,19 @@ def _kernel(avas_obj):
     assert avas_obj.openshell_option != 1
 
     if isinstance(mf, scf.uhf.UHF):
-        log.note('UHF/UKS object is found.  AVAS takes alpha orbitals only')
-        mo_coeff = mf.mo_coeff[0]
-        mo_occ = mf.mo_occ[0]
-        mo_energy = mf.mo_energy[0]
+        if (avas_obj.openshell_option == 4):
+           log.note("UHF/UKS object is found. AVAS will work with the unrestricted orbitals.")
+           mo_coeff = mf.mo_coeff[0]
+           mo_occ = mf.mo_occ[0]
+           mo_energy = mf.mo_energy[0]
+        else:
+           log.note('UHF/UKS object is found.  AVAS takes alpha orbitals only. If unrestricted AVAS is intended use openshell_option = 4')
+           mo_coeff = mf.mo_coeff[0]
+           mo_occ = mf.mo_occ[0]
+           mo_energy = mf.mo_energy[0]
+#       mo_coeff = mf.mo_coeff
+#       mo_occ = mf.mo_occ
+#       mo_energy = mf.mo_energy
     else:
         mo_coeff = mf.mo_coeff
         mo_occ = mf.mo_occ
@@ -151,6 +160,47 @@ def _kernel(avas_obj):
 
         occ_weights = numpy.hstack([wocc[wocc<threshold], wocc[wocc>=threshold]])
         vir_weights = numpy.hstack([wvir[wvir>=threshold], wvir[wvir<threshold]])
+    elif avas_obj.openshell_option == 4:
+        from pyscf.lo import iao
+
+        mo_coeff = mf.mo_coeff
+        mo_occ = mf.mo_occ
+        mo_energy = mf.mo_energy
+
+        nspin = mo_coeff.shape[0] 
+
+        nocc = (numpy.count_nonzero(mo_occ[0] != 0), numpy.count_nonzero(mo_occ[1] != 0))
+
+        ncas = numpy.zeros((nspin))
+        occ_weights = []
+        vir_weights = []
+        mo_unrestricted = numpy.zeros((mo_coeff.shape), float)
+
+        for s in range(nspin):
+            c = iao.iao(mol, mo_coeff[s,:,ncore:nocc[s]], avas_obj.minao)[:,baslst]
+            s2 = reduce(numpy.dot, (c.T, ovlp, c))
+            s21 = reduce(numpy.dot, (c.T, ovlp, mo_coeff[s, :, ncore:]))
+            sa = s21.T.dot(scipy.linalg.solve(s2, s21, sym_pos=True))
+
+            wocc, u = numpy.linalg.eigh(sa[:(nocc[s]-ncore), :(nocc[s]-ncore)])
+            log.info('Option 2: threshold %s', threshold)
+            ncas_occ = (wocc > threshold).sum()
+            nelecas = (mol.nelectron - ncore * 2) - (wocc < threshold).sum() * 2
+            mocore = mo_coeff[s,:,ncore:nocc[s]].dot(u[:,wocc<threshold])
+            mocas = mo_coeff[s,:,ncore:nocc[s]].dot(u[:,wocc>=threshold])
+
+            wvir, u = numpy.linalg.eigh(sa[(nocc[s]-ncore):,(nocc[s]-ncore):])
+            ncas_vir = (wvir > threshold).sum()
+            mocas = numpy.hstack((mocas,
+                              mo_coeff[s,:,nocc[s]:].dot(u[:,wvir>=threshold])))
+            movir = mo_coeff[s,:,nocc[s]:].dot(u[:,wvir<threshold])
+            ncas[s] = mocas.shape[1]
+
+            occ_weights.append(numpy.hstack([wocc[wocc<threshold], wocc[wocc>=threshold]]))
+            vir_weights.append(numpy.hstack([wvir[wvir>=threshold], wvir[wvir<threshold]]))
+
+            mofreeze = mo_coeff[s,:,:ncore]
+            mo_unrestricted[s] = numpy.hstack((mofreeze, mocore, mocas, movir))
 
     elif avas_obj.openshell_option == 3:
         docc = nocc - mol.spin
@@ -177,9 +227,9 @@ def _kernel(avas_obj):
 
     log.debug('projected occ eig %s', occ_weights)
     log.debug('projected vir eig %s', vir_weights)
-    log.info('Active from occupied = %d , eig %s', ncas_occ, occ_weights[occ_weights>=threshold])
+    log.info('Active from occupied = %d , eig %s', ncas_occ, occ_weights[0][occ_weights[0]>=threshold])
     log.info('Inactive from occupied = %d', mocore.shape[1])
-    log.info('Active from unoccupied = %d , eig %s', ncas_vir, vir_weights[vir_weights>=threshold])
+    log.info('Active from unoccupied = %d , eig %s', ncas_vir, vir_weights[0][vir_weights[0]>=threshold])
     log.info('Inactive from unoccupied = %d', movir.shape[1])
     log.info('Dimensions of active %d', ncas)
     nalpha = (nelecas + mol.spin) // 2
@@ -187,24 +237,27 @@ def _kernel(avas_obj):
     log.info('# of alpha electrons %d', nalpha)
     log.info('# of beta electrons %d', nbeta)
 
-    mofreeze = mo_coeff[:,:ncore]
-    if avas_obj.canonicalize:
-        from pyscf.mcscf import dmet_cas
+    if (mo_coeff.shape[0] == 2):  
+       mo = mo_unrestricted 
+    else:
+       mofreeze = mo_coeff[:,:ncore]
+       if avas_obj.canonicalize:
+           from pyscf.mcscf import dmet_cas
 
-        def trans(c):
-            if c.shape[1] == 0:
-                return c
-            else:
-                csc = reduce(numpy.dot, (c.T, ovlp, mo_coeff))
-                fock = numpy.dot(csc*mo_energy, csc.T)
-                e, u = scipy.linalg.eigh(fock)
-                return dmet_cas.symmetrize(mol, e, numpy.dot(c, u), ovlp, log)
-        if ncore > 0:
-            mofreeze = trans(mofreeze)
-        mocore = trans(mocore)
-        mocas = trans(mocas)
-        movir = trans(movir)
-    mo = numpy.hstack((mofreeze, mocore, mocas, movir))
+           def trans(c):
+               if c.shape[1] == 0:
+                  return c
+               else:
+                  csc = reduce(numpy.dot, (c.T, ovlp, mo_coeff))
+                  fock = numpy.dot(csc*mo_energy, csc.T)
+                  e, u = scipy.linalg.eigh(fock)
+                  return dmet_cas.symmetrize(mol, e, numpy.dot(c, u), ovlp, log)
+               if ncore > 0:
+                  mofreeze = trans(mofreeze)
+                  mocore = trans(mocore)
+                  mocas = trans(mocas)
+                  movir = trans(movir)
+           mo = numpy.hstack((mofreeze, mocore, mocas, movir))
     return ncas, nelecas, mo, occ_weights, vir_weights
 avas = kernel
 
