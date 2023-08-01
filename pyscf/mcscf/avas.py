@@ -231,7 +231,7 @@ def _kernel(avas_obj):
     log.info('Inactive from occupied = %d', mocore.shape[1])
     log.info('Active from unoccupied = %d , eig %s', ncas_vir, vir_weights[0][vir_weights[0]>=threshold])
     log.info('Inactive from unoccupied = %d', movir.shape[1])
-    log.info('Dimensions of active %d', ncas)
+#    log.info('Dimensions of active %d', ncas)
     nalpha = (nelecas + mol.spin) // 2
     nbeta = nelecas - nalpha
     log.info('# of alpha electrons %d', nalpha)
