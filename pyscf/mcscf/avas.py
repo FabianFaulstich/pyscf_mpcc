@@ -166,40 +166,43 @@ def _kernel(avas_obj):
         mo_coeff = mf.mo_coeff
         mo_occ = mf.mo_occ
         mo_energy = mf.mo_energy
-
-        nspin = mo_coeff.shape[0] 
+        nspin = 2 
+        print("length of mo_coeff", len(mo_coeff), mo_coeff[0].shape)
 
         nocc = (numpy.count_nonzero(mo_occ[0] != 0), numpy.count_nonzero(mo_occ[1] != 0))
 
         ncas = numpy.zeros((nspin))
         occ_weights = []
         vir_weights = []
-        mo_unrestricted = numpy.zeros((mo_coeff.shape), float)
+        mo_unrestricted = numpy.zeros((2,mo_coeff[0].shape[0],mo_coeff[0].shape[1]), float)
 
         for s in range(nspin):
-            c = iao.iao(mol, mo_coeff[s,:,ncore:nocc[s]], avas_obj.minao)[:,baslst]
+            c = iao.iao(mol, mo_coeff[s][:,ncore:nocc[s]], avas_obj.minao)[:,baslst]
             s2 = reduce(numpy.dot, (c.T, ovlp, c))
-            s21 = reduce(numpy.dot, (c.T, ovlp, mo_coeff[s, :, ncore:]))
+            s21 = reduce(numpy.dot, (c.T, ovlp, mo_coeff[s][:, ncore:]))
             sa = s21.T.dot(scipy.linalg.solve(s2, s21, sym_pos=True))
 
             wocc, u = numpy.linalg.eigh(sa[:(nocc[s]-ncore), :(nocc[s]-ncore)])
             log.info('Option 2: threshold %s', threshold)
             ncas_occ = (wocc > threshold).sum()
             nelecas = (mol.nelectron - ncore * 2) - (wocc < threshold).sum() * 2
-            mocore = mo_coeff[s,:,ncore:nocc[s]].dot(u[:,wocc<threshold])
-            mocas = mo_coeff[s,:,ncore:nocc[s]].dot(u[:,wocc>=threshold])
+
+            mocore = mo_coeff[s][:,ncore:nocc[s]].dot(u[:,wocc<threshold])
+            mocas = mo_coeff[s][:,ncore:nocc[s]].dot(u[:,wocc>=threshold])
 
             wvir, u = numpy.linalg.eigh(sa[(nocc[s]-ncore):,(nocc[s]-ncore):])
             ncas_vir = (wvir > threshold).sum()
+
             mocas = numpy.hstack((mocas,
-                              mo_coeff[s,:,nocc[s]:].dot(u[:,wvir>=threshold])))
-            movir = mo_coeff[s,:,nocc[s]:].dot(u[:,wvir<threshold])
+                              mo_coeff[s][:,nocc[s]:].dot(u[:,wvir>=threshold])))
+            movir = mo_coeff[s][:,nocc[s]:].dot(u[:,wvir<threshold])
+
             ncas[s] = mocas.shape[1]
 
             occ_weights.append(numpy.hstack([wocc[wocc<threshold], wocc[wocc>=threshold]]))
             vir_weights.append(numpy.hstack([wvir[wvir>=threshold], wvir[wvir<threshold]]))
 
-            mofreeze = mo_coeff[s,:,:ncore]
+            mofreeze = mo_coeff[s][:,:ncore]
             mo_unrestricted[s] = numpy.hstack((mofreeze, mocore, mocas, movir))
 
     elif avas_obj.openshell_option == 3:
@@ -237,7 +240,7 @@ def _kernel(avas_obj):
     log.info('# of alpha electrons %d', nalpha)
     log.info('# of beta electrons %d', nbeta)
 
-    if (mo_coeff.shape[0] == 2):  
+    if (len(mo_coeff) == 2):  
        mo = mo_unrestricted 
     else:
        mofreeze = mo_coeff[:,:ncore]

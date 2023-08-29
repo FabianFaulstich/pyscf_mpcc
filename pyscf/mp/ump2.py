@@ -150,10 +150,10 @@ def update_amps(mp, t2, eris):
     mo_eb_v = eris.mo_energy[1][noccb:] + mp.level_shift
 
     focka, fockb = eris.fock
-    fooa = focka[:nocca,:nocca] - numpy.diag(mo_ea_o)
-    foob = fockb[:noccb,:noccb] - numpy.diag(mo_eb_o)
-    fvva = focka[nocca:,nocca:] - numpy.diag(mo_ea_v)
-    fvvb = fockb[noccb:,noccb:] - numpy.diag(mo_eb_v)
+    fooa = focka[:nocca,:nocca] #- numpy.diag(mo_ea_o)
+    foob = fockb[:noccb,:noccb] #- numpy.diag(mo_eb_o)
+    fvva = focka[nocca:,nocca:] #- numpy.diag(mo_ea_v)
+    fvvb = fockb[noccb:,noccb:] #- numpy.diag(mo_eb_v)
 
     u2aa  = lib.einsum('ijae,be->ijab', t2aa, fvva)
     u2bb  = lib.einsum('ijae,be->ijab', t2bb, fvvb)
@@ -182,7 +182,7 @@ def update_amps(mp, t2, eris):
     u2ab /= lib.direct_sum('ia+jb->ijab', eia_a, eia_b)
     u2bb /= lib.direct_sum('ia+jb->ijab', eia_b, eia_b)
 
-    u2 = u2aa, u2ab, u2bb
+    u2 = t2aa+u2aa, t2ab+u2ab, t2bb+u2bb
 
     return u2
 
@@ -193,9 +193,9 @@ def get_t1(mp, eris, t2):
     nocca, noccb, nvira, nvirb = t2ab.shape
 
     mo_ea_o = eris.mo_energy[0][:nocca]
-    mo_ea_v = eris.mo_energy[0][nocca:] + mp.level_shift
+    mo_ea_v = eris.mo_energy[0][nocca:] #+ mp.level_shift
     mo_eb_o = eris.mo_energy[1][:noccb]
-    mo_eb_v = eris.mo_energy[1][noccb:] + mp.level_shift
+    mo_eb_v = eris.mo_energy[1][noccb:] #+ mp.level_shift
 
     eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
     eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
