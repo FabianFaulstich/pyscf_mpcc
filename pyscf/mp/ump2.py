@@ -221,14 +221,18 @@ def get_t1(mp, eris, t2):
 
 
 # Iteratively solve MP2 if non-canonical HF is provided
-def _iterative_kernel(mp, eris, verbose=None):
+def _iterative_kernel(mp, eris, t1 = None, t2 = None, verbose=None):
     cput1 = cput0 = (logger.process_clock(), logger.perf_counter())
     log = logger.new_logger(mp, verbose)
 
-    emp2, t2 = mp.init_amps(eris=eris)
-    t1 = mp.get_t1(eris, t2)
-#    t2 = 0 * t2
-#    emp2 = 0
+    if t1 is not None and t2 is not None:
+        t1 = t1
+        t2 = t2
+        emp2 = 0
+    else:
+        emp2, t2 = mp.init_amps(eris=eris)
+        t1 = mp.get_t1(eris, t2)
+
     log.info('Init E(MP2) = %.15g', emp2)
 
     adiis = lib.diis.DIIS(mp)
