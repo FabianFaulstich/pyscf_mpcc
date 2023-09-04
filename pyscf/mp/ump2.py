@@ -28,8 +28,6 @@ from pyscf.mp import mp2
 from pyscf.ao2mo import _ao2mo
 from pyscf import __config__
 
-from pyscf.cc.ccsd import * 
-
 WITH_T2 = getattr(__config__, 'mp_ump2_with_t2', True)
 
 
@@ -201,7 +199,8 @@ def add_vvvv(mymp, t1, t2, eris, out=None, with_ovvv=False, t2sym=None):
     tauaa = taubb = tauab = None
     time0 = log.timer_debug1('vvvv-tau', *time0)
 
-    buf = _contract_vvvv_t2(mymp, mymp.mol, None, tau, out, log)
+    #buf = _contract_vvvv_t2(mymp, mymp.mol, None, tau, out, log)
+    t2new = 0.5*einsum('ijef,abef->ijab', tau, Wvvvv)
 
     mo = numpy.asarray(numpy.hstack((mo_a[:,nocca:], mo_b[:,noccb:])), order='F')
     u2aa = numpy.zeros_like(t2aa)
