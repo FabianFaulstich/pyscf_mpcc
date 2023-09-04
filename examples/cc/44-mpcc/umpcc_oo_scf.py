@@ -148,6 +148,7 @@ def oo_mp2(mf, c_lo, t1, t2, spin_restricted):
     if spin_restricted:
         # Running regular MP2 and CCSD
         mymp = mp.MP2(mf).run(verbose=0)
+        mymp.async_io = True
 
         # Running localized MP2
         eris = mp.mp2._make_eris(mymp, mo_coeff=c_lo)
@@ -158,11 +159,13 @@ def oo_mp2(mf, c_lo, t1, t2, spin_restricted):
         print("spin multiplicity", sz)
         # Running regular MP2 and CCSD
         mymp = mp.UMP2(mf).run()
+        mymp.async_io = True
 
         # Running localized MP2
         eris = mp.ump2._make_eris(mymp, mo_coeff=c_lo)
         mp_lo = mp.ump2._iterative_kernel(mymp, eris, t1=t1, t2=t2, verbose=0)
 
+    breakpoint()
     return mp_lo
 
 
@@ -211,7 +214,7 @@ if __name__ == "__main__":
         count = 0
         count_tol = 100
 
-        while e_diff < tol and count < count_tol:
+        while e_diff > tol and count < count_tol:
 
             if count > 0:
                 mp_lo = oo_mp2(mf, c_lo, mp_cc_t1, mp_cc_t2, spin_restricted)
