@@ -83,7 +83,7 @@ def get_localized_orbs(
     return c_lo, act_hole, act_part
 
 
-def fragmented_mpcc_unrestricted(frags, mf, mo_coeff, mp_t2, mp_t1, idx_s, idx_d):
+def fragmented_mpcc_unrestricted(frags, mycc, mp_t2, mp_t1, idx_s, idx_d):
 
     _, t2ab, _ = mp_t2
     nocca, noccb, _, _ = t2ab.shape
@@ -95,12 +95,7 @@ def fragmented_mpcc_unrestricted(frags, mf, mo_coeff, mp_t2, mp_t1, idx_s, idx_d
     for frag in frags:
         act_hole = [frag[0][0], frag[0][1]]
         act_particle = [frag[1][0] - nocca, frag[1][1] - noccb]
-        mycc = cc.umpccsd.CCSD(mf, mo_coeff=mo_coeff)
-        mycc.verbose = 5
-        mycc.max_cycle = 80
-        mycc.diis_space = 14
-        mycc.level_shift = 0.5
-        res = mycc.kernel(act_hole, act_particle, idx_s, idx_d, t1=t1, t2=t2)
+        res = mycc.kernel(act_hole, act_particle, idx_s, idx_d, t1=t1, t2=t2, oo_mp2 = False)
         print("Exact Exact localized CCSD in MPCCSD (4,2) :", res[0])
 
         t2 = mycc.t2
@@ -165,7 +160,6 @@ def oo_mp2(mf, c_lo, t1, t2, spin_restricted):
         eris = mp.ump2._make_eris(mymp, mo_coeff=c_lo)
         mp_lo = mp.ump2._iterative_kernel(mymp, eris, t1=t1, t2=t2, verbose=0)
 
-    breakpoint()
     return mp_lo
 
 
@@ -186,13 +180,15 @@ if __name__ == "__main__":
     # idx_s = [[2], [2]]
     # idx_d = [[3, 7, 9, 10, 11],[3, 7, 9, 10, 11]]
 
-    bds = np.arange(2.2, 1.2, -0.05)
+    bds = np.arange(1.2, 2.2, 0.05)
+
+    bds = [1.4]
 
     spin = 0
     spin_restricted = False
     basis = "aug-ccpvdz"
 
-    ao_labels = ["N 2p", "N 2s", "N 3p", "N 3s", "N 3d"]
+    ao_labels = ["N 2p", "N 2s", "N 3p", "N 3s"]
     #    ao_labels = ["N 2p", "N 2s"]
 
     res_hf = []
@@ -214,23 +210,45 @@ if __name__ == "__main__":
         count = 0
         count_tol = 100
 
+        mycc = cc.umpccsd.CCSD(mf, mo_coeff = c_lo)
+        mycc.verbose = 5
+        mycc.max_cycle = 80
+        mycc.diis_space = 14
+        mycc.level_shift = 0.5
+
+        e_mp_cc_its = []
+
         while e_diff > tol and count < count_tol:
 
             if count > 0:
-                mp_lo = oo_mp2(mf, c_lo, mp_cc_t1, mp_cc_t2, spin_restricted)
+                # mp_lo = oo_mp2(mf, c_lo, mp_cc_t1, mp_cc_t2, spin_restricted)
+                mycc.kernel(act_hole = None, 
+                            act_particle = None, 
+                            idx_s = None, 
+                            idx_d = None, 
+                            t1=mycc.t1, 
+                            t2=mycc.t2, 
+                            oo_mp2 = True)
+
+                mp_t2 = mycc.t2
+                mp_t1 = mycc.t1
+                breakpoint()
             else:
                 mp_lo = oo_mp2(mf, c_lo, None, None, spin_restricted)
-            mp_t2 = mp_lo[2]
-            mp_t1 = mp_lo[3]
+                mp_t2 = mp_lo[2]
+                mp_t1 = mp_lo[3]
 
             e_mp_cc, mp_cc_t1, mp_cc_t2 = fragmented_mpcc_unrestricted(
-                frag, mf, c_lo, mp_t2, mp_t1, idx_s, idx_d
+                frag, mycc, mp_t2, mp_t1, idx_s, idx_d
             )
 
+
             e_diff = np.abs(e_mp_cc - e_mp_cc_prev)
+            e_mp_cc_its.append(e_mp_cc)
             e_mp_cc_prev = e_mp_cc
             count += 1
 
+        print(f"SCF UMPCC stopped after {count} iterations, iterate difference: {e_diff}")
         breakpoint()
 
         res_hf.append(e_mf)

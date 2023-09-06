@@ -42,7 +42,7 @@ MEMORYMIN = getattr(__config__, 'cc_ccsd_memorymin', 2000)
 # t1: ia
 # t2: ijab
 def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
-           tolnormt=1e-6, verbose=None, callback=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None):
+           tolnormt=1e-6, verbose=None, callback=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False):
     log = logger.new_logger(mycc, verbose)
     if eris is None:
         eris = mycc.ao2mo(mycc.mo_coeff)
@@ -68,6 +68,8 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
     for istep in range(max_cycle):
         if act_particle is not None:
             t1new, t2new = mycc.update_amps(t1, t2, eris,  act_hole, act_particle, idx_s, idx_d)
+        elif oo_mp2:
+            t1new, t2new = mycc.update_amps_oomp2(t1, t2, eris)
         else:
             t1new, t2new = mycc.update_amps(t1, t2, eris)
         if callback is not None:
@@ -1075,9 +1077,9 @@ http://sunqm.net/pyscf/code-rule.html#api-rules for the details of API conventio
     _add_vvvv = _add_vvvv
     update_amps = update_amps
 
-    def kernel(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None):
-        return self.ccsd(t1, t2, eris, act_particle, act_hole, idx_s, idx_d)
-    def ccsd(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None):
+    def kernel(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False):
+        return self.ccsd(t1, t2, eris, act_particle, act_hole, idx_s, idx_d, oo_mp2)
+    def ccsd(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False):
         assert (self.mo_coeff is not None)
         assert (self.mo_occ is not None)
 
@@ -1093,7 +1095,8 @@ http://sunqm.net/pyscf/code-rule.html#api-rules for the details of API conventio
         self.converged, self.e_corr, self.t1, self.t2 = \
                 kernel(self, eris, t1, t2, max_cycle=self.max_cycle,
                        tol=self.conv_tol, tolnormt=self.conv_tol_normt,
-                       verbose=self.verbose, callback=self.callback, act_particle=act_particle, act_hole=act_hole, idx_s=idx_s, idx_d=idx_d)
+                       verbose=self.verbose, callback=self.callback, act_particle=act_particle, 
+                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2)
         self._finalize()
         return self.e_corr, self.t1, self.t2
 

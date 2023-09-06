@@ -616,7 +616,6 @@ def _iterative_kernel(mp, eris, t1 = None, t2 = None, verbose=None):
     conv = False
     for istep in range(mp.max_cycle):
        
-        breakpoint()
         # t1new, t2new = mp.update_amps_oomp2(t1, t2, eris) 
         t2new = mp.update_amps(t2, eris)
 
