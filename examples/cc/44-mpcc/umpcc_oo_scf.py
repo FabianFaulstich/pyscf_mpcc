@@ -135,7 +135,13 @@ def get_N2(basis, bond_length, spin, spin_restricted, dm0=None):
         mf = mf.newton().run(mo1, mf.mo_occ)
         mf.stability()
 
-    return mol, mf
+        mymp = mp.UMP2(mf).run()
+        mycc = cc.UCCSD(mf).run()
+        mycc.diis = 12
+        mycc.max_cycle = 80
+
+
+    return mol, mf, mf.e_tot, mymp.e_corr, mycc.e_corr
 
 
 def oo_mp2(mf, c_lo, t1, t2, spin_restricted):
@@ -154,7 +160,6 @@ def oo_mp2(mf, c_lo, t1, t2, spin_restricted):
         print("spin multiplicity", sz)
         # Running regular MP2 and CCSD
         mymp = mp.UMP2(mf).run()
-        mymp.async_io = True
 
         # Running localized MP2
         eris = mp.ump2._make_eris(mymp, mo_coeff=c_lo)
@@ -180,16 +185,16 @@ if __name__ == "__main__":
     # idx_s = [[2], [2]]
     # idx_d = [[3, 7, 9, 10, 11],[3, 7, 9, 10, 11]]
 
-    bds = np.arange(1.2, 2.2, 0.05)
+    bds = np.arange(1.0, 2.0, 0.05)
 
-    bds = [1.4]
+#   bds = [1.5]
 
     spin = 0
     spin_restricted = False
     basis = "aug-ccpvdz"
 
-    ao_labels = ["N 2p", "N 2s", "N 3p", "N 3s"]
-    #    ao_labels = ["N 2p", "N 2s"]
+#   ao_labels = ["C 2p", "C 2s", "C 3p", "C 3s","O 2p", "O 2s", "O 3p", "O 3s" ]
+    ao_labels = ["N 2p", "N 2s","N 3p", "N 3s", "N 3d"]
 
     res_hf = []
     res_mp = []
@@ -199,9 +204,15 @@ if __name__ == "__main__":
     for bd in bds:
         print("Bond length :", bd)
 
-        mol, mf = get_N2(basis, bd, spin, spin_restricted)
+        if bd == bds[0]:
+            mol, mf, e_hf, e_mp, e_cc = get_N2(basis, bd, spin, spin_restricted)
+        else:
+            mol, mf, e_hf, e_mp, e_cc = get_N2(basis, bd, spin, spin_restricted, dm0=dm0)
 
-        c_lo, act_hole, act_part = get_localized_orbs(mol, mf, ao_labels)
+
+        dm0 = mf.make_rdm1()
+
+        c_lo, act_hole, act_part = get_localized_orbs(mol, mf, ao_labels, minao="dzp")
         frag = [[act_hole, act_part]]
 
         e_mp_cc_prev = -np.inf
@@ -211,8 +222,8 @@ if __name__ == "__main__":
         count_tol = 100
 
         mycc = cc.umpccsd.CCSD(mf, mo_coeff = c_lo)
-        mycc.verbose = 5
-        mycc.max_cycle = 80
+        mycc.verbose = 3
+        mycc.max_cycle = 50
         mycc.diis_space = 14
         mycc.level_shift = 0.5
 
@@ -221,22 +232,30 @@ if __name__ == "__main__":
         while e_diff > tol and count < count_tol:
 
             if count > 0:
+
+                print("=== Starting OOMP2 iterations ======")     
+
+                mycc.max_cycle = 1
                 # mp_lo = oo_mp2(mf, c_lo, mp_cc_t1, mp_cc_t2, spin_restricted)
                 mycc.kernel(act_hole = None, 
                             act_particle = None, 
                             idx_s = None, 
                             idx_d = None, 
-                            t1=mycc.t1, 
-                            t2=mycc.t2, 
+                          #  t1=mycc.t1, 
+                          #  t2=mycc.t2, 
+                            t1=mp_cc_t1, 
+                            t2=mp_cc_t2, 
                             oo_mp2 = True)
 
                 mp_t2 = mycc.t2
                 mp_t1 = mycc.t1
-                breakpoint()
             else:
                 mp_lo = oo_mp2(mf, c_lo, None, None, spin_restricted)
                 mp_t2 = mp_lo[2]
                 mp_t1 = mp_lo[3]
+
+            print("=== Starting UMPCCSD ======")     
+            mycc.max_cycle = 50
 
             e_mp_cc, mp_cc_t1, mp_cc_t2 = fragmented_mpcc_unrestricted(
                 frag, mycc, mp_t2, mp_t1, idx_s, idx_d
@@ -249,12 +268,12 @@ if __name__ == "__main__":
             count += 1
 
         print(f"SCF UMPCC stopped after {count} iterations, iterate difference: {e_diff}")
-        breakpoint()
+#        breakpoint()
 
-        res_hf.append(e_mf)
+        res_hf.append(e_hf)
         res_mp.append(e_mp)
         res_cc.append(e_cc)
-        res_mpcc.append(e_mpcc)
+        res_mpcc.append(e_mp_cc)
 
     res_hf = np.array(res_hf)
     res_mp = np.array(res_mp)
@@ -273,7 +292,7 @@ if __name__ == "__main__":
     ax1.set_title(f"Absolute energies ({basis}, {ao_labels}, spin = {spin})", pad=20)
     ax1.set_xlabel("Bond length")
 
-    name = f"abs_energies_{basis}_test"
+    name = f"abs_energies_{basis}_N2_relaxed"
     #    for elem in ao_labels:
     #        name += f"_{elem}"
     name += f"_{spin}"
@@ -299,7 +318,7 @@ if __name__ == "__main__":
     ax1.set_title(f"Corr. energy diff. ({basis}, {ao_labels}, spin = {spin})", pad=20)
     ax1.set_xlabel("Bond length")
 
-    name = f"corr_energy_diff_{basis}_test"
+    name = f"corr_energy_diff_{basis}_N2_relaxed"
     # for elem in ao_labels:
     #    name += f"_{elem}"
     name += f"_{spin}"
