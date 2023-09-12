@@ -44,7 +44,7 @@ if __name__ == '__main__':
     ]
 
     #basis= 'sto-3g' 
-    basis= '6-31g'
+    basis= 'ccpvdz'
     #basis= '6-31g'
     #basis= 'aug-cc-pwcvtz-dk.0.nw' 
 
