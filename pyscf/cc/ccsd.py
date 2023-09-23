@@ -66,10 +66,10 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
 
     conv = False
     for istep in range(max_cycle):
-        if act_particle is not None:
-            t1new, t2new = mycc.update_amps(t1, t2, eris,  act_hole, act_particle, idx_s, idx_d)
+        if act_particle is not None and not oo_mp2:
+            t1new, t2new = mycc.update_amps(t1, t2, eris, act_hole, act_particle, idx_s, idx_d)
         elif oo_mp2:
-            t1new, t2new = mycc.update_amps_oomp2(t1, t2, eris)
+            t1new, t2new = mycc.update_amps_oomp2(t1, t2, eris, act_hole, act_particle, idx_s, idx_d)
         else:
             t1new, t2new = mycc.update_amps(t1, t2, eris)
         if callback is not None:

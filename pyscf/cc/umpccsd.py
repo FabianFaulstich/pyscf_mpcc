@@ -73,7 +73,7 @@ def get_index_tuples(act_hole, act_particle, nocc, nvir):
     return singles, doubles
 
 
-def update_amps_oomp2(cc, t1, t2, eris):
+def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles):
 
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
@@ -368,6 +368,33 @@ def update_amps_oomp2(cc, t1, t2, eris):
     u2aa /= lib.direct_sum('ia+jb->ijab', eia_a, eia_a)
     u2ab /= lib.direct_sum('ia+jb->ijab', eia_a, eia_b)
     u2bb /= lib.direct_sum('ia+jb->ijab', eia_b, eia_b)
+
+    # NOTE we only update the inactive orbitals!
+    idx_s_a, idx_d_a = get_index_tuples(act_hole[0], act_particle[0], nocca, nvira)
+    idx_s_b, idx_d_b = get_index_tuples(act_hole[1], act_particle[1], noccb, nvirb)
+
+    idx_d_ab = [(elem_a[0], elem_b[1],elem_a[2],elem_b[3]) for elem_a, elem_b in zip(idx_d_a,idx_d_b)]
+
+    # NOTE that we have to pass the active indices in order to only
+    #      update the inactive orbitals
+    # u1a_c = np.copy(u1a)
+    # u1b_c = np.copy(u1b)
+    # u2aa_c = np.copy(u2aa)
+    # u2bb_c = np.copy(u2bb)
+    # u2ab_c = np.copy(u2ab)
+    
+    for s in idx_singles[0]:
+        u1a[idx_s_a[s]] = t1[0][idx_s_a[s]]
+    for d in idx_doubles[0]:
+        u2aa[idx_d_a[d]] = t2[0][idx_d_a[d]]  
+
+    for s in idx_singles[1]:
+        u1b[idx_s_b[s]] = t1[1][idx_s_b[s]]
+    for d in idx_doubles[1]: 
+        u2ab[idx_d_ab[d]] = t2[1][idx_d_ab[d]]  
+
+    for d in idx_doubles[2]: 
+        u2bb[idx_d_b[d]] = t2[2][idx_d_b[d]]  
 
     t1new = u1a, u1b
     t2new = u2aa, u2ab, u2bb

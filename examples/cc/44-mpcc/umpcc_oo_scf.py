@@ -67,14 +67,25 @@ def get_localized_orbs(
     avas_obj.with_iao = True
     _, _, mocas = avas_obj.kernel()
 
-    act_hole = (
-        np.where(avas_obj.occ_weights[0] > avas_obj.threshold)[0],
-        np.where(avas_obj.occ_weights[1] > avas_obj.threshold)[0],
-    )
-    act_part = (
-        np.where(avas_obj.vir_weights[0] > avas_obj.threshold)[0] + mf.mol.nelec[0],
-        np.where(avas_obj.vir_weights[1] > avas_obj.threshold)[0] + mf.mol.nelec[1],
-    )
+    if isinstance(mf, scf.uhf.UHF):
+        act_hole = (
+            np.where(avas_obj.occ_weights[0] > avas_obj.threshold)[0],
+            np.where(avas_obj.occ_weights[1] > avas_obj.threshold)[0],
+        )
+        act_part = (
+            np.where(avas_obj.vir_weights[0] > avas_obj.threshold)[0] + mf.mol.nelec[0],
+            np.where(avas_obj.vir_weights[1] > avas_obj.threshold)[0] + mf.mol.nelec[1],
+        )
+    elif isinstance(mf, scf.rohf.ROHF):
+        act_hole = (
+            np.where(avas_obj.occ_weights > avas_obj.threshold)[0],
+            np.where(avas_obj.occ_weights > avas_obj.threshold)[0]
+        )
+
+        act_part = (
+            np.where(avas_obj.vir_weights > avas_obj.threshold)[0] + mf.mol.nelec[0],
+            np.where(avas_obj.vir_weights > avas_obj.threshold)[0] + mf.mol.nelec[1]
+        )
 
     c_lo = mocas
 
@@ -136,18 +147,17 @@ def get_N2(basis, bond_length, spin, spin_restricted, dm0=None):
         mf = mf.newton().run(mo1, mf.mo_occ)
         mf.stability()
 
-        mymp = mp.UMP2(mf).run()
-        mycc = cc.UCCSD(mf).run()
-        mycc.diis = 12
-        mycc.max_cycle = 80
-
+    mymp = mp.UMP2(mf).run()
+    mycc = cc.UCCSD(mf).run()
+    mycc.diis = 12
+    mycc.max_cycle = 80
 
     return mol, mf, mf.e_tot, mymp.e_corr, mycc.e_corr
 
 
-def oo_mp2(mf, c_lo, t1, t2, spin_restricted):
+def oo_mp2(mf, c_lo, t1, t2):
 
-    if spin_restricted:
+    if isinstance(mf, scf.rohf.ROHF):
         # Running regular MP2 and CCSD
         mymp = mp.MP2(mf).run(verbose=0)
         mymp.async_io = True
@@ -156,7 +166,7 @@ def oo_mp2(mf, c_lo, t1, t2, spin_restricted):
         eris = mp.mp2._make_eris(mymp, mo_coeff=c_lo)
         mp_lo = mp.mp2._iterative_kernel(mymp, eris, t1=t1, t2=t2, verbose=0)
 
-    else:
+    elif isinstance(mf, scf.uhf.UHF):
         _, sz = mf.spin_square()
         print("spin multiplicity", sz)
         # Running regular MP2 and CCSD
@@ -192,7 +202,8 @@ if __name__ == "__main__":
 
     spin = 0
     spin_restricted = False
-    basis = "aug-ccpvtz"
+    openshell_option = 4
+    basis = "aug-ccpvdz"
 
 #   ao_labels = ["C 2p", "C 2s", "C 3p", "C 3s","O 2p", "O 2s", "O 3p", "O 3s" ]
     ao_labels = ["N 2p", "N 2s","N 3p", "N 3s", "N 3d"]
@@ -213,7 +224,10 @@ if __name__ == "__main__":
 
         dm0 = mf.make_rdm1()
 
-        c_lo, act_hole, act_part = get_localized_orbs(mol, mf, ao_labels, minao="dzp")
+        # Why not always convert to UHF object?
+        mf = scf.addons.convert_to_uhf(mf)
+
+        c_lo, act_hole, act_part = get_localized_orbs(mol, mf, ao_labels, minao="dzp", openshell_option = openshell_option)
         frag = [[act_hole, act_part]]
 
         e_mp_cc_prev = -np.inf
@@ -253,7 +267,7 @@ if __name__ == "__main__":
                 mp_t2 = mycc.t2
                 mp_t1 = mycc.t1
             else:
-                mp_lo = oo_mp2(mf, c_lo, None, None, spin_restricted)
+                mp_lo = oo_mp2(mf, c_lo, None, None)
                 mp_t2 = mp_lo[2]
                 mp_t1 = mp_lo[3]
 
