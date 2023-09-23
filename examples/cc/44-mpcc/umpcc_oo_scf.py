@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from scipy.linalg import fractional_matrix_power
 from pyscf.tools import cubegen, molden
 from pyscf.mcscf import avas
+from pyscf import lib
 
 
 def write_molden(mol, mf, name):
@@ -191,7 +192,7 @@ if __name__ == "__main__":
 
     spin = 0
     spin_restricted = False
-    basis = "aug-ccpvdz"
+    basis = "aug-ccpvtz"
 
 #   ao_labels = ["C 2p", "C 2s", "C 3p", "C 3s","O 2p", "O 2s", "O 3p", "O 3s" ]
     ao_labels = ["N 2p", "N 2s","N 3p", "N 3s", "N 3d"]
@@ -217,7 +218,7 @@ if __name__ == "__main__":
 
         e_mp_cc_prev = -np.inf
         e_diff = np.inf
-        tol = 1e-6
+        tol = 1e-4
         count = 0
         count_tol = 100
 
@@ -228,6 +229,8 @@ if __name__ == "__main__":
         mycc.level_shift = 0.5
 
         e_mp_cc_its = []
+
+        adiis = lib.diis.DIIS(mycc)
 
         while e_diff > tol and count < count_tol:
 
@@ -260,6 +263,17 @@ if __name__ == "__main__":
             e_mp_cc, mp_cc_t1, mp_cc_t2 = fragmented_mpcc_unrestricted(
                 frag, mycc, mp_t2, mp_t1, idx_s, idx_d
             )
+
+#           t2shape = [x.shape for x in mp_cc_t2]
+#           mp_cc_t2 = np.hstack([x.ravel() for x in mp_cc_t2])
+#           mp_cc_t2 = adiis.update(mp_cc_t2)
+#           mp_cc_t2 = lib.split_reshape(mp_cc_t2, t2shape)
+
+
+            t1shape = [x.shape for x in mp_cc_t1]
+            mp_cc_t1 = np.hstack([x.ravel() for x in mp_cc_t1])
+            mp_cc_t1 = adiis.update(mp_cc_t1)
+            mp_cc_t1 = lib.split_reshape(mp_cc_t1, t1shape)
 
 
             e_diff = np.abs(e_mp_cc - e_mp_cc_prev)
