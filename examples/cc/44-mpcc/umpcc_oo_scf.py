@@ -196,7 +196,7 @@ if __name__ == "__main__":
     # idx_s = [[2], [2]]
     # idx_d = [[3, 7, 9, 10, 11],[3, 7, 9, 10, 11]]
 
-    bds = np.arange(1.0, 2.0, 0.05)
+    bds = np.arange(1.0, 2.2, 0.05)
 
 #   bds = [1.5]
 
@@ -206,7 +206,7 @@ if __name__ == "__main__":
     basis = "aug-ccpvdz"
 
 #   ao_labels = ["C 2p", "C 2s", "C 3p", "C 3s","O 2p", "O 2s", "O 3p", "O 3s" ]
-    ao_labels = ["N 2p", "N 2s","N 3p", "N 3s", "N 3d"]
+    ao_labels = ["N 2p", "N 2s","N 3p", "N 3s"]
 
     res_hf = []
     res_mp = []
