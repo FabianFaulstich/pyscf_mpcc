@@ -228,7 +228,7 @@ if __name__ == "__main__":
     parser.add_argument("--minao", type=str, help="MINAO for AVAS")
     parser.add_argument('--ao_labels', type=str)
     parser.add_argument('--state', type=str, help="b2g, b1g, or eg")
-    parser.add_argument("--frozen", type=str, help="MINAO for AVAS")
+    parser.add_argument("--frozen", type=str, help="Freezing core electrons in reference calcs")
 
     args = parser.parse_args()
 
@@ -242,12 +242,24 @@ if __name__ == "__main__":
 
     # (4,2)
     # this shold be just one entry
+    # NOTE These are the active-inactive indices that are kept fix in MPCC
     idx_s = [[0, 1, 2], [0, 1, 2]]
     idx_d = [
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
     ]
+
+    # NOTE These are the active-inactive indices that are kept fix in the OO-MP2 orbital relaxation
+    idx_s_oomp2 = [
+            np.delete(np.arange(4), np.array(idx_s[0])), 
+            np.delete(np.arange(4), np.array(idx_s[1]))
+             ]
+    idx_d_oomp2 = [
+            np.delete(np.arange(16), np.array(idx_d[0])),
+            np.delete(np.arange(16), np.array(idx_d[1])),
+            np.delete(np.arange(16), np.array(idx_d[2]))
+            ]
 
     # (2,1)
     # idx_s = [[2], [2]]
@@ -290,10 +302,13 @@ if __name__ == "__main__":
 
     mycc.verbose = 4
     mycc.max_cycle = 50
-    mycc.diis_space = 14
+    mycc.diis_space = 8
     mycc.level_shift = 0.5
 
     e_mp_cc_its = []
+
+    # DIIS
+    adiis = lib.diis.DIIS(mycc)
 
     while e_diff > tol and count < count_tol:
 
@@ -301,12 +316,13 @@ if __name__ == "__main__":
 
             print("=== Starting OOMP2 iterations ======")     
 
-            mycc.max_cycle = 1
+            mycc.max_cycle = 50
             # mp_lo = oo_mp2(mf, c_lo, mp_cc_t1, mp_cc_t2, spin_restricted)
-            mycc.kernel(act_hole = None, 
-                        act_particle = None, 
-                        idx_s = None, 
-                        idx_d = None, 
+            nocca, noccb, _, _ = mycc.t2[1].shape
+            mycc.kernel(act_hole = [frag[0][0][0], frag[0][0][1]], 
+                        act_particle = [frag[0][1][0] - nocca, frag[0][1][1] - noccb], 
+                        idx_s = idx_s_oomp2, 
+                        idx_d = idx_d_oomp2, 
                       #  t1=mycc.t1, 
                       #  t2=mycc.t2, 
                         t1=mp_cc_t1, 
@@ -327,6 +343,11 @@ if __name__ == "__main__":
             frag, mycc, mp_t2, mp_t1, idx_s, idx_d
         )
 
+
+        t1shape = [x.shape for x in mp_cc_t1]
+        mp_cc_t1 = np.hstack([x.ravel() for x in mp_cc_t1])
+        mp_cc_t1 = adiis.update(mp_cc_t1)
+        mp_cc_t1 = lib.split_reshape(mp_cc_t1, t1shape)
 
         e_diff = np.abs(e_mp_cc - e_mp_cc_prev)
         e_mp_cc_its.append(e_mp_cc)

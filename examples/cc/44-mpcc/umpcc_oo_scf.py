@@ -76,6 +76,7 @@ def get_localized_orbs(
             np.where(avas_obj.vir_weights[1] > avas_obj.threshold)[0] + mf.mol.nelec[1],
         )
     elif isinstance(mf, scf.rohf.ROHF):
+        breakpoint()
         act_hole = (
             np.where(avas_obj.occ_weights > avas_obj.threshold)[0],
             np.where(avas_obj.occ_weights > avas_obj.threshold)[0]
@@ -184,12 +185,25 @@ if __name__ == "__main__":
 
     # (4,2)
     # this shold be just one entry
+
+    # NOTE These are the active-inactive indices that are kept fix in MPCC
     idx_s = [[0, 1, 2], [0, 1, 2]]
     idx_d = [
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
     ]
+
+    # NOTE These are the active-inactive indices that are kept fix in the OO-MP2 orbital relaxation
+    idx_s_oomp2 = [
+            np.delete(np.arange(4), np.array(idx_s[0])), 
+            np.delete(np.arange(4), np.array(idx_s[1]))
+             ]
+    idx_d_oomp2 = [
+            np.delete(np.arange(16), np.array(idx_d[0])),
+            np.delete(np.arange(16), np.array(idx_d[1])),
+            np.delete(np.arange(16), np.array(idx_d[2]))
+            ]
 
     # (2,1)
     # idx_s = [[2], [2]]
@@ -205,7 +219,7 @@ if __name__ == "__main__":
     basis = "aug-ccpvdz"
 
 #   ao_labels = ["C 2p", "C 2s", "C 3p", "C 3s","O 2p", "O 2s", "O 3p", "O 3s" ]
-    ao_labels = ["N 2p", "N 2s","N 3p", "N 3s", "N 3d"]
+    ao_labels = ["N 3p", "N 3s", "N 3d"]
 
     res_hf = []
     res_mp = []
@@ -231,7 +245,7 @@ if __name__ == "__main__":
 
         e_mp_cc_prev = -np.inf
         e_diff = np.inf
-        tol = 1e-6
+        tol = 5e-6
         count = 0
         count_tol = 100
 
@@ -251,16 +265,16 @@ if __name__ == "__main__":
 
                 mycc.max_cycle = 1
                 # mp_lo = oo_mp2(mf, c_lo, mp_cc_t1, mp_cc_t2, spin_restricted)
-                mycc.kernel(act_hole = None, 
-                            act_particle = None, 
-                            idx_s = None, 
-                            idx_d = None, 
+                nocca, noccb, _, _ = mycc.t2[1].shape
+                mycc.kernel(act_hole = [frag[0][0][0], frag[0][0][1]], 
+                            act_particle = [frag[0][1][0] - nocca, frag[0][1][1] - noccb], 
+                            idx_s = idx_s_oomp2, 
+                            idx_d = idx_d_oomp2, 
                           #  t1=mycc.t1, 
                           #  t2=mycc.t2, 
                             t1=mp_cc_t1, 
                             t2=mp_cc_t2, 
                             oo_mp2 = True)
-
                 mp_t2 = mycc.t2
                 mp_t1 = mycc.t1
             else:
@@ -280,6 +294,7 @@ if __name__ == "__main__":
             e_mp_cc_its.append(e_mp_cc)
             e_mp_cc_prev = e_mp_cc
             count += 1
+            print(f"Iterate difference : {e_diff}\n")
 
         print(f"SCF UMPCC stopped after {count} iterations, iterate difference: {e_diff}")
 #        breakpoint()
