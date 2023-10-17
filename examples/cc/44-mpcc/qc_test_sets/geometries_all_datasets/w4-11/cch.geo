@@ -1,0 +1,13 @@
+$molecule
+0 2
+C
+C 1 Rcc
+X 2 ONE 1 PI2
+H 2 Rch 3 PI2 1 PI1
+
+Rcc=1.21131544
+Rch=1.06452797
+PI1=180.0
+PI2=90.0
+ONE=1.0
+$end
