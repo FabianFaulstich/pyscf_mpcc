@@ -302,7 +302,7 @@ def run_mpcc(mol, atoms_list, minao, openshell_option):
         print(f'\n Iterate progress : e-diff = {e_diff} (tol = {tol}) \n')
 
     print(f"SCF UMPCC stopped after {count} iterations, iterate difference: {e_diff}")
-
+    return e_mp_cc
 
 
 if __name__ == '__main__':
@@ -352,9 +352,10 @@ if __name__ == '__main__':
             #     continue
 
             # Running mpcc for full molecule
-            run_mpcc(mol, atoms_list, minao, openshell_option)
+            e_mpcc_mol = run_mpcc(mol, atoms_list, minao, openshell_option)
 
             # Running mpcc for individual atoms:
+            e_mpcc_atom = []
             for atom in atoms_list:
 
                 if atom == 'H':
@@ -371,9 +372,8 @@ if __name__ == '__main__':
                     mol.spin = 1
                     mol.build()
 
-                breakpoint()
-                run_mpcc(mol, [atom], minao, openshell_option)
-                breakpoint()
+                e = run_mpcc(mol, [atom], minao, openshell_option)
+                e_mpcc_atom.append(e)
 
     
 
