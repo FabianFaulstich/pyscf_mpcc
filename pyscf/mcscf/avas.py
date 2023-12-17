@@ -177,10 +177,21 @@ def _kernel(avas_obj):
         mo_unrestricted = numpy.zeros((2,mo_coeff[0].shape[0],mo_coeff[0].shape[1]), float)
 
         for s in range(nspin):
-            c = iao.iao(mol, mo_coeff[s][:,ncore:nocc[s]], avas_obj.minao)[:,baslst]
-            s2 = reduce(numpy.dot, (c.T, ovlp, c))
-            s21 = reduce(numpy.dot, (c.T, ovlp, mo_coeff[s][:, ncore:]))
-            sa = s21.T.dot(scipy.linalg.solve(s2, s21, sym_pos=True))
+#           c = iao.iao(mol, mo_coeff[s][:,ncore:nocc[s]], avas_obj.minao)[:,baslst]
+#           s2 = reduce(numpy.dot, (c.T, ovlp, c))
+#           s21 = reduce(numpy.dot, (c.T, ovlp, mo_coeff[s][:, ncore:]))
+#           sa = s21.T.dot(scipy.linalg.solve(s2, s21, sym_pos=True))
+
+            if avas_obj.with_iao:
+               c = iao.iao(mol, mo_coeff[s][:,ncore:nocc[s]], avas_obj.minao)[:,baslst]
+               s2 = reduce(numpy.dot, (c.T, ovlp, c))
+               s21 = reduce(numpy.dot, (c.T, ovlp, mo_coeff[s][:, ncore:]))
+            else:
+               s2 = pmol.intor_symmetric('int1e_ovlp')[baslst][:,baslst]
+               s21 = gto.intor_cross('int1e_ovlp', pmol, mol)[baslst]
+               s21 = numpy.dot(s21, mo_coeff[s][:, ncore:])
+            sa = s21.T.dot(scipy.linalg.solve(s2, s21, assume_a='pos'))
+
 
             wocc, u = numpy.linalg.eigh(sa[:(nocc[s]-ncore), :(nocc[s]-ncore)])
             log.info('Option 2: threshold %s', threshold)
