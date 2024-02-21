@@ -310,16 +310,16 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
 ##  add the disconnected contribution to the T2 amplitude equation 
 ##
 
-    tmp = np.einsum('ia,jb->ijab', u1b, t1b)
-    tmp = tmp - tmp.transpose(1,0,2,3)
-    u2bb += tmp - tmp.transpose(0,1,3,2)
+   #tmp = np.einsum('ia,jb->ijab', u1b, t1b)
+   #tmp = tmp - tmp.transpose(1,0,2,3)
+   #u2bb += tmp - tmp.transpose(0,1,3,2)
 
-    tmp = np.einsum('ia,jb->ijab', u1a, t1a)
-    tmp = tmp - tmp.transpose(1,0,2,3)
-    u2aa += tmp - tmp.transpose(0,1,3,2)
+   #tmp = np.einsum('ia,jb->ijab', u1a, t1a)
+   #tmp = tmp - tmp.transpose(1,0,2,3)
+   #u2aa += tmp - tmp.transpose(0,1,3,2)
 
-    u2ab += np.einsum('ia,jb->jiba', u1b, t1a)
-    u2ab += np.einsum('ia,JB->iJaB', u1a, t1b)
+   #u2ab += np.einsum('ia,jb->jiba', u1b, t1a)
+   #u2ab += np.einsum('ia,JB->iJaB', u1a, t1b)
 
 ##  end of disconnected terms
 

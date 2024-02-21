@@ -122,6 +122,7 @@ def get_N2(basis, bond_length, spin, spin_restricted, dm0=None):
     mol = gto.M()
     mol.basis = basis
     mol.atom = [["N", [0, 0, 0]], ["N", [bond_length, 0, 0]]]
+#    mol.atom = 'N 0 0 0'
     mol.verbose = 3
     mol.unit = "angstrom"
     mol.spin = spin
@@ -210,9 +211,10 @@ if __name__ == "__main__":
     # idx_s = [[2], [2]]
     # idx_d = [[3, 7, 9, 10, 11],[3, 7, 9, 10, 11]]
 
-    bds = np.arange(1.0, 2.2, 0.05)
+    bds = np.arange(1.0, 3.0, 0.05)
+#    bds = np.arange(0.6, 1.0, 0.05)
 
-#   bds = [1.5]
+#    bds = [1.5]
 
     spin = 0
     spin_restricted = False
@@ -220,6 +222,7 @@ if __name__ == "__main__":
     basis = "aug-ccpvdz"
 
 #   ao_labels = ["C 2p", "C 2s", "C 3p", "C 3s","O 2p", "O 2s", "O 3p", "O 3s" ]
+#    ao_labels = ["N 2p", "N 2s","N 3p", "N 3s", "N 3d"]
     ao_labels = ["N 2p", "N 2s","N 3p", "N 3s"]
 
     res_hf = []
@@ -241,7 +244,11 @@ if __name__ == "__main__":
         # Why not always convert to UHF object?
         mf = scf.addons.convert_to_uhf(mf)
 
-        c_lo, act_hole, act_part = get_localized_orbs(mol, mf, ao_labels, minao="dzp", openshell_option = openshell_option)
+        c_lo, act_hole, act_part = get_localized_orbs(mol, mf, ao_labels, minao="dz", openshell_option = openshell_option)
+
+        print ("dimension of active hole", len(act_hole[0]),len(act_hole[1])) 
+        print ("dimension of active part", len(act_part[0]),len(act_part[1])) 
+
         frag = [[act_hole, act_part]]
 
         e_mp_cc_prev = -np.inf
@@ -253,62 +260,62 @@ if __name__ == "__main__":
         mycc = cc.umpccsd.CCSD(mf, mo_coeff = c_lo)
         mycc.verbose = 3
         mycc.max_cycle = 50
-        mycc.diis_space = 14
+#        mycc.diis_space = 14
         mycc.level_shift = 0.5
 
         e_mp_cc_its = []
 
         adiis = lib.diis.DIIS(mycc)
 
-        while e_diff > tol and count < count_tol:
+     #  while e_diff > tol and count < count_tol:
 
-            if count > 0:
+     #      if count > 0:
 
-                print("=== Starting OOMP2 iterations ======")     
+     #          print("=== Starting OOMP2 iterations ======")     
 
-                mycc.max_cycle = 1
-                # mp_lo = oo_mp2(mf, c_lo, mp_cc_t1, mp_cc_t2, spin_restricted)
-                nocca, noccb, _, _ = mycc.t2[1].shape
-                mycc.kernel(act_hole = [frag[0][0][0], frag[0][0][1]], 
-                            act_particle = [frag[0][1][0] - nocca, frag[0][1][1] - noccb], 
-                            idx_s = idx_s_oomp2, 
-                            idx_d = idx_d_oomp2, 
-                          #  t1=mycc.t1, 
-                          #  t2=mycc.t2, 
-                            t1=mp_cc_t1, 
-                            t2=mp_cc_t2, 
-                            oo_mp2 = True)
-                mp_t2 = mycc.t2
-                mp_t1 = mycc.t1
-            else:
-                mp_lo = oo_mp2(mf, c_lo, None, None)
-                mp_t2 = mp_lo[2]
-                mp_t1 = mp_lo[3]
+     #          mycc.max_cycle = 50
+     #          # mp_lo = oo_mp2(mf, c_lo, mp_cc_t1, mp_cc_t2, spin_restricted)
+     #          nocca, noccb, _, _ = mycc.t2[1].shape
+     #          mycc.kernel(act_hole = [frag[0][0][0], frag[0][0][1]], 
+     #                      act_particle = [frag[0][1][0] - nocca, frag[0][1][1] - noccb], 
+     #                      idx_s = idx_s_oomp2, 
+     #                      idx_d = idx_d_oomp2, 
+     #                    #  t1=mycc.t1, 
+     #                    #  t2=mycc.t2, 
+     #                      t1=mp_cc_t1, 
+     #                      t2=mp_cc_t2, 
+     #                      oo_mp2 = True)
+     #          mp_t2 = mycc.t2
+     #          mp_t1 = mycc.t1
+     #      else:
+     #          mp_lo = oo_mp2(mf, c_lo, None, None)
+     #          mp_t2 = mp_lo[2]
+     #          mp_t1 = mp_lo[3]
 
-            print("=== Starting UMPCCSD ======")     
-            mycc.max_cycle = 50
+     #      print("=== Starting UMPCCSD ======")     
+     #      mycc.max_cycle = 50
 
-            e_mp_cc, mp_cc_t1, mp_cc_t2 = fragmented_mpcc_unrestricted(
-                frag, mycc, mp_t2, mp_t1, idx_s, idx_d
-            )
+     #      e_mp_cc, mp_cc_t1, mp_cc_t2 = fragmented_mpcc_unrestricted(
+     #          frag, mycc, mp_t2, mp_t1, idx_s, idx_d
+     #      )
 
-#           t2shape = [x.shape for x in mp_cc_t2]
-#           mp_cc_t2 = np.hstack([x.ravel() for x in mp_cc_t2])
-#           mp_cc_t2 = adiis.update(mp_cc_t2)
-#           mp_cc_t2 = lib.split_reshape(mp_cc_t2, t2shape)
-
-
-            t1shape = [x.shape for x in mp_cc_t1]
-            mp_cc_t1 = np.hstack([x.ravel() for x in mp_cc_t1])
-            mp_cc_t1 = adiis.update(mp_cc_t1)
-            mp_cc_t1 = lib.split_reshape(mp_cc_t1, t1shape)
+#    #      t2shape = [x.shape for x in mp_cc_t2]
+#    #      mp_cc_t2 = np.hstack([x.ravel() for x in mp_cc_t2])
+#    #      mp_cc_t2 = adiis.update(mp_cc_t2)
+#    #      mp_cc_t2 = lib.split_reshape(mp_cc_t2, t2shape)
 
 
-            e_diff = np.abs(e_mp_cc - e_mp_cc_prev)
-            e_mp_cc_its.append(e_mp_cc)
-            e_mp_cc_prev = e_mp_cc
-            count += 1
-            print(f"Iterate difference : {e_diff}\n")
+     #      t1shape = [x.shape for x in mp_cc_t1]
+     #      mp_cc_t1 = np.hstack([x.ravel() for x in mp_cc_t1])
+     #      mp_cc_t1 = adiis.update(mp_cc_t1)
+     #      mp_cc_t1 = lib.split_reshape(mp_cc_t1, t1shape)
+
+
+     #      e_diff = np.abs(e_mp_cc - e_mp_cc_prev)
+     #      e_mp_cc_its.append(e_mp_cc)
+     #      e_mp_cc_prev = e_mp_cc
+     #      count += 1
+     #      print(f"Iterate difference : {e_diff}\n")
 
         print(f"SCF UMPCC stopped after {count} iterations, iterate difference: {e_diff}")
 #        breakpoint()
@@ -316,12 +323,18 @@ if __name__ == "__main__":
         res_hf.append(e_hf)
         res_mp.append(e_mp)
         res_cc.append(e_cc)
-        res_mpcc.append(e_mp_cc)
+#        res_mpcc.append(e_mp_cc)
 
     res_hf = np.array(res_hf)
     res_mp = np.array(res_mp)
     res_cc = np.array(res_cc)
-    res_mpcc = np.array(res_mpcc)
+#    res_mpcc = np.array(res_mpcc)
+
+    np.savetxt("UCC.txt", (res_hf + res_cc))
+    np.savetxt("UMP.txt", (res_hf + res_mp))
+#    np.savetxt("UMPCC_tz_3d.txt", (res_hf + res_mpcc))
+    np.savetxt("distance.txt", bds)
+
 
     #    breakpoint()
 
