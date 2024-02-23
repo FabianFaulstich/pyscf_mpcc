@@ -190,8 +190,8 @@ def _contract(subscripts, *tensors, **kwargs):
         print("Reshaping A as (-1,", inner_shape, ")")
         print("Reshaping B as (", inner_shape, ",-1)")
 
-    shapeCt = list()
-    idxCt = list()
+    shapeCt = []
+    idxCt = []
     for idx in idxAt:
         if idx in shared_idxAB:
             break
@@ -1116,6 +1116,16 @@ def expm(a):
         y, buf = buf, y
     return y
 
+def ndarray_pointer_2d(array):
+    '''Get the C pointer of a 2D array
+    '''
+    assert array.ndim == 2
+    assert array.flags.c_contiguous
+
+    ptr = (array.ctypes.data +
+           numpy.arange(array.shape[0])*array.strides[0]).astype(numpy.uintp)
+    ptr = ptr.ctypes.data_as(ctypes.c_void_p)
+    return ptr
 
 class NPArrayWithTag(numpy.ndarray):
     # Initialize kwargs in function tag_array
