@@ -4,7 +4,7 @@ class MPCCSD():
     
     def __init__(self,t1,t2):
 
-        sefl.act_hole 
+        self.act_hole 
         self.act_particle 
         self.nocc 
         self.nvir
@@ -41,33 +41,33 @@ class MPCCSD():
 
 
         def get_t_mix():
-            singles_iA = np.ix_(inact_hole, act_particle) # i, A
-            singles_Ia = np.ix_(act_hole, inact_particle) # I, a
+            singles_iA = np.ix_(self.inact_hole, self.act_particle) # i, A
+            singles_Ia = np.ix_(self.act_hole, self.inact_particle) # I, a
             
             t1_mix_a = [t1[0][single_iA], t1[0][single_Ia]]
             t1_mix_b = [t1[1][single_iA], t1[1][single_Ia]]
             t1_mix = [t1_mix_a, t1_mix_b]
             
 
-            doubles_IJaB = np.ix_(act_hole, act_hole, inact_particle, act_particle) # IJ, aB
+            doubles_IJaB = np.ix_(self.act_hole, self.act_hole, self.inact_particle, self.act_particle) # IJ, aB
             # doubles.append(np.ix_(act_hole, act_hole, act_particle, inact_particle)) # IJ, Ab = - IJ, aB
             
-            doubles_iJaB = np.ix_(inact_hole, act_hole, inact_particle, act_particle) # iJ, aB
+            doubles_iJaB = np.ix_(self.inact_hole, self.act_hole, self.inact_particle, self.act_particle) # iJ, aB
             # doubles.append(np.ix_(inact_hole, act_hole, act_particle, inact_particle)) # iJ, Ab = - iJ, aB  
             # doubles.append(np.ix_(act_hole, inact_hole, inact_particle, act_particle)) # Ij, aB = - iJ, aB
             # doubles.append(np.ix_(act_hole, inact_hole, act_particle, inact_particle)) # Ij, Ab = iJ, aB 
 
-            doubles_ijaB = np.ix_(inact_hole, inact_hole, inact_particle, act_particle) # ij, aB
+            doubles_ijaB = np.ix_(self.inact_hole, self.inact_hole, self.inact_particle, self.act_particle) # ij, aB
             # doubles.append(np.ix_(inact_hole, inact_hole, act_particle, inact_particle)) # ij, Ab = - ij, aB
              
-            doubles_iJab = np.ix_(inact_hole, act_hole, inact_particle, inact_particle) # iJ, ab
+            doubles_iJab = np.ix_(self.inact_hole, self.act_hole, self.inact_particle, self.inact_particle) # iJ, ab
             # doubles.append(np.ix_(act_hole, inact_hole, inact_particle, inact_particle)) # Ij, ab = - iJ, ab 
          
-            doubles_iJAB = np.ix_(inact_hole, act_hole, act_particle, act_particle) # iJ, AB 
+            doubles_iJAB = np.ix_(self.inact_hole, self.act_hole, self.act_particle, self.act_particle) # iJ, AB 
             # doubles.append(np.ix_(act_hole, inact_hole, act_particle, act_particle)) # Ij, AB = - iJ, AB
              
-            doubles_IJab = np.ix_(act_hole, act_hole, inact_particle, inact_particle) # IJ, ab
-            doubles_ijAB = np.ix_(inact_hole, inact_hole, act_particle, act_particle) # ij, AB
+            doubles_IJab = np.ix_(self.act_hole, self.act_hole, self.inact_particle, self.inact_particle) # IJ, ab
+            doubles_ijAB = np.ix_(self.inact_hole, self.inact_hole, self.act_particle, self.act_particle) # ij, AB
 
             t2_mix_aa = [t2[0][doubles_IJab], t2[0][doubles_ijAB], t2[0][doubles_iJaB], t2[0][doubles_iJAB], t2[0][doubles_iJab], t2[0][doubles_ijaB], t2[0][doubles_IJaB]]
             t2_mix_ab = [t2[1][doubles_IJab], t2[1][doubles_ijAB], t2[1][doubles_iJaB], t2[1][doubles_iJAB], t2[1][doubles_iJab], t2[1][doubles_ijaB], t2[1][doubles_IJaB]]
@@ -93,8 +93,6 @@ class MPCCSD():
 
             return t1_frag, t2_frag
 
-
-
         def get_t_env():
 
             singles = np.ix_(self.inact_hole, self.inact_particle) 
@@ -112,5 +110,5 @@ class MPCCSD():
             return t1_env, t2_env
 
 
-        
+                
 
