@@ -51,33 +51,56 @@ def Foo(t1_mix, t1_env, t2_mix, t2_env, act_hole, act_particle, eris):
     eris_ovOV = np.asarray(eris.ovOV)
     tilaa, tilab, tilbb = make_tau(t2, t1, t1, fac=0.5)
 
-    # np.ix_(self.act_hole, self.act_hole, self.inact_particle, self.act_particle)
-
     tau_Inef_aa = tilaa[np.ix_(act_hole[0],inact_hole[0], act_particle[0], act_particle[0])]
     eri_Menf_aa = eris_ovov[np.ix_(act_hole[0], inact_particle[0], inact_hole[0], inact_particle[0])]
     Fooa  = lib.einsum('inef,menf->mi', tau_Inef_aa, eris_Menf_aa)
 
-    # NOTE continue building local copies ... 
-    Fooa += lib.einsum('iNeF,meNF->mi', tilab, eris_ovOV)
-    Foob  = lib.einsum('inef,menf->mi', tilbb, eris_OVOV)
-    Foob += lib.einsum('nIfE,nfME->MI', tilab, eris_ovOV)
+    tau_Inef_ab = tilab[np.ix_(act_hole[0],inact_hole[1], act_particle[0], act_particle[1])]
+    eri_Menf_ab = eris_ovOV[np.ix_(act_hole[0], inact_particle[0], inact_hole[1], inact_particle[1])]
+    Fooa += lib.einsum('iNeF,meNF->mi', tau_Inef_ab, eri_Menf_ab)
+    
+    tau_Inef_bb = tilbb[np.ix_(act_hole[1],inact_hole[1], act_particle[1], act_particle[1])]
+    eri_Menf_bb = eris_OVOV[np.ix_(act_hole[1], inact_particle[1], inact_hole[1], inact_particle[1])]
+    Foob  = lib.einsum('inef,menf->mi', tau_Inef_bb, eri_Menf_bb)
+  
+    Foob += lib.einsum('nIfE,nfME->MI', tau_Inef_ab, eri_Menf_ab)
 
     eris_ovoo = np.asarray(eris.ovoo)
     eris_OVOO = np.asarray(eris.OVOO)
     eris_OVoo = np.asarray(eris.OVoo)
     eris_ovOO = np.asarray(eris.ovOO)
-    Fooa += np.einsum('ne,nemi->mi', t1a, eris_ovoo)
-    Fooa -= np.einsum('ne,meni->mi', t1a, eris_ovoo)
-    Fooa += np.einsum('NE,NEmi->mi', t1b, eris_OVoo)
-    Foob += np.einsum('ne,nemi->mi', t1b, eris_OVOO)
-    Foob -= np.einsum('ne,meni->mi', t1b, eris_OVOO)
-    Foob += np.einsum('ne,neMI->MI', t1a, eris_ovOO)
 
-    fooa = eris.focka[:nocca,:nocca]
-    foob = eris.fockb[:noccb,:noccb]
-    fova = eris.focka[:nocca,nocca:]
-    fovb = eris.fockb[:noccb,noccb:]
-    Fova, Fovb = Fov(t1, t2, eris)
+    eri_neMI_aa = eris_ovoo[np.ix_(inact_hole[0], inact_particle[0], act_hole[0], act_hole[0])]
+    Fooa += np.einsum('ne,nemi->mi', t1_env[0], eri_neMI_aa) 
+
+    # Fooa -= np.einsum('ne,meni->mi', t1a, eris_ovoo)
+    eri_MenI_aa = eris_ovoo[np.ix_(act_hole[0], inact_particle[0], inact_hole[0], act_hole[0])]
+    Fooa -= np.einsum('ne,meni->mi', t1_env[0], eri_MenI_aa)
+
+    eri_neMI_ba = eris_OVoo[np.ix_(inact_hole[1], inact_particle[1], act_hole[0], act_hole[0])]
+    Fooa += np.einsum('NE,NEmi->mi', t1_enc[1], eri_neMI_ba)
+
+    eri_neMI_bb = eris_OVOO[np.ix_(inact_hole[1], inact_particle[1], act_hole[1], act_hole[1])]
+    Foob += np.einsum('ne,nemi->mi', t1_env[1], eri_neMI_bb)
+
+    # Foob -= np.einsum('ne,meni->mi', t1b, eris_OVOO)
+    eri_MenI_bb = eris_OVOO[np.ix_(act_hole[1], inact_particle[1], inact_hole[1], act_hole[1])]
+    Foob -= np.einsum('ne,meni->mi', t1_env[1], eri_MenI_bb)
+
+    eri_neMI_ab = eris_ovOO[np.ix_(inact_hole[0], inact_particle[0], act_hole[1], act_hole[1])]
+    Foob += np.einsum('ne,neMI->MI', t1_env[0], eri_neMI_ab)
+
+    fooa = eris.focka[np.ix_(act_hole[0], act_hole[0])]
+    foob = eris.fockb[np.ix_(act_hole[1], act_hole[1])]
+    fova = eris.focka[np.idx_(act_hole[0], inact_particle[0])]
+    fovb = eris.focka[np.idx_(act_hole[1], inact_particle[1])]
+
+    # NOTE stopped here!!
+    eri_MEnf_aa = eris.ovov[np.ix_(act_hole[0], inact_particle[0], inact_hole[0], act_particle[0])]
+    Fova = np.einsum('nf,menf->me', t1_env[0], eri_MEnf_aa)
+
+
+    Fova, Fovb = Fov(t1, t2, eris)  
 
     Fooa += fooa + 0.5*lib.einsum('me,ie->mi', Fova+fova, t1a)
     Foob += foob + 0.5*lib.einsum('me,ie->mi', Fovb+fovb, t1b)
