@@ -32,6 +32,7 @@ from pyscf.cc import ccsd
 from pyscf.ao2mo import _ao2mo
 from pyscf.mp import ump2
 from pyscf import scf
+from pyscf.cc import umpcc_intermediates as imd
 from pyscf import __config__
 
 MEMORYMIN = getattr(__config__, 'cc_ccsd_memorymin', 2000)
@@ -51,37 +52,67 @@ def update_amps(cc, t1, t2, eris):
     mo_eb_o = eris.mo_energy[1][:noccb]
     mo_eb_v = eris.mo_energy[1][noccb:] + cc.level_shift
 
+    tauaa, tauab, taubb = make_tau(t2, t1, t1)
+#   initialization of CC Residue
 
-    Fvv = imd.cc_Fvv(t1, t2, eris)
-    Foo = imd.cc_Foo(t1, t2, eris)
-    Fov = imd.cc_Fov(t1, t2, eris)
-    Woooo = imd.cc_Woooo(t1, t2, eris)
-    Wvvvv = imd.cc_Wvvvv(t1, t2, eris)
-    Wovvo = imd.cc_Wovvo(t1, t2, eris)
+    u1a = np.zeros_like(t1a)
+    u1b = np.zeros_like(t1b)
 
+    u2aa, u2ab, u2bb = cc._add_vvvv(None, (tauaa,tauab,taubb), eris)
+    u2aa *= .5
+    u2bb *= .5
+
+    mem_now = lib.current_memory()[0]
+    max_memory = max(0, cc.max_memory - mem_now - u2aa.size*8e-6)
+
+    Fvva, Fvvb = imd.Fvv(t1, t2, eris, max_memory, ccsd.BLKMIN)
+    Fooa, Foob = imd.Foo(t1, t2, eris)
+    Fova, Fovb = imd.Fov(t1, t2, eris)
+    Woooo, WoOoO, WOOOO = imd.Woooo(t1, t2, eris)
+    #Wvvvv = imd.Wvvvv(t1, t2, eris)
+    wovvo, wOVVO, woVvO, woVVo, wOvVo, wOvvO = imd.Wovvo(t1, t2, eris, max_memory, ccsd.BLKMIN)
+    #wooov, wooOV, wOOov, wOOOV = imd.Wooov(t1, t2, eris)
+    #woovo, wooVO, wOOvo, wOOVO = imd.Woovo(t1, t2, eris)
+#   Waemf, WaeMF, WAEmf, WAEMF = imd.Wvvov(t1, t2, eris)
+#   wvvvo, wvvVO, wVVvo, wVVVO = imd.Wvvvo(t1, t2, eris)
 
     # T1 equation
-    t1new = np.array(fov).conj()
-    t1new +=  einsum('ie,ae->ia', t1, Fvv)
-    t1new += -einsum('ma,mi->ia', t1, Foo)
-    t1new +=  einsum('imae,me->ia', t2, Fov)
-    t1new += -einsum('nf,naif->ia', t1, eris.ovov)
-    t1new += -0.5*einsum('imef,maef->ia', t2, eris.ovvv)
-    t1new += -0.5*einsum('mnae,mnie->ia', t2, eris.ooov)
 
+    eris_ovoo = np.asarray(eris.ovoo)
+    ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
 
-    Fova += fova
-    Fovb += fovb
+    eris_OVOO = np.asarray(eris.OVOO)
+    OVOO = eris_OVOO - eris_OVOO.transpose(2,1,0,3)
+
+    eris_oovv = np.asarray(eris.oovv)
+    eris_ovvo = np.asarray(eris.ovvo)
+    oovv = eris_oovv - eris_ovvo.transpose(0,3,2,1)
+
+    eris_OOVV = np.asarray(eris.OOVV)
+    eris_OVVO = np.asarray(eris.OVVO)
+    OOVV = eris_OOVV - eris_OVVO.transpose(0,3,2,1)
+
+    eris_OVvo = np.asarray(eris.OVvo)
+    eris_ovVO = np.asarray(eris.ovVO)
+
+    fova = eris.focka[:nocca,nocca:]
+    fovb = eris.fockb[:noccb,noccb:]
+
+#    Fova += fova
+#    Fovb += fovb
+
     u1a += fova.conj()
     u1a += np.einsum('ie,ae->ia', t1a, Fvva)
     u1a -= np.einsum('ma,mi->ia', t1a, Fooa)
     u1a -= np.einsum('imea,me->ia', t2aa, Fova)
     u1a += np.einsum('iMaE,ME->ia', t2ab, Fovb)
+    u1a += 0.5*lib.einsum('mnae,meni->ia', t2aa, ovoo)
     u1b += fovb.conj()
     u1b += np.einsum('ie,ae->ia',t1b,Fvvb)
     u1b -= np.einsum('ma,mi->ia',t1b,Foob)
     u1b -= np.einsum('imea,me->ia', t2bb, Fovb)
     u1b += np.einsum('mIeA,me->IA', t2ab, Fova)
+    u1b += 0.5*lib.einsum('mnae,meni->ia', t2bb, OVOO)
 
     u1a-= np.einsum('nf,niaf->ia', t1a,      oovv)
     u1a+= np.einsum('NF,NFai->ia', t1b, eris_OVvo)
@@ -92,21 +123,15 @@ def update_amps(cc, t1, t2, eris):
 
     # T2 equation
 
-    u2aa, u2ab, u2bb = cc._add_vvvv(None, (tauaa,tauab,taubb), eris)
-    u2aa *= .5
-    u2bb *= .5
-
     # We will keep the out-of-core section as is now.
 
-    mem_now = lib.current_memory()[0]
-    max_memory = max(0, cc.max_memory - mem_now - u2aa.size*8e-6)
     if nvira > 0 and nocca > 0:
         blksize = max(ccsd.BLKMIN, int(max_memory*1e6/8/(nvira**3*3+1)))
         for p0,p1 in lib.prange(0, nocca, blksize):
             ovvv = eris.get_ovvv(slice(p0,p1))  # ovvv = eris.ovvv[p0:p1]
             ovvv = ovvv - ovvv.transpose(0,3,2,1)
-            Fvva += np.einsum('mf,mfae->ae', t1a[p0:p1], ovvv)
-            wovvo[p0:p1] += lib.einsum('jf,mebf->mbej', t1a, ovvv)
+#            Fvva += np.einsum('mf,mfae->ae', t1a[p0:p1], ovvv)
+#            wovvo[p0:p1] += lib.einsum('jf,mebf->mbej', t1a, ovvv)
             u1a += 0.5*lib.einsum('mief,meaf->ia', t2aa[p0:p1], ovvv)
             u2aa[:,p0:p1] += lib.einsum('ie,mbea->imab', t1a, ovvv.conj())
             tmp1aa = lib.einsum('ijef,mebf->ijmb', tauaa, ovvv)
@@ -118,8 +143,8 @@ def update_amps(cc, t1, t2, eris):
         for p0,p1 in lib.prange(0, noccb, blksize):
             OVVV = eris.get_OVVV(slice(p0,p1))  # OVVV = eris.OVVV[p0:p1]
             OVVV = OVVV - OVVV.transpose(0,3,2,1)
-            Fvvb += np.einsum('mf,mfae->ae', t1b[p0:p1], OVVV)
-            wOVVO[p0:p1] = lib.einsum('jf,mebf->mbej', t1b, OVVV)
+ #           Fvvb += np.einsum('mf,mfae->ae', t1b[p0:p1], OVVV)
+#            wOVVO[p0:p1] = lib.einsum('jf,mebf->mbej', t1b, OVVV)
             u1b += 0.5*lib.einsum('MIEF,MEAF->IA', t2bb[p0:p1], OVVV)
             u2bb[:,p0:p1] += lib.einsum('ie,mbea->imab', t1b, OVVV.conj())
             tmp1bb = lib.einsum('ijef,mebf->ijmb', taubb, OVVV)
@@ -130,9 +155,9 @@ def update_amps(cc, t1, t2, eris):
         blksize = max(ccsd.BLKMIN, int(max_memory*1e6/8/(nvira*nvirb**2*3+1)))
         for p0,p1 in lib.prange(0, nocca, blksize):
             ovVV = eris.get_ovVV(slice(p0,p1))  # ovVV = eris.ovVV[p0:p1]
-            Fvvb += np.einsum('mf,mfAE->AE', t1a[p0:p1], ovVV)
-            woVvO[p0:p1] = lib.einsum('JF,meBF->mBeJ', t1b, ovVV)
-            woVVo[p0:p1] = lib.einsum('jf,mfBE->mBEj',-t1a, ovVV)
+#            Fvvb += np.einsum('mf,mfAE->AE', t1a[p0:p1], ovVV)
+#            woVvO[p0:p1] = lib.einsum('JF,meBF->mBeJ', t1b, ovVV)
+#            woVVo[p0:p1] = lib.einsum('jf,mfBE->mBEj',-t1a, ovVV)
             u1b += lib.einsum('mIeF,meAF->IA', t2ab[p0:p1], ovVV)
             u2ab[p0:p1] += lib.einsum('IE,maEB->mIaB', t1b, ovVV.conj())
             tmp1ab = lib.einsum('iJeF,meBF->iJmB', tauab, ovVV)
@@ -143,9 +168,9 @@ def update_amps(cc, t1, t2, eris):
         blksize = max(ccsd.BLKMIN, int(max_memory*1e6/8/(nvirb*nvira**2*3+1)))
         for p0,p1 in lib.prange(0, noccb, blksize):
             OVvv = eris.get_OVvv(slice(p0,p1))  # OVvv = eris.OVvv[p0:p1]
-            Fvva += np.einsum('MF,MFae->ae', t1b[p0:p1], OVvv)
-            wOvVo[p0:p1] = lib.einsum('jf,MEbf->MbEj', t1a, OVvv)
-            wOvvO[p0:p1] = lib.einsum('JF,MFbe->MbeJ',-t1b, OVvv)
+#            Fvva += np.einsum('MF,MFae->ae', t1b[p0:p1], OVvv)
+#            wOvVo[p0:p1] = lib.einsum('jf,MEbf->MbEj', t1a, OVvv)
+#            wOvvO[p0:p1] = lib.einsum('JF,MFbe->MbeJ',-t1b, OVvv)
             u1a += lib.einsum('iMfE,MEaf->ia', t2ab[:,p0:p1], OVvv)
             u2ab[:,p0:p1] += lib.einsum('ie,MBea->iMaB', t1a, OVvv.conj())
             tmp1abba = lib.einsum('iJeF,MFbe->iJbM', tauab, OVvv)
@@ -154,10 +179,45 @@ def update_amps(cc, t1, t2, eris):
 
 
 
+
+
+
+    eris_ovov = np.asarray(eris.ovov)
+    ovov = eris_ovov - eris_ovov.transpose(0,3,2,1)
+
+
     u2aa += lib.einsum('mnab,mnij->ijab', tauaa, Woooo*.5)
     u2aa += ovov.conj().transpose(0,2,1,3) * .5
+    tmp1aa = lib.einsum('ie,mjbe->mbij', t1a,      oovv)
     u2aa += 2*lib.einsum('ma,mbij->ijab', t1a, tmp1aa)
 
+
+    eris_OVOV = np.asarray(eris.OVOV)
+    OVOV = eris_OVOV - eris_OVOV.transpose(0,3,2,1)
+
+    u2bb += lib.einsum('mnab,mnij->ijab', taubb, WOOOO*.5)
+    u2bb += OVOV.conj().transpose(0,2,1,3) * .5
+    tmp1bb = lib.einsum('ie,mjbe->mbij', t1b,      OOVV)
+    u2bb += 2*lib.einsum('ma,mbij->ijab', t1b, tmp1bb)
+
+
+    eris_ovOV = np.asarray(eris.ovOV)
+    eris_ooVV = np.asarray(eris.ooVV)
+    eris_OOvv = np.asarray(eris.OOvv)
+
+    u2ab += lib.einsum('mNaB,mNiJ->iJaB', tauab, WoOoO)
+    u2ab += eris_ovOV.conj().transpose(0,2,1,3)
+
+
+    tmp1ab = lib.einsum('ie,meBJ->mBiJ', t1a, eris_ovVO)
+    tmp1ab+= lib.einsum('IE,mjBE->mBjI', t1b, eris_ooVV)
+
+    u2ab -= lib.einsum('ma,mBiJ->iJaB', t1a, tmp1ab)
+
+    tmp1ba = lib.einsum('IE,MEbj->MbIj', t1b, eris_OVvo)
+    tmp1ba+= lib.einsum('ie,MJbe->MbJi', t1a, eris_OOvv)
+
+    u2ab -= lib.einsum('MA,MbIj->jIbA', t1b, tmp1ba)
 
 
     u2aa += 2*lib.einsum('imae,mbej->ijab', t2aa, wovvo)
@@ -204,7 +264,6 @@ def update_amps(cc, t1, t2, eris):
     time0 = log.timer_debug1('update t1 t2', *time0)
     t1new = u1a, u1b
     t2new = u2aa, u2ab, u2bb
-
 
     return t1new, t2new
 
