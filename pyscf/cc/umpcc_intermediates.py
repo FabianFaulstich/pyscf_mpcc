@@ -100,7 +100,7 @@ def Foo(t1, t2, eris):
 
     return Fooa, Foob
 
-def Fvv(t1, t2, eris, max_memory):
+def Fvv(t1, t2, eris, max_memory, BLKMIN):
 
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
@@ -123,27 +123,27 @@ def Fvv(t1, t2, eris, max_memory):
     #mem_now = lib.current_memory()[0]
     #max_memory = max(0, cc.max_memory - mem_now - t2aa.size*8e-6)
     if nvira > 0 and nocca > 0:
-        blksize = max(ccsd.BLKMIN, int(max_memory*1e6/8/(nvira**3*3+1)))
+        blksize = max(BLKMIN, int(max_memory*1e6/8/(nvira**3*3+1)))
         for p0,p1 in lib.prange(0, nocca, blksize):
             ovvv = eris.get_ovvv(slice(p0,p1))  # ovvv = eris.ovvv[p0:p1]
             ovvv = ovvv - ovvv.transpose(0,3,2,1)
             Fvva += np.einsum('mf,mfae->ae', t1a[p0:p1], ovvv)
 
     if nvirb > 0 and noccb > 0:
-        blksize = max(ccsd.BLKMIN, int(max_memory*1e6/8/(nvirb**3*3+1)))
+        blksize = max(BLKMIN, int(max_memory*1e6/8/(nvirb**3*3+1)))
         for p0,p1 in lib.prange(0, noccb, blksize):
             OVVV = eris.get_OVVV(slice(p0,p1))  # OVVV = eris.OVVV[p0:p1]
             OVVV = OVVV - OVVV.transpose(0,3,2,1)
             Fvvb += np.einsum('mf,mfae->ae', t1b[p0:p1], OVVV)
 
     if nvirb > 0 and nocca > 0:
-        blksize = max(ccsd.BLKMIN, int(max_memory*1e6/8/(nvira*nvirb**2*3+1)))
+        blksize = max(BLKMIN, int(max_memory*1e6/8/(nvira*nvirb**2*3+1)))
         for p0,p1 in lib.prange(0, nocca, blksize):
             ovVV = eris.get_ovVV(slice(p0,p1))  # ovVV = eris.ovVV[p0:p1]
             Fvvb += np.einsum('mf,mfAE->AE', t1a[p0:p1], ovVV)
 
     if nvira > 0 and noccb > 0:
-        blksize = max(ccsd.BLKMIN, int(max_memory*1e6/8/(nvirb*nvira**2*3+1)))
+        blksize = max(BLKMIN, int(max_memory*1e6/8/(nvirb*nvira**2*3+1)))
         for p0,p1 in lib.prange(0, noccb, blksize):
             OVvv = eris.get_OVvv(slice(p0,p1))  # OVvv = eris.OVvv[p0:p1]
             Fvva += np.einsum('MF,MFae->ae', t1b[p0:p1], OVvv)
@@ -228,7 +228,7 @@ def Woooo(t1, t2, eris):
     return Woooo, WoOoO, WOOOO
 
 
-def Wovvo(t1, t2, eris, max_memory):
+def Wovvo(t1, t2, eris, max_memory, BLKMIN):
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
     nocca, noccb, nvira, nvirb = t2ab.shape
@@ -241,32 +241,32 @@ def Wovvo(t1, t2, eris, max_memory):
     wOvVo = np.zeros((noccb,nvira,nvirb,nocca), dtype=dtype)
     wOvvO = np.zeros((noccb,nvira,nvira,noccb), dtype=dtype)
 
-    mem_now = lib.current_memory()[0]
-    max_memory = max(0, cc.max_memory - mem_now - u2aa.size*8e-6)
+#    mem_now = lib.current_memory()[0]
+#    max_memory = max(0, cc.max_memory - mem_now - u2aa.size*8e-6)
     
     if nvira > 0 and nocca > 0:
-        blksize = max(ccsd.BLKMIN, int(max_memory*1e6/8/(nvira**3*3+1)))
+        blksize = max(BLKMIN, int(max_memory*1e6/8/(nvira**3*3+1)))
         for p0,p1 in lib.prange(0, nocca, blksize):
             ovvv = eris.get_ovvv(slice(p0,p1))  # ovvv = eris.ovvv[p0:p1]
             ovvv = ovvv - ovvv.transpose(0,3,2,1)
             wovvo[p0:p1] += lib.einsum('jf,mebf->mbej', t1a, ovvv)
 
     if nvirb > 0 and noccb > 0:
-        blksize = max(ccsd.BLKMIN, int(max_memory*1e6/8/(nvirb**3*3+1)))
+        blksize = max(BLKMIN, int(max_memory*1e6/8/(nvirb**3*3+1)))
         for p0,p1 in lib.prange(0, noccb, blksize):
             OVVV = eris.get_OVVV(slice(p0,p1))  # OVVV = eris.OVVV[p0:p1]
             OVVV = OVVV - OVVV.transpose(0,3,2,1)
             wOVVO[p0:p1] = lib.einsum('jf,mebf->mbej', t1b, OVVV)
 
     if nvirb > 0 and nocca > 0:
-        blksize = max(ccsd.BLKMIN, int(max_memory*1e6/8/(nvira*nvirb**2*3+1)))
+        blksize = max(BLKMIN, int(max_memory*1e6/8/(nvira*nvirb**2*3+1)))
         for p0,p1 in lib.prange(0, nocca, blksize):
             ovVV = eris.get_ovVV(slice(p0,p1))  # ovVV = eris.ovVV[p0:p1]
             woVvO[p0:p1] = lib.einsum('JF,meBF->mBeJ', t1b, ovVV)
             woVVo[p0:p1] = lib.einsum('jf,mfBE->mBEj',-t1a, ovVV)
 
     if nvira > 0 and noccb > 0:
-        blksize = max(ccsd.BLKMIN, int(max_memory*1e6/8/(nvirb*nvira**2*3+1)))
+        blksize = max(BLKMIN, int(max_memory*1e6/8/(nvirb*nvira**2*3+1)))
         for p0,p1 in lib.prange(0, noccb, blksize):
             OVvv = eris.get_OVvv(slice(p0,p1))  # OVvv = eris.OVvv[p0:p1]
             wOvVo[p0:p1] = lib.einsum('jf,MEbf->MbEj', t1a, OVvv)
