@@ -6,36 +6,78 @@ from pyscf import df
 from pyscf.mp import mp2
 from pyscf.mp.mp2 import make_rdm1, make_rdm2
 from pyscf import __config__
+from pyscf.mp.dfmp2_native import DFMP2
+
 
 WITH_T2 = getattr(__config__, "mp_dfmp2_with_t2", True)
 
 
+def amplitudes_to_vector(t1, t2, out = None):
+    nocc, nvir = t1.shape
+    nov = nocc * nvir
+    size = nov + nov*(nov+1)//2
+    vector = np.ndarray(size, t1.dtype, buffer=out)
+    vector[:nov] = t1.ravel()
+    lib.pack_tril(t2.transpose(0,2,1,3).reshape(nov,nov), out=vector[nov:])
+    return vector
+
+def vector_to_amplitudes(vector, nmo, nocc):
+    nvir = nmo - nocc
+    nov = nocc * nvir
+    t1 = vector[:nov].copy().reshape((nocc,nvir))
+    # filltriu=lib.SYMMETRIC because t2[iajb] == t2[jbia]
+    t2 = lib.unpack_tril(vector[nov:], filltriu=lib.SYMMETRIC)
+    t2 = t2.reshape(nocc,nvir,nocc,nvir).transpose(0,2,1,3)
+    return t1, np.asarray(t2, order='C')
+
+
 def kernel(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
 
-    np.set_printoptions(linewidth = 300, suppress = True)
+    np.set_printoptions(linewidth=300, suppress=True)
     # NOTE have this in myll
     tol = 1e-6
-    maxcount = 30
-    
+    maxcount = 50
+
     # NOTE initialize Ω
-    #myll.t1 = np.zeros((myll.nocc, myll.nvir))
+    # myll.t1 = np.zeros((myll.nocc, myll.nvir))
 
     err = np.inf
     count = 0
-    
+
     # Constructing 3-legged integrals
     myll.compute_three_center_ints()
-    
-    initialize_t1(myll)
-    e_init = compute_CC2_energy(myll, myll.t1, np.transpose(myll.t2,[2,0,3,1]))
-    print(f'Initial energy: {e_init}')
 
+    initialize_t1(myll)
+    e_init = compute_CC2_energy(myll, myll.t1, np.transpose(myll.t2, [2, 0, 3, 1]))
+    print(f"Initial energy: {e_init}")
+
+    adiis = lib.diis.DIIS()
     while err > tol and count < maxcount:
 
-        res, DE = updated_amp(myll)
+        res, DE, t1_new, t2_new = updated_amp(myll)
+        if myll.diis:
+            t1, t2 = run_diis(myll, t1_new, t2_new, adiis)
+        else:
+            t1 = t1_new
+            t2 = t2_new
+
+        myll.t1 = t1
+        myll.t2 = t2
+       
         count += 1
-        print(f'Energy progress {DE:.6e} residual progress {res:.6e}')
-    breakpoint()
+        err = res
+        print(f"It {count} Energy progress {DE:.6e} residual progress {res:.6e}")
+    breakpoint()   
+    return DE
+
+
+def run_diis(myll, t1,t2,adiis):
+    
+    vec = amplitudes_to_vector(t1, t2)
+    t1, t2 = vector_to_amplitudes(adiis.update(vec),myll.nmo, myll.nocc)
+    
+    return t1, t2
+
 
 def compute_CC2_energy(myll, t1, t2):
 
@@ -69,26 +111,39 @@ def compute_CC2_energy(myll, t1, t2):
 
 def initialize_t1(myll):
 
-    mymp = mp2.MP2(mf).run()
+    mymp = mp2.MP2(myll.mymf).run()
+    mydfmp = DFMP2(myll.mymf).run()
     # t2 = myll.mycc.t2
     t2 = mymp.t2
     # NOTE anti-symmetrized
-    t2 = 2*t2 - np.transpose(t2,[0,1,3,2])
+    t2 = 2 * t2 - np.transpose(t2, [0, 1, 3, 2])
     myll.t2 = t2
-    print(f'Computed MP2 initial guess')
-    print(f'Comparing with MP2  energy: {mymp.e_tot} with {mymp.e_corr} corr. energy')
-    print(f'Comparing with CCSD energy: {myll.mycc.e_tot} with {myll.mycc.e_corr} corr. energy')
+
+    mf = scf.RHF(mol).density_fit().run()
+    myccdf = cc.CCSD(mf)
+    myccdf.with_df = df.DF(mf.mol, auxbasis='ccpvdz-ri')
+    myccdf.run()
+
+    print(f"Computed MP2 initial guess")
+    print(f"Comparing with MP2 energy   : {mymp.e_tot} with {mymp.e_corr} corr. energy")
+    print(f"Comparing with DFMP2 energy : {mydfmp.e_tot} with {mymp.e_corr} corr. energy")
+    print(
+        f"Comparing with CCSD energy  : {myll.mycc.e_tot} with {myll.mycc.e_corr} corr. energy"
+    )
+    print(
+        f"Comparing with DFCCSD energy: {myccdf.e_tot} with {myccdf.e_corr} corr. energy"
+    )
     Loo = myll.Loo
     Lov = myll.Lov
     Lvv = myll.Lvv
-   
+
     Yvo = np.einsum("ijab,Ljb->Lai", t2, Lov)
     Ω = np.einsum("Lba,Lbi->ia", Lvv, Yvo)
     Ω -= np.einsum("Lji,Laj->ia", Loo, Yvo)
-   
+
     e_init = np.einsum("Lia,Lai", Lov, Yvo)
-    print(f'Initial CC2 energy update : {e_init}')
-    myll.t1 = Ω  
+    print(f"Initial CC2 energy update : {e_init}")
+    myll.t1 = 0* Ω
 
 
 def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
@@ -110,17 +165,19 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
     Xoo = np.einsum("Lia,ja->Lij", Lov, t1)
 
     Joo = Xoo + Loo
-    Ωvo = -1*np.einsum("Laj,Lji->ai", Xvo, Joo)
+    Ωvo = -1 * np.einsum("Laj,Lji->ai", Xvo, Joo)
     Jvo = Xvo + np.transpose(Lov, (0, 2, 1)) - np.einsum("Lij,ja->Lai", Joo, t1)
 
     X = np.einsum("Lia,ia->L", Lov, t1)
-    
+
     Ωvo += np.einsum("Ljk,ka,Lji->ai", Xoo, t1, Joo)
     Ωvo += np.einsum("Lai,L->ai", Jvo, X)
-    # NOTE used fix-point iteration rather than residual minimization
-    # Ωvo += (t1 * fock).T
-    # Ωvo += np.einsum('ib,ba -> ai',t1,fvv)
-    # Ωvo -= np.einsum('ka,ik -> ai',t1,foo)
+
+    # NOTE singles contraction with F for non-diagonal basis
+    #Ωvo += np.einsum('ia,ia -> ai',t1, fock)
+    # NOTE include fov contractrion here 
+    Ωvo += np.einsum('ib,ba -> ai',t1,fvv)
+    Ωvo -= np.einsum('ka,ik -> ai',t1,foo)
 
     Fov = np.einsum("Lbj,L->jb", Jvo, X) - np.einsum("Lij,Lib->jb", Xoo, Lov)
 
@@ -130,21 +187,18 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
     Yvo = np.einsum("aibj,Ljb->Lai", t2, Lov)
     Ωvo += np.einsum("aijb,bj->ai", t2, Fov)
 
-    
     Jvv = np.einsum("Ljb,ja->Lba", Lov, t1) + Lvv
     Ωvo += np.einsum("Lba,Lbi->ai", Jvv, Yvo)
     Ωvo -= np.einsum("Lji,Laj->ai", Joo, Yvo)
 
     e1 = np.einsum("Lij,ja->Lai", Xoo, t1) + np.einsum("L,ia->Lai", X, t1) + Jvo
     ΔE = np.einsum("Lai,Lai", e1, Yvo)
- 
 
-    res = np.linalg.norm(myll.t1 + Ωvo.T/ fock)   
-    myll.t1 = - Ωvo.T / fock 
-    # NOTE rename Ωvo to just Ω 
-    return res, ΔE 
+    res = np.linalg.norm(myll.t1 + Ωvo.T / fock)
 
-
+    myll.t1 = -Ωvo.T / fock
+    # NOTE rename Ωvo to just Ω
+    return res, ΔE, myll.t1, t2
 
 
 # NOTE how to remove the mp2 dependence?
@@ -160,12 +214,15 @@ class mpccLL(mp2.MP2):
             self.with_df.auxbasis = df.make_auxbasis(mf.mol, mp2fit=True)
 
         self._keys.update(["with_df"])
-       
+
         # NOTE can be potentially initialized
         self.t1 = None
         self.t2 = None
 
-        # NOTE make this better! Only keep the necessary parts of mycc 
+        # NOTE use DIIS as default
+        self.diis = True
+
+        # NOTE make this better! Only keep the necessary parts of mycc
         self.mycc = mycc
         self.mymf = mf
 
@@ -204,11 +261,11 @@ class mpccLL(mp2.MP2):
             [mf.mo_energy[a] - mf.mo_energy[i] for a in range(self.nocc, self.nmo)]
             for i in range(self.nocc)
         ]
-        
+
         fock_mo = mf.mo_coeff.T @ mf.get_fock() @ mf.mo_coeff
-        foo = fock_mo[:self.nocc,: self.nocc]
-        fvv = fock_mo[self.nocc:self.nmo,self.nocc:self.nmo]
-        
+        foo = fock_mo[: self.nocc, : self.nocc]
+        fvv = fock_mo[self.nocc : self.nmo, self.nocc : self.nmo]
+
         self.foo = foo
         self.fvv = fvv
         self.fock = np.array(fock)
@@ -389,6 +446,28 @@ if __name__ == "__main__":
     from pyscf import scf
     from pyscf import gto
 
+    # Testing CO
+    
+    mol = gto.Mole()
+    mol.verbose = 0
+    mol.atom = [
+        ["C", [0.0, 0.0, 0.0]],
+        ["O", [0.0, 0.0, 1.4]]
+    ]
+
+    mol.basis = "cc-pvdz"
+    mol.build()
+    mf = scf.RHF(mol).run()
+    mycc = cc.CCSD(mf).run()
+
+    mpccll = mpccLL(mf, mycc)
+    mpccll.diis = True
+    print(f'Reference Energy : -0.371111485169')
+    mpccll.kernel()
+
+
+    # Testing H2O
+    
     mol = gto.Mole()
     mol.verbose = 0
     mol.atom = [
@@ -403,4 +482,7 @@ if __name__ == "__main__":
     mycc = cc.CCSD(mf).run()
 
     mpccll = mpccLL(mf, mycc)
-    emp2, t2 = mpccll.kernel()
+    mpccll.diis = False
+    print(f'Reference Energy -0.204867860525')
+    ecc2 = mpccll.kernel()
+
