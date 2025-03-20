@@ -79,6 +79,7 @@ from pyscf.cc import momgfccsd
 from pyscf import scf
 from pyscf.cc import rmpccsd_slow
 from pyscf.cc import umpccsd
+from pyscf.cc import umpccsd_lambda
 from pyscf.cc import umpcc_fast_driver
 
 def CCSD(mf, frozen=None, mo_coeff=None, mo_occ=None):

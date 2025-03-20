@@ -388,10 +388,23 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     u2bb /= lib.direct_sum('ia+jb->ijab', eia_b, eia_b)
 
     # NOTE we only update the inactive orbitals!
-    idx_s_a, idx_d_a = get_index_tuples(act_hole[0], act_particle[0], nocca, nvira)
-    idx_s_b, idx_d_b = get_index_tuples(act_hole[1], act_particle[1], noccb, nvirb)
+   
+    idx_s_a_super = []
+    idx_s_b_super = []
+    idx_d_a_super = []
+    idx_d_b_super = []
+    idx_d_ab_super = []
+ 
+    for f in range(len(act_hole)):
+       idx_s_a, idx_d_a = get_index_tuples(act_hole[f][0], act_particle[f][0], nocca, nvira)
+       idx_s_b, idx_d_b = get_index_tuples(act_hole[f][1], act_particle[f][1], noccb, nvirb)
 
-    idx_d_ab = [(elem_a[0], elem_b[1],elem_a[2],elem_b[3]) for elem_a, elem_b in zip(idx_d_a,idx_d_b)]
+       idx_d_ab = [(elem_a[0], elem_b[1],elem_a[2],elem_b[3]) for elem_a, elem_b in zip(idx_d_a,idx_d_b)]
+       idx_s_a_super.append(idx_s_a)
+       idx_s_b_super.append(idx_s_b)
+       idx_d_a_super.append(idx_d_a)
+       idx_d_b_super.append(idx_d_b)
+       idx_d_ab_super.append(idx_d_ab)
 
     # NOTE that we have to pass the active indices in order to only
     #      update the inactive orbitals
@@ -400,28 +413,33 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     # u2aa_c = np.copy(u2aa)
     # u2bb_c = np.copy(u2bb)
     # u2ab_c = np.copy(u2ab)
+
+
+    for f in range(len(act_hole)):
     
-    for s in idx_singles[0]:
-        u1a[idx_s_a[s]] = t1[0][idx_s_a[s]]
-    for d in idx_doubles[0]:
-        u2aa[idx_d_a[d]] = t2[0][idx_d_a[d]]  
+        for s in idx_singles[0]:
+            u1a[idx_s_a_super[f][s]] = t1[0][idx_s_a_super[f][s]]
+        for d in idx_doubles[0]:
+            u2aa[idx_d_a_super[f][d]] = t2[0][idx_d_a_super[f][d]]  
 
-    for s in idx_singles[1]:
-        u1b[idx_s_b[s]] = t1[1][idx_s_b[s]]
-    for d in idx_doubles[1]: 
-        u2ab[idx_d_ab[d]] = t2[1][idx_d_ab[d]]  
+        for s in idx_singles[1]:
+            u1b[idx_s_b_super[f][s]] = t1[1][idx_s_b_super[f][s]]
+        for d in idx_doubles[1]: 
+            u2ab[idx_d_ab_super[f][d]] = t2[1][idx_d_ab_super[f][d]]  
 
-    for d in idx_doubles[2]: 
-        u2bb[idx_d_b[d]] = t2[2][idx_d_b[d]]  
+        for d in idx_doubles[2]: 
+            u2bb[idx_d_b_super[f][d]] = t2[2][idx_d_b_super[f][d]]  
 
     t1new = u1a, u1b
     t2new = u2aa, u2ab, u2bb
 
-    return t1new, t2new
+    if (pert_triples):
+       return t1new, t2new, t3act
+    else:
+       return t1new, t2new
 
 
-
-def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles):
+def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles, pert_triples=False):
 
     time0 = logger.process_clock(), logger.perf_counter()
     log = logger.Logger(cc.stdout, cc.verbose)
@@ -538,8 +556,28 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     Fooa += .5 * lib.einsum('inef,menf->mi', tilaa, ovov)
     Fova = np.einsum('nf,menf->me',t1a, ovov)
     u2aa += ovov.conj().transpose(0,2,1,3) * .5
-    wovvo -= 0.5*lib.einsum('jnfb,menf->mbej', t2aa, ovov)
-    woVvO += 0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, ovov)
+
+#Here we will construct the wovvo intermediate with two different approaches. For the active part we will construct the full d+e way.  
+
+#    wovvo -= 0.5*lib.einsum('jnfb,menf->mbej', t2aa, ovov)
+#    woVvO += 0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, ovov)
+
+    DCA_ovvo = -0.5*lib.einsum('jnfb,menf->mbej', t2aa, eris_ovov)
+    DCA_oVvO = +0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, eris_ovov)
+
+# we will take only the active amplitudes to update with the antisymmetric term.. 
+
+    ovov_MENF = ovov[np.ix_(act_hole[0], act_particle[0], act_hole[0], act_particle[0])]
+
+    t2aa_act = t2aa[np.ix_(act_hole[0], act_hole[0], act_particle[0], act_particle[0])]   
+    t2ab_act = t2ab[np.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])]   
+
+    DCA_ovvo[np.ix_(act_hole[0], act_particle[0], act_particle[0], act_hole[0])] = -0.5*lib.einsum('jnfb,menf->mbej', t2aa_act, ovov_MENF)
+    DCA_oVvO[np.ix_(act_hole[0], act_particle[1], act_particle[0], act_hole[1])] = +0.5*lib.einsum('nJfB,menf->mBeJ', t2ab_act, ovov_MENF)
+
+    wovvo +=DCA_ovvo
+    woVvO +=DCA_oVvO
+
     tmpaa = lib.einsum('jf,menf->mnej', t1a, ovov)
     wovvo -= lib.einsum('nb,mnej->mbej', t1a, tmpaa)
     eris_ovov = ovov = tmpaa = tilaa = None
@@ -564,8 +602,29 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     Foob += .5 * lib.einsum('inef,menf->mi', tilbb, OVOV)
     Fovb = np.einsum('nf,menf->me',t1b, OVOV)
     u2bb += OVOV.conj().transpose(0,2,1,3) * .5
-    wOVVO -= 0.5*lib.einsum('jnfb,menf->mbej', t2bb, OVOV)
-    wOvVo += 0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, OVOV)
+
+# we have to make the modifications here as well:
+
+#   wOVVO -= 0.5*lib.einsum('jnfb,menf->mbej', t2bb, OVOV)
+#   wOvVo += 0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, OVOV)
+
+    DCA_OVVO = -0.5*lib.einsum('jnfb,menf->mbej', t2bb, eris_OVOV)
+    DCA_OvVo = +0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, eris_OVOV)
+
+# we will take only the active amplitudes to update with the antisymmetric term.. 
+
+    OVOV_MENF = OVOV[np.ix_(act_hole[1], act_particle[1], act_hole[1], act_particle[1])]
+
+    t2bb_act = t2aa[np.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])]   
+    t2ab_act = t2ab[np.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])]   
+
+    DCA_OVVO[np.ix_(act_hole[1], act_particle[1], act_particle[1], act_hole[1])] = -0.5*lib.einsum('jnfb,menf->mbej', t2bb_act, OVOV_MENF)
+    DCA_OvVo[np.ix_(act_hole[1], act_particle[0], act_particle[1], act_hole[0])] = +0.5*lib.einsum('jNbF,MENF->MbEj', t2ab_act, OVOV_MENF)
+
+    wOVVO +=DCA_OVVO
+    wOvVo +=DCA_OvVo
+
+
     tmpbb = lib.einsum('jf,menf->mnej', t1b, OVOV)
     wOVVO -= lib.einsum('nb,mnej->mbej', t1b, tmpbb)
     eris_OVOV = OVOV = tmpbb = tilbb = None
@@ -604,6 +663,7 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     woVvO -= 0.5*lib.einsum('JNFB,meNF->mBeJ', t2bb, eris_ovOV)
     woVVo += 0.5*lib.einsum('jNfB,mfNE->mBEj', t2ab, eris_ovOV)
     wOvvO += 0.5*lib.einsum('nJbF,neMF->MbeJ', t2ab, eris_ovOV)
+
     tmpabab = lib.einsum('JF,meNF->mNeJ', t1b, eris_ovOV)
     tmpbaba = lib.einsum('jf,nfME->MnEj', t1a, eris_ovOV)
     woVvO -= lib.einsum('NB,mNeJ->mBeJ', t1b, tmpabab)
@@ -708,6 +768,14 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     u2aa = u2aa - u2aa.transpose(1,0,2,3)
     u2bb = u2bb - u2bb.transpose(0,1,3,2)
     u2bb = u2bb - u2bb.transpose(1,0,2,3)
+
+    if (pert_triples):
+       u3, u2_active = update_amps_t3(cc, t1, t2, eris)
+
+       u2aa[np.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])] +=u2_active_aa   
+       u2ab[np.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])] +=u2_active_ab  
+       u2bb[np.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])] +=u2_active_bb  
+
 
     eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
     eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
@@ -1028,25 +1096,25 @@ class UCCSD(ccsd.CCSD):
                                 idx_d = idx_d,
                                 oo_mp2 = oo_mp2)
 
-    def solve_lambda(self, t1=None, t2=None, l1=None, l2=None,
+    def solve_lambda(self, act_hole, act_particle, t1=None, t2=None, l1=None, l2=None,
                      eris=None):
-        from pyscf.cc import uccsd_lambda
+        from pyscf.cc import umpccsd_lambda
         if t1 is None: t1 = self.t1
         if t2 is None: t2 = self.t2
         if eris is None: eris = self.ao2mo(self.mo_coeff)
         self.converged_lambda, self.l1, self.l2 = \
-                uccsd_lambda.kernel(self, eris, t1, t2, l1, l2,
+                umpccsd_lambda.kernel(self, act_hole, act_particle, eris, t1, t2, l1, l2,
                                     max_cycle=self.max_cycle,
                                     tol=self.conv_tol_normt,
                                     verbose=self.verbose)
         return self.l1, self.l2
 
     def ccsd_t(self, t1=None, t2=None, eris=None):
-        from pyscf.cc import uccsd_t
+        from pyscf.cc import umpcc_t_slow
         if t1 is None: t1 = self.t1
         if t2 is None: t2 = self.t2
         if eris is None: eris = self.ao2mo(self.mo_coeff)
-        return uccsd_t.kernel(self, eris, t1, t2, self.verbose)
+        return umpcc_t_slow.lhs_umpcc_triples(self, l1, l2, t3, eris)
     uccsd_t = ccsd_t
 
     def make_rdm1(self, t1=None, t2=None, l1=None, l2=None, ao_repr=False,

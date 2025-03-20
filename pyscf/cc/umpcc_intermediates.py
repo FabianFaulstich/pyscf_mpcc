@@ -164,26 +164,38 @@ def Fvv(t1, t2, eris, max_memory, BLKMIN):
         for p0,p1 in lib.prange(0, nocca, blksize):
             ovvv = eris.get_ovvv(slice(p0,p1))  # ovvv = eris.ovvv[p0:p1]
             ovvv = ovvv - ovvv.transpose(0,3,2,1)
-            Fvva += np.einsum('mf,mfae->ae', t1a[p0:p1], ovvv)
+
+            ovvv_mfAE = ovvv[np.ix_(inact_hole[0], inact_particle[0], act_particle[0], act_particle[0])]
+
+            Fvva += np.einsum('mf,mfae->ae', t1a[p0:p1], ovvv_mfAE)
 
     if nvirb > 0 and noccb > 0:
         blksize = max(BLKMIN, int(max_memory*1e6/8/(nvirb**3*3+1)))
         for p0,p1 in lib.prange(0, noccb, blksize):
             OVVV = eris.get_OVVV(slice(p0,p1))  # OVVV = eris.OVVV[p0:p1]
             OVVV = OVVV - OVVV.transpose(0,3,2,1)
-            Fvvb += np.einsum('mf,mfae->ae', t1b[p0:p1], OVVV)
+            
+            OVVV_mfAE = OVVV[np.ix_(inact_hole[1], inact_particle[1], act_particle[1], act_particle[1])]
+
+            Fvvb += np.einsum('mf,mfae->ae', t1b[p0:p1], OVVV_mfAE)
 
     if nvirb > 0 and nocca > 0:
         blksize = max(BLKMIN, int(max_memory*1e6/8/(nvira*nvirb**2*3+1)))
         for p0,p1 in lib.prange(0, nocca, blksize):
             ovVV = eris.get_ovVV(slice(p0,p1))  # ovVV = eris.ovVV[p0:p1]
-            Fvvb += np.einsum('mf,mfAE->AE', t1a[p0:p1], ovVV)
+
+            ovVV_mfAE = ovVV[np.ix_(inact_hole[0], inact_particle[0], act_particle[1], act_particle[1])]
+
+            Fvvb += np.einsum('mf,mfAE->AE', t1a[p0:p1], ovVV_mfAE)
 
     if nvira > 0 and noccb > 0:
         blksize = max(BLKMIN, int(max_memory*1e6/8/(nvirb*nvira**2*3+1)))
         for p0,p1 in lib.prange(0, noccb, blksize):
             OVvv = eris.get_OVvv(slice(p0,p1))  # OVvv = eris.OVvv[p0:p1]
-            Fvva += np.einsum('MF,MFae->ae', t1b[p0:p1], OVvv)
+            
+            OVvv_mfAE = OVvv[np.ix_(inact_hole[1], inact_particle[1], act_particle[0], act_particle[0])]
+
+            Fvva += np.einsum('MF,MFae->ae', t1b[p0:p1], OVvv_mfAE)
 
     eris_ovov = np.asarray(eris.ovov)
 
@@ -333,28 +345,38 @@ def Wovvo(t1, t2, eris, max_memory, BLKMIN):
         for p0,p1 in lib.prange(0, nocca, blksize):
             ovvv = eris.get_ovvv(slice(p0,p1))  # ovvv = eris.ovvv[p0:p1]
             ovvv = ovvv - ovvv.transpose(0,3,2,1)
-            wovvo[p0:p1] += lib.einsum('jf,mebf->mbej', t1a, ovvv)
+            ovvv_MEBf = ovvv[np.ix_(act_hole[0], act_particle[0], act_particle[0], inact_particle[0])] 
+#           wovvo[p0:p1] += lib.einsum('jf,mebf->mbej', t1a, ovvv)
+            wovvo[p0:p1] += lib.einsum('jf,mebf->mbej', t1_mix[0][1], ovvv_MEBf)
 
     if nvirb > 0 and noccb > 0:
         blksize = max(BLKMIN, int(max_memory*1e6/8/(nvirb**3*3+1)))
         for p0,p1 in lib.prange(0, noccb, blksize):
             OVVV = eris.get_OVVV(slice(p0,p1))  # OVVV = eris.OVVV[p0:p1]
             OVVV = OVVV - OVVV.transpose(0,3,2,1)
-            wOVVO[p0:p1] = lib.einsum('jf,mebf->mbej', t1b, OVVV)
+            OVVV_MEBf = OVVV[np.ix_(act_hole[1], act_particle[1], act_particle[1], inact_particle[1])] 
+
+#            wOVVO[p0:p1] = lib.einsum('jf,mebf->mbej', t1b, OVVV_MEBf)
+            wOVVO[p0:p1] = lib.einsum('jf,mebf->mbej', t1_mix[1][1], OVVV_MEBf) #check for t1_mix definition
 
     if nvirb > 0 and nocca > 0:
         blksize = max(BLKMIN, int(max_memory*1e6/8/(nvira*nvirb**2*3+1)))
         for p0,p1 in lib.prange(0, nocca, blksize):
             ovVV = eris.get_ovVV(slice(p0,p1))  # ovVV = eris.ovVV[p0:p1]
-            woVvO[p0:p1] = lib.einsum('JF,meBF->mBeJ', t1b, ovVV)
-            woVVo[p0:p1] = lib.einsum('jf,mfBE->mBEj',-t1a, ovVV)
+            ovVV_MEBf = ovVV[np.ix_(act_hole[0], act_particle[0], act_particle[1], inact_particle[1])] 
+            woVvO[p0:p1] = lib.einsum('JF,meBF->mBeJ', t1_mix[1][1], ovVV_MEBf)
+            woVVo[p0:p1] = lib.einsum('jf,mfBE->mBEj',-t1_mix[0][1], ovVV_MEBf)
 
     if nvira > 0 and noccb > 0:
         blksize = max(BLKMIN, int(max_memory*1e6/8/(nvirb*nvira**2*3+1)))
         for p0,p1 in lib.prange(0, noccb, blksize):
             OVvv = eris.get_OVvv(slice(p0,p1))  # OVvv = eris.OVvv[p0:p1]
-            wOvVo[p0:p1] = lib.einsum('jf,MEbf->MbEj', t1a, OVvv)
-            wOvvO[p0:p1] = lib.einsum('JF,MFbe->MbeJ',-t1b, OVvv)
+
+
+            OVvv_MEBf = ovVV[np.ix_(act_hole[1], act_particle[1], act_particle[0], inact_particle[0])] 
+
+            wOvVo[p0:p1] = lib.einsum('jf,MEbf->MbEj', t1_mix[0][1], OVvv_MEBf)
+            wOvvO[p0:p1] = lib.einsum('JF,MFbe->MbeJ',-t1_mix[1][1], OVvv_MEBf)
 
     eris_ovoo = np.asarray(eris.ovoo)
     ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
@@ -394,7 +416,6 @@ def Wovvo(t1, t2, eris, max_memory, BLKMIN):
 
     eris_OVoo_MEnJ = eris_OVoo[np.ix_(act_hole[1], act_particle[1], inact_hole[0], act_hole[0])] 
     eris_ovOO_MEnJ = eris_ovOO[np.ix_(act_hole[0], act_particle[0], inact_hole[1], act_hole[1])] 
-
 
     wOvVo -= lib.einsum('nb,MEnj->MbEj', t1_mix[0][0], eris_OVoo_MEnJ)
     woVVo += lib.einsum('NB,NEmj->mBEj', t1_mix[1][0], eris_OVoo_MEnJ)
