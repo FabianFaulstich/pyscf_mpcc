@@ -83,6 +83,7 @@ def make_intermediates(mycc, t1, t2, eris):
     fvvb = eris.fockb[noccb:,noccb:]
 
     tauaa, tauab, taubb = uccsd.make_tau(t2, t1, t1)
+    tauaa_t1, tauab_t1, taubb_t1 = uccsd.make_tau((0*t2[0],0*t2[1],0*t2[2]) , t1, t1)
 
     ovov = numpy.asarray(eris.ovov)
     ovov = ovov - ovov.transpose(0,3,2,1)
@@ -103,6 +104,25 @@ def make_intermediates(mycc, t1, t2, eris):
     v1a_t1  = fvva - einsum('ja,jb->ba', fova, t1a)
     v1b_t1  = fvvb - einsum('ja,jb->ba', fovb, t1b)
 
+    v1a_t1 += einsum('jcka,jkbc->ba', ovov, tauaa_t1) * .5
+    v1a_t1 -= einsum('jaKC,jKbC->ba', ovOV, tauab_t1) * .5
+    v1a_t1 -= einsum('kaJC,kJbC->ba', ovOV, tauab_t1) * .5
+    v1b_t1 += einsum('jcka,jkbc->ba', OVOV, taubb_t1) * .5
+    v1b_t1 -= einsum('kcJA,kJcB->BA', ovOV, tauab_t1) * .5
+    v1b_t1 -= einsum('jcKA,jKcB->BA', ovOV, tauab_t1) * .5
+
+
+
+
+
+
+
+
+
+
+
+
+
     v2a  = fooa + einsum('ib,jb->ij', fova, t1a)
     v2b  = foob + einsum('ib,jb->ij', fovb, t1b)
     v2a += einsum('ibkc,jkbc->ij', ovov, tauaa) * .5
@@ -112,6 +132,11 @@ def make_intermediates(mycc, t1, t2, eris):
 
     v2a_t1  = fooa + einsum('ib,jb->ij', fova, t1a)
     v2b_t1  = foob + einsum('ib,jb->ij', fovb, t1b)
+    v2a_t1 += einsum('ibkc,jkbc->ij', ovov, tauaa_t1) * .5
+    v2a_t1 += einsum('ibKC,jKbC->ij', ovOV, tauab_t1)
+    v2b_t1 += einsum('ibkc,jkbc->ij', OVOV, taubb_t1) * .5
+    v2b_t1 += einsum('kcIB,kJcB->IJ', ovOV, tauab_t1)
+
 
     ovoo = numpy.asarray(eris.ovoo)
     ovoo = ovoo - ovoo.transpose(2,1,0,3)
@@ -127,6 +152,9 @@ def make_intermediates(mycc, t1, t2, eris):
     v2a_t1 -= numpy.einsum('ibkj,kb->ij', ovoo, t1a)
     v2a_t1 += numpy.einsum('KBij,KB->ij', OVoo, t1b)
 
+    v2b_t1 -= numpy.einsum('ibkj,kb->ij', OVOO, t1b)
+    v2b_t1 += numpy.einsum('kbIJ,kb->IJ', ovOO, t1a)
+
     v5a  = fvoa + numpy.einsum('kc,jkbc->bj', fova, t2aa)
     v5a += numpy.einsum('KC,jKbC->bj', fovb, t2ab)
     v5b  = fvob + numpy.einsum('kc,jkbc->bj', fovb, t2bb)
@@ -141,6 +169,20 @@ def make_intermediates(mycc, t1, t2, eris):
     v5a -= einsum('LCkj,kLbC->bj', OVoo, t2ab)
     v5b -= einsum('LCKJ,KLBC->BJ', OVOO, t2bb) * .5
     v5b -= einsum('lcKJ,lKcB->BJ', ovOO, t2ab)
+
+
+
+    v5a_t1  = fvoa + numpy.einsum('kc,jkbc->bj', fova, t2aa)
+    v5a_t1 += numpy.einsum('KC,jKbC->bj', fovb, t2ab)
+    v5b_t1  = fvob + numpy.einsum('kc,jkbc->bj', fovb, t2bb)
+    v5b_t1 += numpy.einsum('kc,kJcB->BJ', fova, t2ab)
+    tmp  = fova - numpy.einsum('kdlc,ld->kc', ovov, t1a)
+    tmp += numpy.einsum('kcLD,LD->kc', ovOV, t1b)
+    v5a_t1 += einsum('kc,kb,jc->bj', tmp, t1a, t1a)
+    tmp  = fovb - numpy.einsum('kdlc,ld->kc', OVOV, t1b)
+    tmp += numpy.einsum('ldKC,ld->KC', ovOV, t1a)
+    v5b_t1 += einsum('kc,kb,jc->bj', tmp, t1b, t1b)
+
 
     oooo = numpy.asarray(eris.oooo)
     OOOO = numpy.asarray(eris.OOOO)
@@ -161,6 +203,15 @@ def make_intermediates(mycc, t1, t2, eris):
     woooo += einsum('icjd,klcd->ikjl', ovov, tauaa) * .25
     wOOOO += einsum('icjd,klcd->ikjl', OVOV, taubb) * .25
     wooOO += einsum('icJD,kLcD->ikJL', ovOV, tauab)
+
+
+    woooo_t1 += einsum('icjd,klcd->ikjl', ovov, tauaa_t1) * .25
+    wOOOO_t1 += einsum('icjd,klcd->ikjl', OVOV, taubb_t1) * .25
+    wooOO_t1 += einsum('icJD,kLcD->ikJL', ovOV, tauab_t1)
+
+
+
+
 
     v4ovvo  = einsum('jbld,klcd->jbck', ovov, t2aa)
     v4ovvo += einsum('jbLD,kLcD->jbck', ovOV, t2ab)
@@ -200,6 +251,7 @@ def make_intermediates(mycc, t1, t2, eris):
     x4ovvo  = numpy.asarray(eris.ovvo)
     x4ovvo -= numpy.asarray(eris.oovv).transpose(0,3,2,1)
     x4OVVO  = numpy.asarray(eris.OVVO)
+    x4OVVO -= numpy.asarray(eris.OOVV).transpose(0,3,2,1)
     x4OVvo  = numpy.asarray(eris.OVvo)
     x4ovVO  = numpy.asarray(eris.ovVO)
     x4oVVo  = -numpy.asarray(eris.ooVV).transpose(0,3,2,1)
@@ -241,6 +293,11 @@ def make_intermediates(mycc, t1, t2, eris):
     wVVvo_t1 -= einsum('jACk,jb->CAbk', x4oVVo, t1a)
     wvvVO_t1  = einsum('jaCK,jb->baCK', x4ovVO, t1a)
     wvvVO_t1 -= einsum('JacK,JB->caBK', x4OvvO, t1b)
+    wvvvo_t1 += einsum('lajk,jlbc->back', .25*ovoo, tauaa_t1)
+    wVVVO_t1 += einsum('lajk,jlbc->back', .25*OVOO, taubb_t1)
+    wVVvo_t1 -= einsum('LAjk,jLcB->BAck', OVoo, tauab_t1)
+    wvvVO_t1 -= einsum('laJK,lJbC->baCK', ovOO, tauab_t1)
+
 
     w3a_t1  = numpy.einsum('jbck,jb->ck', x4ovvo, t1a)
     w3a_t1 += numpy.einsum('JBck,JB->ck', x4OVvo, t1b)
@@ -252,7 +309,6 @@ def make_intermediates(mycc, t1, t2, eris):
     w3a += numpy.einsum('JBck,JB->ck', v4OVvo, t1b)
     w3b  = numpy.einsum('jbck,jb->ck', v4OVVO, t1b)
     w3b += numpy.einsum('jbCK,jb->CK', v4ovVO, t1a)
-
 
 
     wovvo  = v4ovvo
@@ -274,6 +330,7 @@ def make_intermediates(mycc, t1, t2, eris):
     woVVo += einsum('LBjk,LC->jBCk', OVoo, t1b)
     wOvvO += einsum('lbJK,lc->JbcK', ovOO, t1a)
 
+
     if nvira > 0 and nocca > 0:
         ovvv = numpy.asarray(eris.get_ovvv())
         ovvv = ovvv - ovvv.transpose(0,3,2,1)
@@ -281,6 +338,7 @@ def make_intermediates(mycc, t1, t2, eris):
         v1a_t1 -= numpy.einsum('jabc,jc->ba', ovvv, t1a)
         v5a += einsum('kdbc,jkcd->bj', ovvv, t2aa) * .5
         woovo += einsum('idcb,kjbd->ijck', ovvv, tauaa) * .25
+        woovo_t1 += einsum('idcb,kjbd->ijck', ovvv, tauaa_t1) * .25
         wovvo += einsum('jbcd,kd->jbck', ovvv, t1a)
         wvvvo -= ovvv.conj().transpose(3,2,1,0) * .5
         wvvvo_t1 -= ovvv.conj().transpose(3,2,1,0) * .5
@@ -292,8 +350,10 @@ def make_intermediates(mycc, t1, t2, eris):
         OVVV = numpy.asarray(eris.get_OVVV())
         OVVV = OVVV - OVVV.transpose(0,3,2,1)
         v1b -= numpy.einsum('jabc,jc->ba', OVVV, t1b)
+        v1b_t1 -= numpy.einsum('jabc,jc->ba', OVVV, t1b)
         v5b += einsum('KDBC,JKCD->BJ', OVVV, t2bb) * .5
         wOOVO += einsum('idcb,kjbd->ijck', OVVV, taubb) * .25
+        wOOVO_t1 += einsum('idcb,kjbd->ijck', OVVV, taubb_t1) * .25
         wOVVO += einsum('jbcd,kd->jbck', OVVV, t1b)
         wVVVO -= OVVV.conj().transpose(3,2,1,0) * .5
         wVVVO_t1 -= OVVV.conj().transpose(3,2,1,0) * .5
@@ -307,6 +367,7 @@ def make_intermediates(mycc, t1, t2, eris):
         v1a_t1 += numpy.einsum('JCba,JC->ba', OVvv, t1b)
         v5a += einsum('KDbc,jKcD->bj', OVvv, t2ab)
         wOOvo += einsum('IDcb,kJbD->IJck', OVvv, tauab)
+        wOOvo_t1 += einsum('IDcb,kJbD->IJck', OVvv, tauab_t1)
         wOVvo += einsum('JBcd,kd->JBck', OVvv, t1a)
         wOvvO -= einsum('JDcb,KD->JbcK', OVvv, t1b)
         wvvVO -= OVvv.conj().transpose(3,2,1,0)
@@ -322,6 +383,7 @@ def make_intermediates(mycc, t1, t2, eris):
         v1b_t1 += numpy.einsum('jcBA,jc->BA', ovVV, t1a)
         v5b += einsum('kdBC,kJdC->BJ', ovVV, t2ab)
         wooVO += einsum('idCB,jKdB->ijCK', ovVV, tauab)
+        wooVO_t1 += einsum('idCB,jKdB->ijCK', ovVV, tauab_t1)
         wovVO += einsum('jbCD,KD->jbCK', ovVV, t1b)
         woVVo -= einsum('jdCB,kd->jBCk', ovVV, t1a)
         wVVvo -= ovVV.conj().transpose(3,2,1,0)
@@ -338,6 +400,9 @@ def make_intermediates(mycc, t1, t2, eris):
     w3a -= lib.einsum('jk,jb->bk', v2a, t1a)
     w3b -= lib.einsum('jk,jb->bk', v2b, t1b)
 
+
+    w3a_t1 += v5a_t1
+    w3b_t1 += v5b_t1
     w3a_t1 += lib.einsum('cb,jb->cj', v1a_t1, t1a)  
     w3b_t1 += lib.einsum('cb,jb->cj', v1b_t1, t1b)
     w3a_t1 -= lib.einsum('jk,jb->bk', v2a_t1, t1a)
@@ -425,7 +490,7 @@ def make_intermediates(mycc, t1, t2, eris):
 
 
 # update L1, L2
-def update_lambda_frag(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part):
+def update_lambda_frag(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
     time0 = logger.process_clock(), logger.perf_counter()
     log = logger.Logger(mycc.stdout, mycc.verbose)
 
@@ -464,17 +529,17 @@ def update_lambda_frag(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part):
     l2bb_frag = numpy.zeros_like(l2bb) 
 
     for s in idx_singles[0]:
-        l1a_frag[idx_s_a[s]] = l1[0][idx_s_a[s]]
+        l1a_frag[idx_s_a[s]] = l1[0][idx_s_a[s]].copy()
     for d in idx_doubles[0]:
-        l2aa_frag[idx_d_a[d]] = l2[0][idx_d_a[d]]  
+        l2aa_frag[idx_d_a[d]] = l2[0][idx_d_a[d]].copy()  
 
     for s in idx_singles[1]:
-        l1b_frag[idx_s_b[s]] = l1[1][idx_s_b[s]]
+        l1b_frag[idx_s_b[s]] = l1[1][idx_s_b[s]].copy()
     for d in idx_doubles[1]: 
-        l2ab_frag[idx_d_ab[d]] = l2[1][idx_d_ab[d]]  
+        l2ab_frag[idx_d_ab[d]] = l2[1][idx_d_ab[d]].copy()  
 
     for d in idx_doubles[2]: 
-        l2bb_frag[idx_d_b[d]] = l2[2][idx_d_b[d]]  
+        l2bb_frag[idx_d_b[d]] = l2[2][idx_d_b[d]].copy()  
 
     u1a = numpy.zeros_like(l1a)
     u1b = numpy.zeros_like(l1b)
@@ -570,6 +635,7 @@ def update_lambda_frag(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part):
         u1a += numpy.einsum('iaCB,BC->ia', ovVV, mVV1)
         ovVV = tmp = None
 
+
     tauaa, tauab, taubb = uccsd.make_tau(t2, t1, t1)
     tmp = lib.einsum('ijcd,klcd->ijkl', l2aa_frag, tauaa)
     ovov = numpy.asarray(eris.ovov)
@@ -591,6 +657,7 @@ def update_lambda_frag(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part):
     u1a += numpy.einsum('iJaB,JB->ia', m3ab, t1b)
     u1b += numpy.einsum('IJAB,JB->IA', m3bb, t1b)
     u1b += numpy.einsum('jIbA,jb->IA', m3ab, t1a)
+
 
     u2aa += m3aa
     u2bb += m3bb
@@ -628,6 +695,8 @@ def update_lambda_frag(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part):
     u2ab += einsum('kIcA,jbck->jIbA', l2ab_frag, imds.wovvo)
     u2ab += einsum('KICA,jbCK->jIbA', l2bb_frag, imds.wovVO)
 
+
+
     ovoo = numpy.asarray(eris.ovoo)
     ovoo = ovoo - ovoo.transpose(2,1,0,3)
     OVOO = numpy.asarray(eris.OVOO)
@@ -656,6 +725,7 @@ def update_lambda_frag(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part):
     u1b += einsum('ib,ba->ia', l1b_frag, v1b)
     u1b -= einsum('ja,ij->ia', l1b_frag, v2b)
 
+
     u1a += numpy.einsum('jb,iabj->ia', l1a_frag, eris.ovvo)
     u1a -= numpy.einsum('jb,ijba->ia', l1a_frag, eris.oovv)
     u1a += numpy.einsum('JB,iaBJ->ia', l1b_frag, eris.ovVO)
@@ -663,39 +733,46 @@ def update_lambda_frag(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part):
     u1b -= numpy.einsum('jb,ijba->ia', l1b_frag, eris.OOVV)
     u1b += numpy.einsum('jb,iabj->ia', l1a_frag, eris.OVvo)
 
-    u1a -= einsum('kjca,ijck->ia', l2aa_frag, imds.woovo_t1)
-    u1a -= einsum('jKaC,ijCK->ia', l2ab_frag, imds.wooVO_t1)
-    u1b -= einsum('kjca,ijck->ia', l2bb_frag, imds.wOOVO_t1)
-    u1b -= einsum('kJcA,IJck->IA', l2ab_frag, imds.wOOvo_t1)
 
-    u1a -= einsum('ikbc,back->ia', l2aa_frag, imds.wvvvo_t1)
-    u1a -= einsum('iKbC,baCK->ia', l2ab_frag, imds.wvvVO_t1)
-    u1b -= einsum('IKBC,BACK->IA', l2bb_frag, imds.wVVVO_t1)
-    u1b -= einsum('kIcB,BAck->IA', l2ab_frag, imds.wVVvo_t1)
+    u1a -= einsum('kjca,ijck->ia', l2aa_frag, imds.woovo)
+    u1a -= einsum('jKaC,ijCK->ia', l2ab_frag, imds.wooVO)
+    u1b -= einsum('kjca,ijck->ia', l2bb_frag, imds.wOOVO)
+    u1b -= einsum('kJcA,IJck->IA', l2ab_frag, imds.wOOvo)
 
-    u1a += numpy.einsum('jiba,bj->ia', l2aa_frag, imds.w3a_t1)
-    u1a += numpy.einsum('iJaB,BJ->ia', l2ab_frag, imds.w3b_t1)
-    u1b += numpy.einsum('JIBA,BJ->IA', l2bb_frag, imds.w3b_t1)
-    u1b += numpy.einsum('jIbA,bj->IA', l2ab_frag, imds.w3a_t1)
+
+    u1a -= einsum('ikbc,back->ia', l2aa_frag, imds.wvvvo)
+    u1a -= einsum('iKbC,baCK->ia', l2ab_frag, imds.wvvVO)
+    u1b -= einsum('IKBC,BACK->IA', l2bb_frag, imds.wVVVO)
+    u1b -= einsum('kIcB,BAck->IA', l2ab_frag, imds.wVVvo)
+
+
+    u1a += numpy.einsum('jiba,bj->ia', l2aa_frag, imds.w3a)
+    u1a += numpy.einsum('iJaB,BJ->ia', l2ab_frag, imds.w3b)
+    u1b += numpy.einsum('JIBA,BJ->IA', l2bb_frag, imds.w3b)
+    u1b += numpy.einsum('jIbA,bj->IA', l2ab_frag, imds.w3a)
+
+
 
     tmpa  = t1a + numpy.einsum('kc,kjcb->jb', l1a_frag, t2aa)
     tmpa += numpy.einsum('KC,jKbC->jb', l1b_frag, t2ab)
     tmpa -= einsum('bd,jd->jb', mvv1, t1a)
     tmpa -= einsum('lj,lb->jb', moo, t1a)
-#    tmpb  = t1b + numpy.einsum('kc,kjcb->jb', l1b_frag, t2bb)
-#    tmpb += numpy.einsum('kc,kJcB->JB', l1a_frag, t2ab)
-    tmpb = -einsum('bd,jd->jb', mVV1, t1b)
-#    tmpb -= einsum('lj,lb->jb', mOO, t1b)
-    tmpb -= einsum('lj,lb->jb', mOO1, t1b)
+    tmpb  = t1b + numpy.einsum('kc,kjcb->jb', l1b_frag, t2bb)
+    tmpb += numpy.einsum('kc,kJcB->JB', l1a_frag, t2ab)
+    tmpb -= einsum('bd,jd->jb', mVV1, t1b)
+    tmpb -= einsum('lj,lb->jb', mOO, t1b)
     u1a += numpy.einsum('jbia,jb->ia', ovov, tmpa)
     u1a += numpy.einsum('iaJB,JB->ia', ovOV, tmpb)
     u1b += numpy.einsum('jbia,jb->ia', OVOV, tmpb)
     u1b += numpy.einsum('jbIA,jb->IA', ovOV, tmpa)
 
+
+
     u1a -= numpy.einsum('iajk,kj->ia', ovoo, moo1)
     u1a -= numpy.einsum('iaJK,KJ->ia', ovOO, mOO1)
     u1b -= numpy.einsum('iajk,kj->ia', OVOO, mOO1)
     u1b -= numpy.einsum('IAjk,kj->IA', OVoo, moo1)
+
 
     tmp  = fova - numpy.einsum('kbja,jb->ka', ovov, t1a)
     tmp += numpy.einsum('kaJB,JB->ka', ovOV, t1b)
@@ -706,6 +783,7 @@ def update_lambda_frag(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part):
     u1b -= lib.einsum('ik,ka->ia', mOO, tmp)
     u1b -= lib.einsum('ca,ic->ia', mVV, tmp)
 
+
     eia = lib.direct_sum('i-j->ij', mo_ea_o, mo_ea_v)
     eIA = lib.direct_sum('i-j->ij', mo_eb_o, mo_eb_v)
     u1a /= eia
@@ -714,6 +792,8 @@ def update_lambda_frag(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part):
     u2aa /= lib.direct_sum('ia+jb->ijab', eia, eia)
     u2ab /= lib.direct_sum('ia+jb->ijab', eia, eIA)
     u2bb /= lib.direct_sum('ia+jb->ijab', eIA, eIA)
+
+    l1a_frag = l1b_frag = l2aa_frag = l2ab_frag = l2bb_frag = None
 
     time0 = log.timer_debug1('update l1 l2', *time0)
     return (u1a,u1b), (u2aa,u2ab,u2bb)
@@ -731,17 +811,14 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
     nocca, nvira = t1a.shape
     noccb, nvirb = t1b.shape
 
-
 # we will set lambda_E = 0, and collect residues for both lambda_E and lambda_F.
-
 
     idx_s_a, idx_d_a = get_index_tuples(act_hole[0], act_particle[0], nocca, nvira)
     idx_s_b, idx_d_b = get_index_tuples(act_hole[1], act_particle[1], noccb, nvirb)
 
     idx_d_ab = [(elem_a[0], elem_b[1],elem_a[2],elem_b[3]) for elem_a, elem_b in zip(idx_d_a,idx_d_b)]
 
-
-# we hardcode an index array to identify the environment type amplitudes
+# we hardcode an index array to identify the fragment type amplitudes
 
     idx_singles = [[3], [3]]
     idx_doubles = [
@@ -752,11 +829,11 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
 
 # then set them to zero
 
-    l1a_env = l1a    
-    l1b_env = l1b    
-    l2aa_env = l2aa  
-    l2ab_env = l2ab  
-    l2bb_env = l2bb  
+    l1a_env = l1a.copy()    
+    l1b_env = l1b.copy()    
+    l2aa_env = l2aa.copy()  
+    l2ab_env = l2ab.copy()  
+    l2bb_env = l2bb.copy()  
 
     for s in idx_singles[0]:
         l1a_env[idx_s_a[s]] = 0.0
@@ -783,11 +860,10 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
 
     fova = eris.focka[:nocca,nocca:]
     fovb = eris.fockb[:noccb,noccb:]
-    v1a = imds.v1a - numpy.diag(mo_ea_v)
-    v1b = imds.v1b - numpy.diag(mo_eb_v)
-    v2a = imds.v2a - numpy.diag(mo_ea_o)
-    v2b = imds.v2b - numpy.diag(mo_eb_o)
-
+    v1a = imds.v1a_t1 - numpy.diag(mo_ea_v)
+    v1b = imds.v1b_t1 - numpy.diag(mo_eb_v)
+    v2a = imds.v2a_t1 - numpy.diag(mo_ea_o)
+    v2b = imds.v2b_t1 - numpy.diag(mo_eb_o)
 
 
 #=========     NOT NEEDED     ================
@@ -806,13 +882,13 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
 
 
     #m3 = lib.einsum('ijcd,cdab->ijab', l2, eris.vvvv) * .5
-#   m3aa, m3ab, m3bb = mycc._add_vvvv(None, (l2aa_frag.conj(),l2ab_frag.conj(),l2bb_frag.conj()), eris)
-#   m3aa = m3aa.conj()
-#   m3ab = m3ab.conj()
-#   m3bb = m3bb.conj()
-#   m3aa += lib.einsum('klab,ikjl->ijab', l2aa_env, numpy.asarray(imds.woooo))
-#   m3bb += lib.einsum('klab,ikjl->ijab', l2bb_env, numpy.asarray(imds.wOOOO))
-#   m3ab += lib.einsum('kLaB,ikJL->iJaB', l2ab_env, numpy.asarray(imds.wooOO))
+    m3aa, m3ab, m3bb = mycc._add_vvvv(None, (l2aa_env.conj(),l2ab_env.conj(),l2bb_env.conj()), eris)
+    m3aa = m3aa.conj()
+    m3ab = m3ab.conj()
+    m3bb = m3bb.conj()
+    m3aa += lib.einsum('klab,ikjl->ijab', l2aa_env, imds.woooo_t1)
+    m3bb += lib.einsum('klab,ikjl->ijab', l2bb_env, imds.wOOOO_t1)
+    m3ab += lib.einsum('kLaB,ikJL->iJaB', l2ab_env, imds.wooOO_t1)
 
     ovov = numpy.asarray(eris.ovov)
     ovov = ovov - ovov.transpose(0,3,2,1)
@@ -826,8 +902,8 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
     if nvira > 0 and nocca > 0:
         ovvv = numpy.asarray(eris.get_ovvv())
         ovvv = ovvv - ovvv.transpose(0,3,2,1)
-#       tmp = lib.einsum('ijcd,kd->ijck', l2aa_env, t1a)
-#        m3aa -= lib.einsum('kbca,ijck->ijab', ovvv, tmp)
+        tmp = lib.einsum('ijcd,kd->ijck', l2aa_env, t1a)
+        m3aa -= lib.einsum('kbca,ijck->ijab', ovvv, tmp)
 
 #        tmp = einsum('ic,jbca->jiba', l1a_frag, ovvv) # should go away
         tmp = einsum('kiab,jk->ijab', l2aa_env, v2a) #will stay
@@ -839,8 +915,8 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
     if nvirb > 0 and noccb > 0:
         OVVV = numpy.asarray(eris.get_OVVV())
         OVVV = OVVV - OVVV.transpose(0,3,2,1)
-#       tmp = lib.einsum('ijcd,kd->ijck', l2bb_env, t1b)
-#       m3bb -= lib.einsum('kbca,ijck->ijab', OVVV, tmp)
+        tmp = lib.einsum('ijcd,kd->ijck', l2bb_env, t1b)
+        m3bb -= lib.einsum('kbca,ijck->ijab', OVVV, tmp)
 
 #        tmp = einsum('ic,jbca->jiba', l1b_frag, OVVV)
         tmp = einsum('kiab,jk->ijab', l2bb_env, v2b)
@@ -851,8 +927,8 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
 
     if nvirb > 0 and nocca > 0:
         OVvv = numpy.asarray(eris.get_OVvv())
-#       tmp = lib.einsum('iJcD,KD->iJcK', l2ab_env, t1b)
-#       m3ab -= lib.einsum('KBca,iJcK->iJaB', OVvv, tmp)
+        tmp = lib.einsum('iJcD,KD->iJcK', l2ab_env, t1b)
+        m3ab -= lib.einsum('KBca,iJcK->iJaB', OVvv, tmp)
 
   #      tmp = einsum('ic,JAcb->JibA', l1a_frag, OVvv)
         tmp = -einsum('kIaB,jk->IjaB', l2ab_env, v2a)
@@ -863,15 +939,16 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
 
     if nvira > 0 and noccb > 0:
         ovVV = numpy.asarray(eris.get_ovVV())
-#       tmp = lib.einsum('iJdC,kd->iJCk', l2ab_env, t1a)
-#       m3ab -= lib.einsum('kaCB,iJCk->iJaB', ovVV, tmp)
+        tmp = lib.einsum('iJdC,kd->iJCk', l2ab_env, t1a)
+        m3ab -= lib.einsum('kaCB,iJCk->iJaB', ovVV, tmp)
 
-#        tmp = einsum('IC,jbCA->jIbA', l1b_frag, ovVV)
+#       tmp = einsum('IC,jbCA->jIbA', l1b_frag, ovVV)
         tmp =  -einsum('iKaB,JK->iJaB', l2ab_env, v2b)
 #       tmp-= einsum('ik,kaJB->iJaB', moo1, ovOV)
         u2ab += tmp
         u1a += numpy.einsum('iaCB,BC->ia', ovVV, mVV1)
         ovVV = tmp = None
+
 
  #  tauaa, tauab, taubb = uccsd.make_tau(t2, t1, t1)
 
@@ -881,23 +958,24 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
     tmp = lib.einsum('ijcd,klcd->ijkl', l2aa_env, tauaa)
     ovov = numpy.asarray(eris.ovov)
     ovov = ovov - ovov.transpose(0,3,2,1)
-    m3aa = lib.einsum('kalb,ijkl->ijab', ovov, tmp) * .25
+    m3aa += lib.einsum('kalb,ijkl->ijab', ovov, tmp) * .25
 
     tmp = lib.einsum('ijcd,klcd->ijkl', l2bb_env, taubb)
     OVOV = numpy.asarray(eris.OVOV)
     OVOV = OVOV - OVOV.transpose(0,3,2,1)
-    m3bb = lib.einsum('kalb,ijkl->ijab', OVOV, tmp) * .25
+    m3bb += lib.einsum('kalb,ijkl->ijab', OVOV, tmp) * .25
 
     tmp = lib.einsum('iJcD,kLcD->iJkL', l2ab_env, tauab)
     ovOV = numpy.asarray(eris.ovOV)
-    m3ab = lib.einsum('kaLB,iJkL->iJaB', ovOV, tmp) * .5
+    m3ab += lib.einsum('kaLB,iJkL->iJaB', ovOV, tmp) * .5
     tmp = lib.einsum('iJdC,lKdC->iJKl', l2ab_env, tauab)
-    m3ab = lib.einsum('laKB,iJKl->iJaB', ovOV, tmp) * .5
+    m3ab += lib.einsum('laKB,iJKl->iJaB', ovOV, tmp) * .5
 
     u1a += numpy.einsum('ijab,jb->ia', m3aa, t1a)
     u1a += numpy.einsum('iJaB,JB->ia', m3ab, t1b)
     u1b += numpy.einsum('IJAB,JB->IA', m3bb, t1b)
     u1b += numpy.einsum('jIbA,jb->IA', m3ab, t1a)
+
 
 #   u2aa += m3aa
 #   u2bb += m3bb
@@ -935,6 +1013,7 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
 #   u2ab += einsum('kIcA,jbck->jIbA', l2ab_frag, imds.wovvo)
 #   u2ab += einsum('KICA,jbCK->jIbA', l2bb_frag, imds.wovVO)
 
+
     ovoo = numpy.asarray(eris.ovoo)
     ovoo = ovoo - ovoo.transpose(2,1,0,3)
     OVOO = numpy.asarray(eris.OVOO)
@@ -946,7 +1025,7 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
 #    tmp+= einsum('ca,icjb->ijab', mvv1, ovov)
     u2aa -= tmp - tmp.transpose(0,1,3,2)
 #    tmp = einsum('ka,jbik->ijab', l1b_frag, OVOO)
-    tmp+= einsum('ijca,cb->ijab', l2bb_env, v1b)
+    tmp = einsum('ijca,cb->ijab', l2bb_env, v1b)
 #    tmp+= einsum('ca,icjb->ijab', mVV1, OVOV)
     u2bb -= tmp - tmp.transpose(0,1,3,2)
 #    u2ab -= einsum('ka,JBik->iJaB', l1a_frag, OVoo)
@@ -963,34 +1042,37 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
     u1b += einsum('ib,ba->ia', l1b_env, v1b)
     u1b -= einsum('ja,ij->ia', l1b_env, v2b)
 
-    u1a += numpy.einsum('jb,iabj->ia', l1a_env, eris.ovvo)
+
+    u1a += numpy.einsum('jb,iabj->ia', l1a_env, eris.ovvo) 
     u1a -= numpy.einsum('jb,ijba->ia', l1a_env, eris.oovv)
     u1a += numpy.einsum('JB,iaBJ->ia', l1b_env, eris.ovVO)
-    u1b += numpy.einsum('jb,iabj->ia', l1b_env, eris.OVVO)
+    u1b += numpy.einsum('jb,iabj->ia', l1b_env, eris.OVVO) 
     u1b -= numpy.einsum('jb,ijba->ia', l1b_env, eris.OOVV)
     u1b += numpy.einsum('jb,iabj->ia', l1a_env, eris.OVvo)
 
-    u1a -= einsum('kjca,ijck->ia', l2aa_env, imds.woovo) #trim indermediates
-    u1a -= einsum('jKaC,ijCK->ia', l2ab_env, imds.wooVO)
-    u1b -= einsum('kjca,ijck->ia', l2bb_env, imds.wOOVO)
-    u1b -= einsum('kJcA,IJck->IA', l2ab_env, imds.wOOvo)
+    u1a -= einsum('kjca,ijck->ia', l2aa_env, imds.woovo_t1) #trim indermediates
+    u1a -= einsum('jKaC,ijCK->ia', l2ab_env, imds.wooVO_t1)
+    u1b -= einsum('kjca,ijck->ia', l2bb_env, imds.wOOVO_t1)
+    u1b -= einsum('kJcA,IJck->IA', l2ab_env, imds.wOOvo_t1)
 
-    u1a -= einsum('ikbc,back->ia', l2aa_env, imds.wvvvo) #trim intermediates
-    u1a -= einsum('iKbC,baCK->ia', l2ab_env, imds.wvvVO)
-    u1b -= einsum('IKBC,BACK->IA', l2bb_env, imds.wVVVO)
-    u1b -= einsum('kIcB,BAck->IA', l2ab_env, imds.wVVvo)
+    u1a -= einsum('ikbc,back->ia', l2aa_env, imds.wvvvo_t1) #trim intermediates
+    u1a -= einsum('iKbC,baCK->ia', l2ab_env, imds.wvvVO_t1)
+    u1b -= einsum('IKBC,BACK->IA', l2bb_env, imds.wVVVO_t1)
+    u1b -= einsum('kIcB,BAck->IA', l2ab_env, imds.wVVvo_t1)
 
-    u1a += numpy.einsum('jiba,bj->ia', l2aa_env, imds.w3a) #trim intermediates. v5a contributions will not be there
-    u1a += numpy.einsum('iJaB,BJ->ia', l2ab_env, imds.w3b)
-    u1b += numpy.einsum('JIBA,BJ->IA', l2bb_env, imds.w3b)
-    u1b += numpy.einsum('jIbA,bj->IA', l2ab_env, imds.w3a)
+    u1a += numpy.einsum('jiba,bj->ia', l2aa_env, imds.w3a_t1) #trim intermediates. v5a contributions will not be there
+    u1a += numpy.einsum('iJaB,BJ->ia', l2ab_env, imds.w3b_t1)
+    u1b += numpy.einsum('JIBA,BJ->IA', l2bb_env, imds.w3b_t1)
+    u1b += numpy.einsum('jIbA,bj->IA', l2ab_env, imds.w3a_t1)
 
-    tmpa = -einsum('bd,jd->jb', mvv1, t1a)
+    tmpa  = t1a + numpy.einsum('kc,kjcb->jb', l1a_env, t2aa)
+    tmpa += numpy.einsum('KC,jKbC->jb', l1b_env, t2ab)
+    tmpa -= einsum('bd,jd->jb', mvv1, t1a)
     tmpa -= einsum('lj,lb->jb', moo1, t1a)
-#    tmpb  = t1b + numpy.einsum('kc,kjcb->jb', l1b_frag, t2bb)
-#    tmpb += numpy.einsum('kc,kJcB->JB', l1a_frag, t2ab)
-    tmpb = -einsum('bd,jd->jb', mVV1, t1b)
-#    tmpb -= einsum('lj,lb->jb', mOO, t1b)
+
+    tmpb  = t1b + numpy.einsum('kc,kjcb->jb', l1b_env, t2bb)
+    tmpb += numpy.einsum('kc,kJcB->JB', l1a_env, t2ab)
+    tmpb -= einsum('bd,jd->jb', mVV1, t1b)
     tmpb -= einsum('lj,lb->jb', mOO1, t1b)
     u1a += numpy.einsum('jbia,jb->ia', ovov, tmpa)
     u1a += numpy.einsum('iaJB,JB->ia', ovOV, tmpb)
@@ -1011,6 +1093,10 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
     u1b -= lib.einsum('ik,ka->ia', mOO, tmp)
     u1b -= lib.einsum('ca,ic->ia', mVV, tmp)
 
+
+    l1a_frag = l1b_frag = l2aa_frag = l2ab_frag = l2bb_frag = None
+
+
     eia = lib.direct_sum('i-j->ij', mo_ea_o, mo_ea_v)
     eIA = lib.direct_sum('i-j->ij', mo_eb_o, mo_eb_v)
     u1a /= eia
@@ -1023,19 +1109,30 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
     time0 = log.timer_debug1('update l1 l2', *time0)
     return (u1a,u1b), (u2aa,u2ab,u2bb)
 
-
 #Now collect all the lambda residues into one equation.. 
 
 
 def update_lambda(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part):
 
-     u1_env, u2_env = update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part)
-     u1_frag, u2_frag = update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part)
+    u1_frag, u2_frag = update_lambda_frag(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part)
+    u1_env, u2_env = update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_part)
 
-     u1 = u1_env + u1_frag
-     u2 = u2_env + u2_frag
+    u1 =  tuple(a + b for a, b in zip(u1_env, u1_frag))
+    u2 =  tuple(a + b for a, b in zip(u2_env, u2_frag))
 
-     return u1, u2
+    u1_env = None
+    u1_frag = None
+    u2_env = None
+    u2_frag = None
+
+    l1a, l1b = l1
+    l2aa, l2ab, l2bb = l2
+
+    u1a, u1b = u1
+    u2aa, u2ab, u2bb = u2
+
+
+    return u1, u2
 
 
 if __name__ == '__main__':
