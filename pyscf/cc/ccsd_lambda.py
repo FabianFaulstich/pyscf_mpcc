@@ -50,6 +50,7 @@ def kernel(mycc, eris=None, t1=None, t2=None, l1=None, l2=None,
 
     imds = fintermediates(mycc, t1, t2, eris)
 
+
     if isinstance(mycc.diis, lib.diis.DIIS):
         adiis = mycc.diis
     elif mycc.diis:
@@ -62,18 +63,22 @@ def kernel(mycc, eris=None, t1=None, t2=None, l1=None, l2=None,
     conv = False
     for istep in range(max_cycle):
         if act_particle is not None:
-
            l1new, l2new = fupdate(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle)
            normt = numpy.linalg.norm(mycc.amplitudes_to_vector(l1new, l2new) -
-                                  mycc.amplitudes_to_vector(l1, l2))
+                               mycc.amplitudes_to_vector(l1, l2))
            l1, l2 = l1new, l2new
-           l1new = l2new = None
-           l1, l2 = mycc.run_diis(l1, l2, istep, normt, 0, adiis)
-           log.info('cycle = %d  norm(lambda1,lambda2) = %.6g', istep+1, normt)
-           cput0 = log.timer('CCSD iter', *cput0)
-           if normt < tol:
-              conv = True
-              break
+        else:
+           l1new, l2new = fupdate(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle)
+           normt = numpy.linalg.norm(mycc.amplitudes_to_vector(l1new, l2new) -
+                               mycc.amplitudes_to_vector(l1, l2))
+           l1, l2 = l1new, l2new
+        l1new = l2new = None
+        l1, l2 = mycc.run_diis(l1, l2, istep, normt, 0, adiis)
+        log.info('cycle = %d  norm(lambda1,lambda2) = %.6g', istep+1, normt)
+        cput0 = log.timer('CCSD iter', *cput0)
+        if normt < tol:
+           conv = True
+           break
     return conv, l1, l2
 
 

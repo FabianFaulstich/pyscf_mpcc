@@ -42,7 +42,7 @@ MEMORYMIN = getattr(__config__, 'cc_ccsd_memorymin', 2000)
 # t1: ia
 # t2: ijab
 def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
-           tolnormt=1e-6, verbose=None, callback=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False):
+           tolnormt=1e-6, verbose=None, callback=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False):
     log = logger.new_logger(mycc, verbose)
     if eris is None:
         eris = mycc.ao2mo(mycc.mo_coeff)
@@ -50,6 +50,18 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
         t1, t2 = mycc.get_init_guess(eris)
     elif t2 is None:
         t2 = mycc.get_init_guess(eris)[1]
+
+    if act_particle is not None and pert_triples:
+
+       t2aa, _, _ = t2
+
+       dtype = t2aa.dtype
+
+       u3aaa = numpy.zeros((len(act_hole[0]),len(act_hole[0]),len(act_hole[0]),len(act_particle[0]),len(act_particle[0]),len(act_particle[0])), dtype=dtype) 
+       u3bbb = numpy.zeros((len(act_hole[1]),len(act_hole[1]),len(act_hole[1]),len(act_particle[1]),len(act_particle[1]),len(act_particle[1])), dtype=dtype) 
+       u3bba = numpy.zeros((len(act_hole[1]),len(act_hole[1]),len(act_hole[0]),len(act_particle[1]),len(act_particle[1]),len(act_particle[0])), dtype=dtype) 
+       u3baa = numpy.zeros((len(act_hole[1]),len(act_hole[0]),len(act_hole[0]),len(act_particle[1]),len(act_particle[0]),len(act_particle[0])), dtype=dtype) 
+       t3old = u3aaa, u3bbb, u3baa, u3bba
 
     cput1 = cput0 = (logger.process_clock(), logger.perf_counter())
     eold = 0
@@ -65,9 +77,13 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
         adiis = None
 
     conv = False
+
     for istep in range(max_cycle):
-        if act_particle is not None and not oo_mp2:
+        if act_particle is not None and not oo_mp2 and not pert_triples:
             t1new, t2new = mycc.update_amps(t1, t2, eris, act_hole, act_particle, idx_s, idx_d)
+        elif act_particle is not None and pert_triples:
+            t1new, t2new, t3act = mycc.update_amps(t1, t2, eris, act_hole, act_particle, idx_s, idx_d, pert_triples, t3old)
+            t3old = t3act
         elif oo_mp2:
             t1new, t2new = mycc.update_amps_oomp2(t1, t2, eris, act_hole, act_particle, idx_s, idx_d)
         else:
@@ -94,7 +110,10 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
             conv = True
             break
     log.timer('CCSD', *cput0)
-    return conv, eccsd, t1, t2
+    if pert_triples:
+        return conv, eccsd, t1, t2, t3act  
+    else:
+        return conv, eccsd, t1, t2
 
 
 def update_amps(mycc, t1, t2, eris):
@@ -965,6 +984,7 @@ http://sunqm.net/pyscf/code-rule.html#api-rules for the details of API conventio
         self.e_corr = None
         self.t1 = None
         self.t2 = None
+        self.t3 = None
         self.l1 = None
         self.l2 = None
         self._nocc = None
@@ -1077,9 +1097,9 @@ http://sunqm.net/pyscf/code-rule.html#api-rules for the details of API conventio
     _add_vvvv = _add_vvvv
     update_amps = update_amps
 
-    def kernel(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False):
-        return self.ccsd(t1, t2, eris, act_particle, act_hole, idx_s, idx_d, oo_mp2)
-    def ccsd(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False):
+    def kernel(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False):
+        return self.ccsd(t1, t2, eris, act_particle, act_hole, idx_s, idx_d, oo_mp2, pert_triples)
+    def ccsd(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False):
         assert (self.mo_coeff is not None)
         assert (self.mo_occ is not None)
 
@@ -1092,13 +1112,24 @@ http://sunqm.net/pyscf/code-rule.html#api-rules for the details of API conventio
         if eris is None:
             eris = self.ao2mo(self.mo_coeff)
 
-        self.converged, self.e_corr, self.t1, self.t2 = \
-                kernel(self, eris, t1, t2, max_cycle=self.max_cycle,
+        if pert_triples:
+            self.converged, self.e_corr, self.t1, self.t2, self.t3 = \
+                 kernel(self, eris, t1, t2, max_cycle=self.max_cycle,
                        tol=self.conv_tol, tolnormt=self.conv_tol_normt,
                        verbose=self.verbose, callback=self.callback, act_particle=act_particle, 
-                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2)
+                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples)
+        else:
+            self.converged, self.e_corr, self.t1, self.t2 = \
+                 kernel(self, eris, t1, t2, max_cycle=self.max_cycle,
+                       tol=self.conv_tol, tolnormt=self.conv_tol_normt,
+                       verbose=self.verbose, callback=self.callback, act_particle=act_particle, 
+                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples)
+
         self._finalize()
-        return self.e_corr, self.t1, self.t2
+        if pert_triples:
+           return self.e_corr, self.t1, self.t2, self.t3
+        else:
+           return self.e_corr, self.t1, self.t2
 
     def _finalize(self):
         '''Hook for dumping results and clearing up the object.'''

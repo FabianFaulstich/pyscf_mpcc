@@ -29,6 +29,7 @@ from pyscf import lib
 from pyscf import ao2mo
 from pyscf.lib import logger
 from pyscf.cc import ccsd
+from pyscf.cc import umpcc_t_slow
 from pyscf.ao2mo import _ao2mo
 from pyscf.mp import ump2
 from pyscf import scf
@@ -433,18 +434,16 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     t1new = u1a, u1b
     t2new = u2aa, u2ab, u2bb
 
-    if (pert_triples):
-       return t1new, t2new, t3act
-    else:
-       return t1new, t2new
+    return t1new, t2new
 
 
-def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles, pert_triples=False):
+def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles, pert_triples=False, t3old=None):
 
     time0 = logger.process_clock(), logger.perf_counter()
     log = logger.Logger(cc.stdout, cc.verbose)
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
+#    u3 = None
     nocca, noccb, nvira, nvirb = t2ab.shape
     mo_ea_o = eris.mo_energy[0][:nocca]
     mo_ea_v = eris.mo_energy[0][nocca:] + cc.level_shift
@@ -770,7 +769,10 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     u2bb = u2bb - u2bb.transpose(1,0,2,3)
 
     if (pert_triples):
-       u3, u2_active = update_amps_t3(cc, t1, t2, eris)
+
+       u3new, u2_active = umpcc_t_slow.update_amps_t3(cc, t1, t2, t3old, eris, act_hole, act_particle)
+
+       u2_active_aa, u2_active_ab, u2_active_bb = u2_active
 
        u2aa[np.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])] +=u2_active_aa   
        u2ab[np.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])] +=u2_active_ab  
@@ -813,8 +815,11 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     t1new = u1a, u1b
     t2new = u2aa, u2ab, u2bb
 
-    return t1new, t2new
 
+    if (pert_triples):
+       return t1new, t2new, u3new
+    else:
+       return t1new, t2new
 
 def energy(cc, t1=None, t2=None, eris=None):
     '''UCCSD correlation energy'''
@@ -1066,15 +1071,19 @@ class UCCSD(ccsd.CCSD):
         logger.timer(self, 'init mp2', *time0)
         return self.emp2, (t1a,t1b), (t2aa,t2ab,t2bb)
 
+
+
+
+
     energy = energy
     update_amps = update_amps
     update_amps_oomp2 = update_amps_oomp2
     _add_vvvv = _add_vvvv
     _add_vvVV = _add_vvVV
 
-    def kernel(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, t1=None, t2=None, eris=None, mbpt2=False):
-        return self.ccsd(act_hole, act_particle, idx_s, idx_d, oo_mp2, t1, t2, eris, mbpt2)
-    def ccsd(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, t1=None, t2=None, eris=None, mbpt2=False):
+    def kernel(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples=False, t1=None, t2=None, eris=None, mbpt2=False):
+        return self.ccsd(act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples, t1, t2, eris, mbpt2)
+    def ccsd(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples=False, t1=None, t2=None, eris=None, mbpt2=False):
         '''Ground-state unrestricted (U)CCSD.
 
         Kwargs:
@@ -1094,7 +1103,8 @@ class UCCSD(ccsd.CCSD):
                                 act_particle = act_particle,
                                 idx_s = idx_s, 
                                 idx_d = idx_d,
-                                oo_mp2 = oo_mp2)
+                                oo_mp2 = oo_mp2,
+                                pert_triples = pert_triples)
 
     def solve_lambda(self, act_hole, act_particle, t1=None, t2=None, l1=None, l2=None,
                      eris=None):
@@ -1109,12 +1119,14 @@ class UCCSD(ccsd.CCSD):
                                     verbose=self.verbose)
         return self.l1, self.l2
 
-    def ccsd_t(self, t1=None, t2=None, eris=None):
+    def ccsd_t(self, act_hole, act_particle, t3, t1=None, t2=None, l1=None, l2=None, eris=None):
         from pyscf.cc import umpcc_t_slow
         if t1 is None: t1 = self.t1
         if t2 is None: t2 = self.t2
+        if l1 is None: t1 = self.l1
+        if l2 is None: t2 = self.l2
         if eris is None: eris = self.ao2mo(self.mo_coeff)
-        return umpcc_t_slow.lhs_umpcc_triples(self, l1, l2, t3, eris)
+        return umpcc_t_slow.lhs_umpcc_triples(self, t1, t2, l1, l2, t3, eris, act_hole, act_particle)
     uccsd_t = ccsd_t
 
     def make_rdm1(self, t1=None, t2=None, l1=None, l2=None, ao_repr=False,
