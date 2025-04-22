@@ -443,6 +443,9 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     log = logger.Logger(cc.stdout, cc.verbose)
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
+
+    DCA = False
+
 #    u3 = None
     nocca, noccb, nvira, nvirb = t2ab.shape
     mo_ea_o = eris.mo_energy[0][:nocca]
@@ -561,21 +564,26 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
 #    wovvo -= 0.5*lib.einsum('jnfb,menf->mbej', t2aa, ovov)
 #    woVvO += 0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, ovov)
 
-    DCA_ovvo = -0.5*lib.einsum('jnfb,menf->mbej', t2aa, eris_ovov)
-    DCA_oVvO = +0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, eris_ovov)
+
+    if (DCA):
+       DCA_ovvo = -0.5*lib.einsum('jnfb,menf->mbej', t2aa, eris_ovov)
+       DCA_oVvO = +0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, eris_ovov)
 
 # we will take only the active amplitudes to update with the antisymmetric term.. 
 
-    ovov_MENF = ovov[np.ix_(act_hole[0], act_particle[0], act_hole[0], act_particle[0])]
+       ovov_MENF = ovov[np.ix_(act_hole[0], act_particle[0], act_hole[0], act_particle[0])]
 
-    t2aa_act = t2aa[np.ix_(act_hole[0], act_hole[0], act_particle[0], act_particle[0])]   
-    t2ab_act = t2ab[np.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])]   
+       t2aa_act = t2aa[np.ix_(act_hole[0], act_hole[0], act_particle[0], act_particle[0])]   
+       t2ab_act = t2ab[np.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])]   
 
-    DCA_ovvo[np.ix_(act_hole[0], act_particle[0], act_particle[0], act_hole[0])] = -0.5*lib.einsum('jnfb,menf->mbej', t2aa_act, ovov_MENF)
-    DCA_oVvO[np.ix_(act_hole[0], act_particle[1], act_particle[0], act_hole[1])] = +0.5*lib.einsum('nJfB,menf->mBeJ', t2ab_act, ovov_MENF)
+       DCA_ovvo[np.ix_(act_hole[0], act_particle[0], act_particle[0], act_hole[0])] = -0.5*lib.einsum('jnfb,menf->mbej', t2aa_act, ovov_MENF)
+       DCA_oVvO[np.ix_(act_hole[0], act_particle[1], act_particle[0], act_hole[1])] = +0.5*lib.einsum('nJfB,menf->mBeJ', t2ab_act, ovov_MENF)
+       wovvo +=DCA_ovvo
+       woVvO +=DCA_oVvO
+    else:
+       wovvo -= 0.5*lib.einsum('jnfb,menf->mbej', t2aa, ovov)
+       woVvO += 0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, ovov)
 
-    wovvo +=DCA_ovvo
-    woVvO +=DCA_oVvO
 
     tmpaa = lib.einsum('jf,menf->mnej', t1a, ovov)
     wovvo -= lib.einsum('nb,mnej->mbej', t1a, tmpaa)
@@ -607,22 +615,25 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
 #   wOVVO -= 0.5*lib.einsum('jnfb,menf->mbej', t2bb, OVOV)
 #   wOvVo += 0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, OVOV)
 
-    DCA_OVVO = -0.5*lib.einsum('jnfb,menf->mbej', t2bb, eris_OVOV)
-    DCA_OvVo = +0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, eris_OVOV)
+    if (DCA):
+       DCA_OVVO = -0.5*lib.einsum('jnfb,menf->mbej', t2bb, eris_OVOV)
+       DCA_OvVo = +0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, eris_OVOV)
 
 # we will take only the active amplitudes to update with the antisymmetric term.. 
 
-    OVOV_MENF = OVOV[np.ix_(act_hole[1], act_particle[1], act_hole[1], act_particle[1])]
+       OVOV_MENF = OVOV[np.ix_(act_hole[1], act_particle[1], act_hole[1], act_particle[1])]
 
-    t2bb_act = t2aa[np.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])]   
-    t2ab_act = t2ab[np.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])]   
+       t2bb_act = t2aa[np.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])]   
+       t2ab_act = t2ab[np.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])]   
 
-    DCA_OVVO[np.ix_(act_hole[1], act_particle[1], act_particle[1], act_hole[1])] = -0.5*lib.einsum('jnfb,menf->mbej', t2bb_act, OVOV_MENF)
-    DCA_OvVo[np.ix_(act_hole[1], act_particle[0], act_particle[1], act_hole[0])] = +0.5*lib.einsum('jNbF,MENF->MbEj', t2ab_act, OVOV_MENF)
+       DCA_OVVO[np.ix_(act_hole[1], act_particle[1], act_particle[1], act_hole[1])] = -0.5*lib.einsum('jnfb,menf->mbej', t2bb_act, OVOV_MENF)
+       DCA_OvVo[np.ix_(act_hole[1], act_particle[0], act_particle[1], act_hole[0])] = +0.5*lib.einsum('jNbF,MENF->MbEj', t2ab_act, OVOV_MENF)
 
-    wOVVO +=DCA_OVVO
-    wOvVo +=DCA_OvVo
-
+       wOVVO +=DCA_OVVO
+       wOvVo +=DCA_OvVo
+    else:
+       wOVVO -= 0.5*lib.einsum('jnfb,menf->mbej', t2bb, OVOV)
+       wOvVo += 0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, OVOV)
 
     tmpbb = lib.einsum('jf,menf->mnej', t1b, OVOV)
     wOVVO -= lib.einsum('nb,mnej->mbej', t1b, tmpbb)
@@ -774,7 +785,7 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
 
        u2_active_aa, u2_active_ab, u2_active_bb = u2_active
 
-       u2aa[np.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])] +=u2_active_aa   
+       u2aa[np.ix_(act_hole[0], act_hole[0], act_particle[0], act_particle[0])] +=u2_active_aa   
        u2ab[np.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])] +=u2_active_ab  
        u2bb[np.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])] +=u2_active_bb  
 
@@ -889,6 +900,49 @@ def vector_to_amplitudes(vector, nmo, nocc):
         t1b, t2bb = ccsd.vector_to_amplitudes_s4(vecb, nmob, noccb)
         t2ab = t2ab.copy().reshape(nocca,noccb,nvira,nvirb)
         return (t1a,t1b), (t2aa,t2ab,t2bb)
+
+#T3
+
+def amplitudes_to_vector_t3(t3, out=None):
+    noccb,noccb,nocca,nvirb,nvirb,nvira = t3[2].shape
+    sizeaaa = (nocca**3) * (nvira**3)
+    sizebbb = (noccb**3) * (nvirb**3)
+    sizebba = (noccb**2) * (nvirb**2) * nocca * nvira
+    sizebaa = (nocca**2) * (nvira**2) * noccb * nvirb
+
+    vector = np.ndarray(sizeaaa+sizebbb+sizebaa+sizebba, t3[0].dtype, buffer=out)
+
+    vector[:sizeaaa] = t3[0].ravel().copy()
+    vector[sizeaaa:(sizeaaa+sizebbb)] = t3[1].ravel().copy()
+    vector[(sizeaaa+sizebbb):(sizeaaa+sizebbb+sizebaa)] = t3[2].ravel().copy()
+    vector[(sizeaaa+sizebbb+sizebaa):] = t3[3].ravel().copy()
+    return vector
+
+def vector_to_amplitudes_t3(vector, nmo, nocc):
+    nocca, noccb = nocc
+    nmoa, nmob = nmo
+    nvira, nvirb = nmoa-nocca, nmob-noccb
+    nocc = nocca + noccb
+    nvir = nvira + nvirb
+    nov = nocc * nvir
+    size = nov + nocc*(nocc-1)//2*nvir*(nvir-1)//2
+
+
+    sizeaaa = (nocca**3) * (nvira**3)
+    sizebbb = (noccb**3) * (nvirb**3)
+    sizebba = (noccb**2) * (nvirb**2) * nocca * nvira
+    sizebaa = (nocca**2) * (nvira**2) * noccb * nvirb
+
+    sections = np.cumsum([sizeaaa, sizebbb, sizebaa])
+    t3aaa, t3bbb, t3baa, t3bba = np.split(vector, sections)
+
+    t3aaa = t3aaa.copy().reshape(nocca,nocca,nocca,nvira,nvira,nvira)
+    t3bbb = t3bbb.copy().reshape(noccb,noccb,noccb,nvirb,nvirb,nvirb)
+    t3baa = t3baa.copy().reshape(noccb,nocca,nocca,nvirb,nvira,nvira)
+    t3bba = t3bba.copy().reshape(noccb,noccb,nocca,nvirb,nvirb,nvira)
+
+    return (t3aaa,t3bbb,t3baa,t3bba)
+
 
 def amplitudes_from_rccsd(t1, t2):
     t2aa = t2 - t2.transpose(0,1,3,2)
@@ -1072,18 +1126,15 @@ class UCCSD(ccsd.CCSD):
         return self.emp2, (t1a,t1b), (t2aa,t2ab,t2bb)
 
 
-
-
-
     energy = energy
     update_amps = update_amps
     update_amps_oomp2 = update_amps_oomp2
     _add_vvvv = _add_vvvv
     _add_vvVV = _add_vvVV
 
-    def kernel(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples=False, t1=None, t2=None, eris=None, mbpt2=False):
-        return self.ccsd(act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples, t1, t2, eris, mbpt2)
-    def ccsd(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples=False, t1=None, t2=None, eris=None, mbpt2=False):
+    def kernel(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples=False, t1=None, t2=None, eris=None, mbpt2=False, t3old=None):
+        return self.ccsd(act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples, t1, t2, eris, mbpt2, t3old)
+    def ccsd(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples=False, t1=None, t2=None, eris=None, mbpt2=False, t3old=None):
         '''Ground-state unrestricted (U)CCSD.
 
         Kwargs:
@@ -1104,16 +1155,18 @@ class UCCSD(ccsd.CCSD):
                                 idx_s = idx_s, 
                                 idx_d = idx_d,
                                 oo_mp2 = oo_mp2,
-                                pert_triples = pert_triples)
+                                pert_triples = pert_triples, t3old=t3old)
 
     def solve_lambda(self, act_hole, act_particle, t1=None, t2=None, l1=None, l2=None,
                      eris=None):
+#       from pyscf.cc import uccsd_lambda
         from pyscf.cc import umpccsd_lambda
         if t1 is None: t1 = self.t1
         if t2 is None: t2 = self.t2
         if eris is None: eris = self.ao2mo(self.mo_coeff)
         self.converged_lambda, self.l1, self.l2 = \
                 umpccsd_lambda.kernel(self, act_hole, act_particle, eris, t1, t2, l1, l2,
+#               uccsd_lambda.kernel(self, eris, t1, t2, l1, l2,
                                     max_cycle=self.max_cycle,
                                     tol=self.conv_tol_normt,
                                     verbose=self.verbose)
@@ -1237,10 +1290,21 @@ class UCCSD(ccsd.CCSD):
     def amplitudes_to_vector(self, t1, t2, out=None):
         return amplitudes_to_vector(t1, t2, out)
 
+
+    def amplitudes_to_vector_t3(self, t3, out=None):
+        return amplitudes_to_vector_t3(t3, out)
+
+
     def vector_to_amplitudes(self, vector, nmo=None, nocc=None):
         if nocc is None: nocc = self.nocc
         if nmo is None: nmo = self.nmo
         return vector_to_amplitudes(vector, nmo, nocc)
+
+
+    def vector_to_amplitudes_t3(self, vector, nmo=None, nocc=None):
+        if nocc is None: nocc = self.nocc
+        if nmo is None: nmo = self.nmo
+        return vector_to_amplitudes_t3(vector, nmo, nocc)
 
     def vector_size(self, nmo=None, nocc=None):
         if nocc is None: nocc = self.nocc

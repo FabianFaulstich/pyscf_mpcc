@@ -217,7 +217,8 @@ class DIIS(object):
         if nd < self.min_space:
             return x
 
-        dt = numpy.array(self.get_err_vec(self._head-1), copy=False)
+#       dt = numpy.array(self.get_err_vec(self._head-1), copy=False)
+        dt = numpy.array(self.get_err_vec(self._head-1), copy=True)
         if self._H is None:
             self._H = numpy.zeros((self.space+1,self.space+1), dt.dtype)
             self._H[0,1:] = self._H[1:,0] = 1

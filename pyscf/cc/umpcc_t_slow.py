@@ -157,23 +157,21 @@ def update_amps_t3(mcc, t1, t2, t3, eris, act_hole, act_particle):
                 - w.transpose(2,1,0,3,4,5) - w.transpose(0,2,1,3,4,5)
                 - w.transpose(1,0,2,3,4,5))
 
-
     def cyclic_hole(u):
-        return (u - u.transpose(0,2,1,3,4,5)-u.transpose(2,1,0,3,4,5))     
-   
+        return (u + u.transpose(1,2,0,3,4,5)+u.transpose(2,0,1,3,4,5))     
 
     def cyclic_particle(u):
-        return (u - u.transpose(0,1,2,3,5,4)-u.transpose(0,1,2,5,4,3))     
- 
+        return (u + u.transpose(0,1,2,4,5,3)+u.transpose(0,1,2,5,3,4))     
+
 
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
     t3aaa, t3bbb, t3baa, t3bba = t3
 
     nocca, noccb, nvira, nvirb = t2ab.shape
-    mo_ea, mo_eb = eris.mo_energy
-    eia = mo_ea[:nocca,None] - mo_ea[nocca:]
-    eIA = mo_eb[:noccb,None] - mo_eb[noccb:]
+#   mo_ea, mo_eb = eris.mo_energy
+#   eia = mo_ea[:nocca,None] - mo_ea[nocca:]
+#   eIA = mo_eb[:noccb,None] - mo_eb[noccb:]
 
     inact_particle_a = numpy.delete(numpy.arange(nvira), act_particle[0])
     inact_particle_b = numpy.delete(numpy.arange(nvirb), act_particle[1])
@@ -186,103 +184,164 @@ def update_amps_t3(mcc, t1, t2, t3, eris, act_hole, act_particle):
 
     imds = make_intermediates(mcc, t1, t2, eris, act_hole, act_particle)
 
+    mo_ea_o = numpy.diag(imds.Foo_act)
+    mo_ea_v = numpy.diag(imds.Fvv_act)
+    mo_eb_o = numpy.diag(imds.FOO_act)
+    mo_eb_v = numpy.diag(imds.FVV_act)
+
+    eia = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
+    eIA = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+
+
     # aaa
-    d3aaa = lib.direct_sum('ia+jb+kc->ijkabc', eia, eia, eia)
+    d3aaa_active = lib.direct_sum('ia+jb+kc->ijkabc', eia, eia, eia)
+#   d3aaa = lib.direct_sum('ia+jb+kc->ijkabc', eia, eia, eia)
+#   d3aaa_active = d3aaa[numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])]
 
-    d3aaa_active = d3aaa[numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])]
+    x  = numpy.einsum('ijae,beck->ijkabc', t2aa[numpy.ix_(act_hole[0], act_hole[0], act_particle[0], numpy.arange(nvira))], imds.Wvvvo_act)
+    x -= numpy.einsum('imab,mjck->ijkabc', t2aa[numpy.ix_(act_hole[0], numpy.arange(nocca), act_particle[0], act_particle[0])], imds.Woovo_act)
 
-    x  = numpy.einsum('ijae,beck->ijkabc', t2aa[numpy.ix_(act_hole[0], act_hole[0], act_particle[0], inact_particle[0])], imds.Wvvvo_act)
-    x -= numpy.einsum('imab,mjck->ijkabc', t2aa[numpy.ix_(act_hole[0], inact_hole[0], act_particle[0], act_particle[0])], imds.Woovo_act)
-
-#    u3aaa = cyclic_particle(cyclic_hole(x)) 
     u3aaa = cyclic_hole(cyclic_particle(x)) 
 
-    print("norm of u3aaa:step 1", numpy.linalg.norm(u3aaa), numpy.linalg.norm(x))
+# fish out the energy contribution
+
     x  = lib.einsum('ijkabe,ce->ijkabc', t3aaa, imds.Fvv_act)
-
     u3aaa += cyclic_particle(x)
-
-    print("norm of u3aaa:step 2", numpy.linalg.norm(u3aaa))
     x  = -lib.einsum('mjkabc,mi->ijkabc', t3aaa, imds.Foo_act)
-
     u3aaa += cyclic_hole(x)
 
-    print("norm of u3aaa:step 3", numpy.linalg.norm(u3aaa))
-#    u3aaa = r6(w)
+    print("norm of u3aaa", numpy.linalg.norm(u3aaa), numpy.max(abs(d3aaa_active)))
 
     # bbb
-    d3bbb = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eIA)
-    d3bbb_active = d3bbb[numpy.ix_(act_hole[1], act_hole[1], act_hole[1], act_particle[1], act_particle[1], act_particle[1])]
-#    w = numpy.einsum('ijae,kceb->ijkabc', t2bb, numpy.asarray(eris.get_OVVV()).conj())
+    d3bbb_active = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eIA)
+#   d3bbb = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eIA)
+#   d3bbb_active = d3bbb[numpy.ix_(act_hole[1], act_hole[1], act_hole[1], act_particle[1], act_particle[1], act_particle[1])]
 
-    x = numpy.einsum('ijae,beck->ijkabc', t2bb[numpy.ix_(act_hole[1], act_hole[1], act_particle[1], inact_particle[1])], numpy.asarray(imds.WVVVO_act))
-    x -= numpy.einsum('imab,mjck->ijkabc', t2bb[numpy.ix_(act_hole[1], inact_hole[1], act_particle[1], act_particle[1])], numpy.asarray(imds.WOOVO_act))
+    x = numpy.einsum('ijae,beck->ijkabc', t2bb[numpy.ix_(act_hole[1], act_hole[1], act_particle[1], numpy.arange(nvirb))], numpy.asarray(imds.WVVVO_act))
+    x -= numpy.einsum('imab,mjck->ijkabc', t2bb[numpy.ix_(act_hole[1], numpy.arange(noccb), act_particle[1], act_particle[1])], numpy.asarray(imds.WOOVO_act))
 
     u3bbb = cyclic_particle(cyclic_hole(x)) 
 
+    temp_t3 = t3bbb + u3bbb/d3bbb_active
+
+# fish out the energy contribution
+    print("energy contribution:t3bbb", (1.0/36)*numpy.einsum('ijkabc,ijkabc', temp_t3.conj(), u3bbb))   
+
     x  = lib.einsum('ijkabe,ce->ijkabc', t3bbb, imds.FVV_act)
-
     u3bbb += cyclic_particle(x)
-
     x = -lib.einsum('mjkabc,mi->ijkabc', t3bbb, imds.FOO_act)
-
     u3bbb += cyclic_hole(x)
 
+    print("diagonal values of FOO_act", numpy.diag(imds.FOO_act))
+    print("diagonal values of FVV_act", numpy.diag(imds.FVV_act))
+
+    print("norm of u3bbb:", numpy.linalg.norm(u3bbb), numpy.max(abs(d3bbb_active)))
+
     # baa
-    d3baa = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eia, eia)
-    d3baa_active = d3baa[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])]
-    u3baa  = numpy.einsum('jIeA,beck->IjkAbc', t2ab[numpy.ix_(act_hole[0], act_hole[1], inact_particle[0], act_particle[1])], numpy.asarray(imds.Wvvvo_act))    # 2
-    u3baa += numpy.einsum('jIbE,AEck->IjkAbc', t2ab[numpy.ix_(act_hole[0], act_hole[1], act_particle[0], inact_particle[1])], numpy.asarray(imds.WVVvo_act))     # 2
-    u3baa += numpy.einsum('jkbe,ceAI->IjkAbc', t2aa[numpy.ix_(act_hole[0], act_hole[0], act_particle[0], inact_particle[0])], numpy.asarray(imds.WvvVO_act))
+    d3baa_active = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eia, eia)
+#   d3baa = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eia, eia)
+#   d3baa_active = d3baa[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])]
+    u3baa  = numpy.einsum('jIeA,beck->IjkAbc', t2ab[numpy.ix_(act_hole[0], act_hole[1], numpy.arange(nvira), act_particle[1])], numpy.asarray(imds.Wvvvo_act))    # 2
 
-    u3baa -= numpy.einsum('mIbA,mjck->IjkAbc', t2ab[numpy.ix_(inact_hole[0], act_hole[1], act_particle[0], act_particle[1])], numpy.asarray(imds.Woovo_act)) 
-    u3baa -= numpy.einsum('jMbA,MIck->IjkAbc', t2ab[numpy.ix_(act_hole[0], inact_hole[1], act_particle[0], act_particle[1])], numpy.asarray(imds.WOOvo_act)) 
-    u3baa -= numpy.einsum('mjcb,mkAI->IjkAbc', t2aa[numpy.ix_(inact_hole[0], act_hole[0], act_particle[0], act_particle[0])], numpy.asarray(imds.WooVO_act))
-
+   #P(jk)
     r = u3baa - u3baa.transpose(0,2,1,3,4,5)
-#    r = r + r.transpose(0,2,1,3,5,4)
-    r = r - r.transpose(0,1,2,3,5,4)
 
+    u3baa = numpy.einsum('jIbE,AEck->IjkAbc', t2ab[numpy.ix_(act_hole[0], act_hole[1], act_particle[0], numpy.arange(nvirb))], numpy.asarray(imds.WVVvo_act))     # 2
 
-    u3baa = lib.einsum('IjkEbc,AE->IjkAbc', t3baa, imds.FVV_act)  
-    u3baa += lib.einsum('IjkAec,be->IjkAbc', t3baa, imds.Fvv_act)  
+   #P(bc)p(jk)
+    y = u3baa - u3baa.transpose(0,2,1,3,4,5)
+    r += y - y.transpose(0,1,2,3,5,4)
 
+    u3baa = numpy.einsum('jkbe,ceAI->IjkAbc', t2aa[numpy.ix_(act_hole[0], act_hole[0], act_particle[0], numpy.arange(nvira))], numpy.asarray(imds.WvvVO_act))
+    #P(bc)
     r += u3baa - u3baa.transpose(0,1,2,3,5,4)
 
-    u3baa = -lib.einsum('MjkAbc,MI->IjkAbc', t3baa, imds.FOO_act)  
-    u3baa -= lib.einsum('ImkAbc,mj->IjkAbc', t3baa, imds.Foo_act)  
+    u3baa = -numpy.einsum('mIbA,mjck->IjkAbc', t2ab[numpy.ix_(numpy.arange(nocca), act_hole[1], act_particle[0], act_particle[1])], numpy.asarray(imds.Woovo_act)) 
+
+    #P(bc)
+    r += u3baa - u3baa.transpose(0,1,2,3,5,4)
+
+    u3baa = -numpy.einsum('jMbA,MIck->IjkAbc', t2ab[numpy.ix_(act_hole[0], numpy.arange(noccb), act_particle[0], act_particle[1])], numpy.asarray(imds.WOOvo_act)) 
+
+   #P(bc)P(jk)
+
+    y = u3baa - u3baa.transpose(0,2,1,3,4,5)
+    r += y - y.transpose(0,1,2,3,5,4)
+
+    u3baa = -numpy.einsum('mjcb,mkAI->IjkAbc', t2aa[numpy.ix_(numpy.arange(nocca), act_hole[0], act_particle[0], act_particle[0])], numpy.asarray(imds.WooVO_act))
+
+    #P(jk) 
 
     r += u3baa - u3baa.transpose(0,2,1,3,4,5)
 
-#    r = w - w.transpose(0,2,1,3,4,5)
-#    r = r + r.transpose(0,2,1,3,5,4)
+    temp_t3 = t3baa + r/d3baa_active
+
+# fish out the energy contribution
+    print("energy contribution:t3baa", (1.0/4)*numpy.einsum('ijkabc,ijkabc', temp_t3.conj(), r))   
+
+    u3baa = lib.einsum('IjkAec,be->IjkAbc', t3baa, imds.Fvv_act)  
+    r += u3baa - u3baa.transpose(0,1,2,3,5,4)
+
+    r += lib.einsum('IjkEbc,AE->IjkAbc', t3baa, imds.FVV_act)  
+
+    u3baa = -lib.einsum('ImkAbc,mj->IjkAbc', t3baa, imds.Foo_act)  
+    r += u3baa - u3baa.transpose(0,2,1,3,4,5)
+    r -= lib.einsum('MjkAbc,MI->IjkAbc', t3baa, imds.FOO_act)  
+
+    print("norm of u3baa:", numpy.linalg.norm(r))
 
     # bba
 
-    d3bba = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eia)
-    d3bba_active = d3bba[numpy.ix_(act_hole[1], act_hole[1], act_hole[0], act_particle[1], act_particle[1], act_particle[0])]
+    d3bba_active = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eia)
+#   d3bba = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eia)
+#   d3bba_active = d3bba[numpy.ix_(act_hole[1], act_hole[1], act_hole[0], act_particle[1], act_particle[1], act_particle[0])]
 
-    u3bba  = numpy.einsum('IJAE,BEck->IJkABc', t2bb[numpy.ix_(act_hole[1], act_hole[1], act_particle[1], inact_particle[1])], numpy.asarray(imds.WVVvo_act)) 
-    u3bba += numpy.einsum('kJcE,BEAI->IJkABc', t2ab[numpy.ix_(act_hole[0], act_hole[1], act_particle[0], inact_particle[1])], numpy.asarray(imds.WVVVO_act))  
-    u3bba += numpy.einsum('kIeA,ceBJ->IJkABc', t2ab[numpy.ix_(act_hole[0], act_hole[1], inact_particle[0], act_particle[1])], numpy.asarray(imds.WvvVO_act))
+    u3bba  = numpy.einsum('IJAE,BEck->IJkABc', t2bb[numpy.ix_(act_hole[1], act_hole[1], act_particle[1], numpy.arange(nvirb))], numpy.asarray(imds.WVVvo_act)) 
+#  P(AB)
 
-    u3bba -= numpy.einsum('IMAB,MJck->IJkABc', t2bb[numpy.ix_(act_hole[1], inact_hole[1], act_particle[1], act_particle[1])], numpy.asarray(imds.WOOvo_act)) 
-    u3bba -= numpy.einsum('kMcB,MJAI->IJkABc', t2ab[numpy.ix_(act_hole[0], inact_hole[1], act_particle[0], act_particle[1])], numpy.asarray(imds.WOOVO_act)) 
-    u3bba -= numpy.einsum('mJcB,mkAI->IJkABc', t2ab[numpy.ix_(inact_hole[0], act_hole[1], act_particle[0], act_particle[1])], numpy.asarray(imds.WooVO_act))
+    v = u3bba - u3bba.transpose(0,1,2,4,3,5)
 
-    v = u3bba - u3bba.transpose(1,0,2,3,4,5)
-    v = v - v.transpose(0,1,2,4,3,5)
+    u3bba = numpy.einsum('kJcE,BEAI->IJkABc', t2ab[numpy.ix_(act_hole[0], act_hole[1], act_particle[0], numpy.arange(nvirb))], numpy.asarray(imds.WVVVO_act))  
+#  P(IJ) 
+    v += u3bba - u3bba.transpose(1,0,2,3,4,5)
 
+    u3bba = +numpy.einsum('kIeA,ceBJ->IJkABc', t2ab[numpy.ix_(act_hole[0], act_hole[1], numpy.arange(nvira), act_particle[1])], numpy.asarray(imds.WvvVO_act))
+ # P(IJ)P(AB)  
 
-    u3bba = lib.einsum('IJkEBc,AE->IJkABc', t3bba, imds.FVV_act)  
-    u3bba += lib.einsum('IJkABe,ce->IJkABc',t3bba, imds.Fvv_act)  
+    y = u3bba - u3bba.transpose(1,0,2,3,4,5)
+    v += y - y.transpose(0,1,2,4,3,5)
 
-    v += u3bba - u3bba.transpose(0,1,2,4,3,5)
-
-    u3bba = -lib.einsum('MJkABc,MI->IJkABc', t3bba, imds.FOO_act)  
-    u3bba -= lib.einsum('IJmABc,mk->IJkABc',t3bba, imds.Foo_act)  
+    u3bba = -numpy.einsum('IMAB,MJck->IJkABc', t2bb[numpy.ix_(act_hole[1], numpy.arange(noccb), act_particle[1], act_particle[1])], numpy.asarray(imds.WOOvo_act)) 
+#P(IJ)
 
     v += u3bba - u3bba.transpose(1,0,2,3,4,5)
+
+    u3bba = -numpy.einsum('kMcB,MJAI->IJkABc', t2ab[numpy.ix_(act_hole[0], numpy.arange(noccb), act_particle[0], act_particle[1])], numpy.asarray(imds.WOOVO_act)) 
+
+#P(AB)
+    v += u3bba - u3bba.transpose(0,1,2,4,3,5)
+    u3bba = -numpy.einsum('mJcB,mkAI->IJkABc', t2ab[numpy.ix_(numpy.arange(nocca), act_hole[1], act_particle[0], act_particle[1])], numpy.asarray(imds.WooVO_act))
+
+#P(IJ)P(AB)
+
+    y = u3bba - u3bba.transpose(1,0,2,3,4,5)
+    v += y - y.transpose(0,1,2,4,3,5)
+
+    temp_t3 = t3bba + v/d3bba_active
+
+# fish out the energy contribution
+    print("energy contribution:t3bba", (1.0/4)*numpy.einsum('ijkabc,ijkabc', temp_t3.conj(), v))   
+
+    u3bba = lib.einsum('IJkEBc,AE->IJkABc', t3bba, imds.FVV_act)  
+    v += u3bba - u3bba.transpose(0,1,2,4,3,5)
+
+    v += lib.einsum('IJkABe,ce->IJkABc',t3bba, imds.Fvv_act)  
+
+    u3bba = -lib.einsum('MJkABc,MI->IJkABc', t3bba, imds.FOO_act)  
+    v += u3bba - u3bba.transpose(1,0,2,3,4,5)
+    v -= lib.einsum('IJmABc,mk->IJkABc',t3bba, imds.Foo_act)  
+
+    print("norm of u3bba:", numpy.linalg.norm(v))
 
 #Now add symmetrization of the u3 tensors:
 #    x = r6(u3aaa)     
@@ -290,17 +349,15 @@ def update_amps_t3(mcc, t1, t2, t3, eris, act_hole, act_particle):
 
 # divide by denominator..
 
-    print("norm of u3aaa", numpy.linalg.norm(u3aaa))
-    print("norm of u3bbb", numpy.linalg.norm(u3bbb))
-
     u3aaa /=d3aaa_active
     u3bbb /=d3bbb_active
     u3bba = v/d3bba_active
     u3baa = r/d3baa_active
 
     print("norm of u3aaa", numpy.linalg.norm(u3aaa))
-    print("norm of u3aaa", numpy.linalg.norm(u3bbb))
-
+    print("norm of u3bbb", numpy.linalg.norm(u3bbb))
+    print("norm of u3baa", numpy.linalg.norm(u3baa))
+    print("norm of u3bba", numpy.linalg.norm(u3bba))
 
 #                    (1)                        ~        (1)
 # contribution of T_3   to the residue of T_2: [F_ov, T_3   ]
@@ -311,37 +368,41 @@ def update_amps_t3(mcc, t1, t2, t3, eris, act_hole, act_particle):
     u2bb = numpy.einsum('ijmabe,me->ijab', t3bbb, imds.FOV_act)
     u2bb += numpy.einsum('IJmABe,me->IJAB', t3bba, imds.Fov_act)
 
+    print("norm of u2aa", numpy.linalg.norm(u2aa))
+    print("norm of u2bb", numpy.linalg.norm(u2bb))
+
 # add symmetrization
 
 #    u2aa = u2aa - u2aa.transpose(0,1,3,2)
 #    u2aa = u2aa - u2aa.transpose(1,0,2,3)
 
-
 #    u2bb = u2bb - u2bb.transpose(0,1,3,2)
 #    u2bb = u2bb - u2bb.transpose(1,0,2,3)
 
+    u2ab = numpy.einsum('MIjEAb,ME->jIbA', t3bba, imds.FOV_act)
+    u2ab += numpy.einsum('IjmAbe,me->jIbA', t3baa, imds.Fov_act)
 
-    u2ab = -numpy.einsum('MIjEAb,ME->jIbA', t3bba, imds.FOV_act)
-    u2ab -= numpy.einsum('IjmAbe,me->jIbA', t3baa, imds.Fov_act)
-
-#    u2aa = 0.0
-#    u2ab = 0.0
-#    u2bb = 0.0
+#   u2aa *= -0.0
+#   u2ab *= -0.0
+#   u2bb *= -0.0
 
     u2_active = u2aa, u2ab, u2bb  
 
+    u3aaa  += t3aaa
+    u3bbb  += t3bbb
+    u3bba  += t3bba
+    u3baa  += t3baa
 
-    u3aaa += t3aaa
-    u3bbb += t3bbb
-    u3bba += t3bba
-    u3baa += t3baa
-
+  # u3aaa *=0.0  
+  # u3bbb *=0.0  
+  # u3bba *=0.0  
+  # u3baa *=0.0  
 
     u3 = u3aaa, u3bbb, u3baa, u3bba
 
     t3new = u3
 
-#   u3 = None
+#    u3 = None
 
     return t3new, u2_active 
 
@@ -416,16 +477,22 @@ def make_intermediates(mcc, t1, t2, eris, act_hole, act_particle):
     class _IMDS: pass
     imds = _IMDS()
 
+#   t1anew = t1a*0.0
+#   t1bnew = t1b*0.0
+#   t2aanew = t2aa*0.0
+#   t2bbnew = t2bb*0.0
+#   t2abnew = t2ab*0.0
+
+#   t1new = t1anew, t1bnew
+#   t2new = t2aanew, t2abnew, t2bbnew
+
 # Foo, Fvv and Fov
     Foo, FOO = uintermediates.Foo(t1, t2, eris)
     Fvv, FVV = uintermediates.Fvv(t1, t2, eris)
     Fov, FOV = uintermediates.Fov(t1, t2, eris)
-
 # Woovo 
     Woovo, WooVO, WOOvo, WOOVO = uintermediates.Woovo(t1, t2, eris)
-#Wvvov
-#   Wvvov, WvvOV, WVVov, WVVOV = uintermediates.Wvvov(t1, t2, eris) // this will be required for the contraction with lambda
-
+#Wvvvo
     Wvvvo, WvvVO, WVVvo, WVVVO = uintermediates.Wvvvo(t1, t2, eris)
 
     imds.Foo_act = Foo[numpy.ix_(act_hole[0], act_hole[0])]
@@ -435,26 +502,24 @@ def make_intermediates(mcc, t1, t2, eris, act_hole, act_particle):
     imds.Fvv_act = Fvv[numpy.ix_(act_particle[0], act_particle[0])]
     imds.FVV_act = FVV[numpy.ix_(act_particle[1], act_particle[1])]
 
+    imds.Woovo_act = Woovo[numpy.ix_(numpy.arange(nocca), act_hole[0], act_particle[0], act_hole[0])]
+    imds.WooVO_act = WooVO[numpy.ix_(numpy.arange(nocca), act_hole[0], act_particle[1], act_hole[1])]
+    imds.WOOvo_act = WOOvo[numpy.ix_(numpy.arange(noccb), act_hole[1], act_particle[0], act_hole[0])]
+    imds.WOOVO_act = WOOVO[numpy.ix_(numpy.arange(noccb), act_hole[1], act_particle[1], act_hole[1])]
 
-    imds.Woovo_act = Woovo[numpy.ix_(inact_hole[0], act_hole[0], act_particle[0], act_hole[0])]
-    imds.WooVO_act = WooVO[numpy.ix_(inact_hole[0], act_hole[0], act_particle[1], act_hole[1])]
-    imds.WOOvo_act = WOOvo[numpy.ix_(inact_hole[1], act_hole[1], act_particle[0], act_hole[0])]
-    imds.WOOVO_act = WOOVO[numpy.ix_(inact_hole[1], act_hole[1], act_particle[1], act_hole[1])]
-
-    imds.Wvvvo_act = Wvvvo[numpy.ix_(act_particle[0], inact_particle[0], act_particle[0], act_hole[0])]
-    imds.WvvVO_act = WvvVO[numpy.ix_(act_particle[0], inact_particle[0], act_particle[1], act_hole[1])]
-    imds.WVVvo_act = WVVvo[numpy.ix_(act_particle[1], inact_particle[1], act_particle[0], act_hole[0])]
-    imds.WVVVO_act = WVVVO[numpy.ix_(act_particle[1], inact_particle[1], act_particle[1], act_hole[1])]
+    imds.Wvvvo_act = Wvvvo[numpy.ix_(act_particle[0],numpy.arange(nvira), act_particle[0], act_hole[0])]
+    imds.WvvVO_act = WvvVO[numpy.ix_(act_particle[0],numpy.arange(nvira), act_particle[1], act_hole[1])]
+    imds.WVVvo_act = WVVvo[numpy.ix_(act_particle[1],numpy.arange(nvirb), act_particle[0], act_hole[0])]
+    imds.WVVVO_act = WVVVO[numpy.ix_(act_particle[1],numpy.arange(nvirb), act_particle[1], act_hole[1])]
 
     return imds 
-
 
 def make_intermediates_energy(mcc, t1, t2, eris, act_hole, act_particle):
 
     cput0 = (logger.process_clock(), logger.perf_counter())
 #    log = logger.Logger(self.stdout, self.verbose)
 
-#    t1, t2, eris = self.t1, self.t2, self.eris
+#   t1, t2, eris = self.t1, self.t2, self.eris
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
     nocca, noccb, nvira, nvirb = t2ab.shape
@@ -469,9 +534,17 @@ def make_intermediates_energy(mcc, t1, t2, eris, act_hole, act_particle):
     inact_particle = (inact_particle_a, inact_particle_b)
     inact_hole = (inact_hole_a, inact_hole_b)
 
-
     class _IMDS: pass
     imds = _IMDS()
+
+#   t1anew = t1a*0.0
+#   t1bnew = t1b*0.0
+#   t2aanew = t2aa*0.0
+#   t2bbnew = t2bb*0.0
+#   t2abnew = t2ab*0.0
+
+#   t1new = t1anew, t1bnew
+#   t2new = t2aanew, t2abnew, t2bbnew
 
     Wvvov, WvvOV, WVVov, WVVOV = uintermediates.Wvvov(t1, t2, eris)
     Wovoo, WOVoo, WovOO, WOVOO = uintermediates.Wovoo(t1, eris)
@@ -484,21 +557,24 @@ def make_intermediates_energy(mcc, t1, t2, eris, act_hole, act_particle):
 
 # Wvvov
 
-    imds.Wvvov_act = Wvvov[numpy.ix_(inact_particle[0], act_particle[0], act_hole[0], act_particle[0])]
-    imds.WvvOV_act = WvvOV[numpy.ix_(inact_particle[0], act_particle[0], act_hole[1], act_particle[1])]
-    imds.WVVov_act = WVVov[numpy.ix_(inact_particle[1], act_particle[1], act_hole[0], act_particle[0])]
-    imds.WVVOV_act = WVVOV[numpy.ix_(inact_particle[1], act_particle[1], act_hole[1], act_particle[1])]
+    imds.Wvvov_act = Wvvov[numpy.ix_(numpy.arange(nvira), act_particle[0], act_hole[0], act_particle[0])]
+    imds.WvvOV_act = WvvOV[numpy.ix_(numpy.arange(nvira), act_particle[0], act_hole[1], act_particle[1])]
+    imds.WVVov_act = WVVov[numpy.ix_(numpy.arange(nvirb), act_particle[1], act_hole[0], act_particle[0])]
+    imds.WVVOV_act = WVVOV[numpy.ix_(numpy.arange(nvirb), act_particle[1], act_hole[1], act_particle[1])]
 
 # Wovoo
-    imds.Wovoo_act = Wovoo[numpy.ix_(act_hole[0], act_particle[0], act_hole[0], inact_hole[0])]
-    imds.WOVoo_act = WOVoo[numpy.ix_(act_hole[1], act_particle[1], act_hole[0], inact_hole[0])]
-    imds.WovOO_act = WovOO[numpy.ix_(act_hole[0], act_particle[0], act_hole[1], inact_hole[1])]
-    imds.WOVOO_act = WOVOO[numpy.ix_(act_hole[1], act_particle[1], act_hole[1], inact_hole[1])]
+    imds.Wovoo_act = Wovoo[numpy.ix_(act_hole[0], act_particle[0], act_hole[0], numpy.arange(nocca))]
+    imds.WOVoo_act = WOVoo[numpy.ix_(act_hole[1], act_particle[1], act_hole[0], numpy.arange(nocca))]
+    imds.WovOO_act = WovOO[numpy.ix_(act_hole[0], act_particle[0], act_hole[1], numpy.arange(noccb))]
+    imds.WOVOO_act = WOVOO[numpy.ix_(act_hole[1], act_particle[1], act_hole[1], numpy.arange(noccb))]
 
 # Wovov
 
-    Wovov = numpy.asarray(eris.ovov)
-    WOVOV = numpy.asarray(eris.OVOV)
+#anti-symmetrize this array:
+#==========================
+
+    Wovov = numpy.asarray(eris.ovov) - numpy.asarray(eris.ovov).transpose(0,3,2,1)
+    WOVOV = numpy.asarray(eris.OVOV) - numpy.asarray(eris.OVOV).transpose(0,3,2,1)
     WovOV = numpy.asarray(eris.ovOV)
 
     imds.Wovov_act = Wovov[numpy.ix_(act_hole[0], act_particle[0], act_hole[0], act_particle[0])]
@@ -528,12 +604,11 @@ def lhs_umpcc_triples(mcc, t1, t2, l1, l2, t3, eris, act_hole, act_particle):
 
 
     def cyclic_hole(u):
-        return (u - u.transpose(0,2,1,3,4,5)-u.transpose(2,1,0,3,4,5))     
+        return (u + u.transpose(1,2,0,3,4,5)+u.transpose(2,0,1,3,4,5))     
    
 
     def cyclic_particle(u):
-        return (u - u.transpose(0,1,2,3,5,4)-u.transpose(0,1,2,5,4,3))     
-
+        return (u + u.transpose(0,1,2,4,5,3)+u.transpose(0,1,2,5,3,4))     
 
     l1a,l1b = l1
     l2aa,l2ab,l2bb = l2
@@ -541,10 +616,6 @@ def lhs_umpcc_triples(mcc, t1, t2, l1, l2, t3, eris, act_hole, act_particle):
 
     nocca, noccb, nvira, nvirb = l2ab.shape
     dtype = numpy.result_type(l1a, l1b, l2aa, l2ab, l2bb)
-
-    mo_ea, mo_eb = eris.mo_energy
-    eia = mo_ea[:nocca,None] - mo_ea[nocca:]
-    eIA = mo_eb[:noccb,None] - mo_eb[noccb:]
 
 
     inact_particle_a = numpy.delete(numpy.arange(nvira), act_particle[0])
@@ -562,34 +633,24 @@ def lhs_umpcc_triples(mcc, t1, t2, l1, l2, t3, eris, act_hole, act_particle):
     l1b_active = l1b[numpy.ix_(act_hole[1], act_particle[1])]
 
 #aaa
-    v = numpy.einsum('ebkc,ijae->ijkabc', imds.Wvvov_act, l2aa[numpy.ix_(act_hole[0], act_hole[0],act_particle[0],inact_particle[0])]) 
-
-    v -= numpy.einsum('iajm,mkbc->ijkabc', imds.Wovoo_act, l2aa[numpy.ix_(inact_hole[0], act_hole[0],act_particle[0],act_particle[0])])
-
+    v = numpy.einsum('ebkc,ijae->ijkabc', imds.Wvvov_act, l2aa[numpy.ix_(act_hole[0], act_hole[0],act_particle[0],numpy.arange(nvira))]) 
+    v -= numpy.einsum('iajm,mkbc->ijkabc', imds.Wovoo_act, l2aa[numpy.ix_(numpy.arange(nocca), act_hole[0],act_particle[0],act_particle[0])])
     v += numpy.einsum('jbkc,ia->ijkabc', imds.Wovov_act, l1a_active)
     v += numpy.einsum('jkbc,ia->ijkabc', l2aa[numpy.ix_(act_hole[0], act_hole[0],act_particle[0],act_particle[0])]  , imds.Fova_active)
 
-#   wd = r6(v) 
     wd = cyclic_particle(cyclic_hole(v)) 
-
-    print("value of v:3", numpy.linalg.norm(wd))
-    print("value of t3aaa", numpy.linalg.norm(t3aaa))
 
     et = numpy.einsum('ijkabc,ijkabc', wd.conj(), t3aaa)*(1.0/36)
 
     print("value of et, step 1:", et)
 
 #bbb
-    v = numpy.einsum('ebkc,ijae->ijkabc', imds.WVVOV_act, l2bb[numpy.ix_(act_hole[1], act_hole[1],act_particle[1],inact_particle[1])]) 
-    v -= numpy.einsum('iajm,mkbc->ijkabc',imds.WOVOO_act, l2bb[numpy.ix_(inact_hole[1], act_hole[1],act_particle[1],act_particle[1])])
+    v = numpy.einsum('ebkc,ijae->ijkabc', imds.WVVOV_act, l2bb[numpy.ix_(act_hole[1], act_hole[1],act_particle[1],numpy.arange(nvirb))]) 
+    v -= numpy.einsum('iajm,mkbc->ijkabc',imds.WOVOO_act, l2bb[numpy.ix_(numpy.arange(noccb), act_hole[1],act_particle[1],act_particle[1])])
     v += numpy.einsum('jbkc,ia->ijkabc', imds.WOVOV_act, l1b_active)
     v += numpy.einsum('jkbc,ia->ijkabc', l2bb[numpy.ix_(act_hole[1], act_hole[1],act_particle[1],act_particle[1])], imds.Fovb_active)
- #   wd = r6(v) 
 
     wd = cyclic_particle(cyclic_hole(v)) 
-
-    print("value of v:3", numpy.linalg.norm(wd))
-    print("value of t3bbb", numpy.linalg.norm(t3bbb))
 
     et += numpy.einsum('ijkabc,ijkabc', wd.conj(), t3bbb)*(1.0/36)
 
@@ -598,23 +659,35 @@ def lhs_umpcc_triples(mcc, t1, t2, l1, l2, t3, eris, act_hole, act_particle):
 
   #  [6 terms to insert here..]
 
-    w  = numpy.einsum('ebkc,jIeA->IjkAbc', imds.Wvvov_act, l2ab[numpy.ix_(act_hole[0], act_hole[1],inact_particle[0],act_particle[1])]) #done 
-    w += numpy.einsum('EAkc,jIbE->IjkAbc', imds.WVVov_act, l2ab[numpy.ix_(act_hole[0], act_hole[1],act_particle[0],inact_particle[1])]) #done
-    w += numpy.einsum('ebIA,jkec->IjkAbc', imds.WvvOV_act, l2aa[numpy.ix_(act_hole[0], act_hole[0],inact_particle[0],act_particle[0])]) #Done 
-
-    w -= numpy.einsum('mIbA,kcjm->IjkAbc', l2ab[numpy.ix_(inact_hole[0], act_hole[1],act_particle[0],act_particle[1])], imds.Wovoo_act) 
-    w -= numpy.einsum('jMbA,kcIM->IjkAbc', l2ab[numpy.ix_(act_hole[0], inact_hole[1],act_particle[0],act_particle[1])], imds.WovOO_act) 
-    w -= numpy.einsum('mkbc,IAjm->IjkAbc', l2aa[numpy.ix_(inact_hole[0], act_hole[0],act_particle[0],act_particle[0])], imds.WOVoo_act) #done #check if the defn of W can be changed
-
-    v  = numpy.einsum('jbkc,IA->IjkAbc', imds.Wovov_act, l1b_active)
-    v += numpy.einsum('kcIA,jb->IjkAbc', imds.WovOV_act, l1a_active)
-    v += numpy.einsum('jkbc,IA->IjkAbc', l2aa[numpy.ix_(act_hole[0], act_hole[0],act_particle[0],act_particle[0])], imds.Fovb_active) 
-    v += numpy.einsum('kIcA,jb->IjkAbc', l2ab[numpy.ix_(act_hole[0], act_hole[1],act_particle[0],act_particle[1])], imds.Fova_active) 
-    w += v
-
+    w  = numpy.einsum('ebkc,jIeA->IjkAbc', imds.Wvvov_act, l2ab[numpy.ix_(act_hole[0], act_hole[1],numpy.arange(nvira),act_particle[1])]) #done 
+    w -= numpy.einsum('mkbc,IAjm->IjkAbc', l2aa[numpy.ix_(numpy.arange(nocca), act_hole[0],act_particle[0],act_particle[0])], imds.WOVoo_act) #done #check if the defn of W can be changed
+    #P(jk)
     r = w - w.transpose(0,2,1,3,4,5)
-#    r = r + r.transpose(0,2,1,3,5,4)
-    r = r - r.transpose(0,1,2,3,5,4)
+
+    w  = numpy.einsum('ebIA,jkec->IjkAbc', imds.WvvOV_act, l2aa[numpy.ix_(act_hole[0], act_hole[0],numpy.arange(nvira),act_particle[0])]) #Done 
+    w -= numpy.einsum('mIbA,kcjm->IjkAbc', l2ab[numpy.ix_(numpy.arange(nocca), act_hole[1],act_particle[0],act_particle[1])], imds.Wovoo_act) 
+    #P(bc)
+    r += w - w.transpose(0,1,2,3,5,4)
+
+    w  = numpy.einsum('EAkc,jIbE->IjkAbc', imds.WVVov_act, l2ab[numpy.ix_(act_hole[0], act_hole[1],act_particle[0],numpy.arange(nvirb))]) #done
+    w -= numpy.einsum('jMbA,kcIM->IjkAbc', l2ab[numpy.ix_(act_hole[0], numpy.arange(noccb),act_particle[0],act_particle[1])], imds.WovOO_act) 
+    w += numpy.einsum('kcIA,jb->IjkAbc', imds.WovOV_act, l1a_active)
+    w += numpy.einsum('kIcA,jb->IjkAbc', l2ab[numpy.ix_(act_hole[0], act_hole[1],act_particle[0],act_particle[1])], imds.Fova_active) 
+    #P(jk)P(bc)
+
+    y = w - w.transpose(0,2,1,3,4,5)
+    r += y - y.transpose(0,1,2,3,5,4)
+
+    r  += numpy.einsum('jbkc,IA->IjkAbc', imds.Wovov_act, l1b_active)
+    r  += numpy.einsum('jkbc,IA->IjkAbc', l2aa[numpy.ix_(act_hole[0], act_hole[0],act_particle[0],act_particle[0])], imds.Fovb_active) 
+
+    #P(None)
+
+#    r = w - w.transpose(0,2,1,3,4,5)
+#    r = r - r.transpose(0,1,2,3,5,4)
+
+    print("value of r baa", numpy.linalg.norm(r))
+    print("value of t3baa", numpy.linalg.norm(t3baa))
 
     et += numpy.einsum('ijkabc,ijkabc', r.conj(), t3baa)*(1.0/4)
     print("value of et, step 3:", et)
@@ -622,22 +695,32 @@ def lhs_umpcc_triples(mcc, t1, t2, l1, l2, t3, eris, act_hole, act_particle):
 #bba
   # [6 terms to insert here..]
 
-    w  = numpy.einsum('kJcE,EBIA->IJkABc', l2ab[numpy.ix_(act_hole[0], act_hole[1],act_particle[0],inact_particle[1])], imds.Wvvov_act) #done 
-    w += numpy.einsum('kJeB,ecIA->IJkABc', l2ab[numpy.ix_(act_hole[0], act_hole[1],inact_particle[0],act_particle[1])], imds.WvvOV_act) #done
-    w += numpy.einsum('IJAE,EBkc->IJkABc', l2bb[numpy.ix_(act_hole[1], act_hole[1],act_particle[1],inact_particle[1])], imds.WVVov_act) #Done 
+    w  = numpy.einsum('kJcE,EBIA->IJkABc', l2ab[numpy.ix_(act_hole[0], act_hole[1],act_particle[0],numpy.arange(nvirb))], imds.WVVOV_act) #done 
+    w -= numpy.einsum('IMAB,kcJM->IJkABc', l2bb[numpy.ix_(act_hole[1], numpy.arange(noccb),act_particle[1],act_particle[1])], imds.WovOO_act) #done
 
-    w -= numpy.einsum('kMcB,IAJM->IJkABc', l2ab[numpy.ix_(act_hole[0], inact_hole[1],act_particle[0],act_particle[1])], imds.WOVOO_act)  #done
-    w -= numpy.einsum('mIcA,JBkm->IJkABc', l2ab[numpy.ix_(inact_hole[0], act_hole[1],act_particle[0],act_particle[1])], imds.WOVoo_act)  #done
-    w -= numpy.einsum('IMAB,kcJM->IJkABc', l2bb[numpy.ix_(act_hole[1], inact_hole[1],act_particle[1],act_particle[1])], imds.WovOO_act) #done
-
-    v  = numpy.einsum('jbkc,ia->ijkabc', imds.WOVOV_act, l1a_active)
-    v += numpy.einsum('iakc,jb->ijkabc', imds.WovOV_act, l1b_active)
-    v += numpy.einsum('JKBC,ia->iJKaBC', l2bb[numpy.ix_(act_hole[1], act_hole[1],act_particle[1],act_particle[1])], imds.Fova_active) 
-    v += numpy.einsum('iKaC,JB->iJKaBC', l2ab[numpy.ix_(act_hole[0], act_hole[1],act_particle[0],act_particle[1])], imds.Fovb_active) 
-    w += v
+# P(IJ)
 
     r = w - w.transpose(1,0,2,3,4,5)
-    r = r - r.transpose(0,1,2,4,3,5)
+
+    w  = numpy.einsum('kJeB,ecIA->IJkABc', l2ab[numpy.ix_(act_hole[0], act_hole[1],numpy.arange(nvira),act_particle[1])], imds.WvvOV_act) #done
+    w -= numpy.einsum('mIcA,JBkm->IJkABc', l2ab[numpy.ix_(numpy.arange(nocca), act_hole[1],act_particle[0],act_particle[1])], imds.WOVoo_act)  #done
+    w += numpy.einsum('kcIA,JB->IJkABc', imds.WovOV_act, l1b_active)
+    w += numpy.einsum('kIcA,JB->IJkABc', l2ab[numpy.ix_(act_hole[0], act_hole[1],act_particle[0],act_particle[1])], imds.Fovb_active) 
+
+# P(IJ)P(AB)
+
+    y = w - w.transpose(1,0,2,3,4,5)
+    r += y - y.transpose(0,1,2,4,3,5)
+
+    w = numpy.einsum('IJAE,EBkc->IJkABc', l2bb[numpy.ix_(act_hole[1], act_hole[1],act_particle[1],numpy.arange(nvirb))], imds.WVVov_act) 
+    w -= numpy.einsum('kMcB,IAJM->IJkABc', l2ab[numpy.ix_(act_hole[0], numpy.arange(noccb),act_particle[0],act_particle[1])], imds.WOVOO_act) 
+
+# P(AB) 
+
+    r += w - w.transpose(0,1,2,4,3,5)
+
+    r  += numpy.einsum('IAJB,kc->IJkABc', imds.WOVOV_act, l1a_active)
+    r  += numpy.einsum('IJAB,kc->IJkABc', l2bb[numpy.ix_(act_hole[1], act_hole[1],act_particle[1],act_particle[1])], imds.Fova_active) 
 
     et += numpy.einsum('ijkabc,ijkabc', r.conj(), t3bba)*(1.0/4)
 

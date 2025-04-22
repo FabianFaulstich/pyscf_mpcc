@@ -42,7 +42,7 @@ MEMORYMIN = getattr(__config__, 'cc_ccsd_memorymin', 2000)
 # t1: ia
 # t2: ijab
 def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
-           tolnormt=1e-6, verbose=None, callback=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False):
+           tolnormt=1e-6, verbose=None, callback=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None):
     log = logger.new_logger(mycc, verbose)
     if eris is None:
         eris = mycc.ao2mo(mycc.mo_coeff)
@@ -51,8 +51,7 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
     elif t2 is None:
         t2 = mycc.get_init_guess(eris)[1]
 
-    if act_particle is not None and pert_triples:
-
+    if t3old is None and pert_triples:
        t2aa, _, _ = t2
 
        dtype = t2aa.dtype
@@ -76,6 +75,16 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
     else:
         adiis = None
 
+    if act_particle is not None and pert_triples:
+       if isinstance(mycc.diis, lib.diis.DIIS):
+          adiis_t3 = mycc.diis
+       elif mycc.diis:
+          adiis_t3 = lib.diis.DIIS(mycc, mycc.diis_file, incore=mycc.incore_complete)
+          adiis_t3.space = mycc.diis_space
+       else:
+          adiis_t3 = None
+
+
     conv = False
 
     for istep in range(max_cycle):
@@ -93,6 +102,11 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
         tmpvec = mycc.amplitudes_to_vector(t1new, t2new)
         tmpvec -= mycc.amplitudes_to_vector(t1, t2)
         normt = numpy.linalg.norm(tmpvec)
+
+        if act_particle is not None and pert_triples:
+           tmpvec = mycc.amplitudes_to_vector_t3(t3act)
+           normt_t3 = numpy.linalg.norm(tmpvec)
+
         tmpvec = None
         if mycc.iterative_damping < 1.0:
             alpha = mycc.iterative_damping
@@ -102,6 +116,10 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
         t1, t2 = t1new, t2new
         t1new = t2new = None
         t1, t2 = mycc.run_diis(t1, t2, istep, normt, eccsd-eold, adiis)
+        if act_particle is not None and pert_triples:
+            t3act = None
+            t3old = mycc.run_diis_t3(t3old, istep, normt_t3, eccsd-eold, adiis_t3)
+
         eold, eccsd = eccsd, mycc.energy(t1, t2, eris)
         log.info('cycle = %d  E_corr(CCSD) = %.15g  dE = %.9g  norm(t1,t2) = %.6g',
                  istep+1, eccsd, eccsd - eold, normt)
@@ -111,7 +129,7 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
             break
     log.timer('CCSD', *cput0)
     if pert_triples:
-        return conv, eccsd, t1, t2, t3act  
+        return conv, eccsd, t1, t2, t3old 
     else:
         return conv, eccsd, t1, t2
 
@@ -698,6 +716,7 @@ def vector_to_amplitudes(vector, nmo, nocc):
     t2 = t2.reshape(nocc,nvir,nocc,nvir).transpose(0,2,1,3)
     return t1, numpy.asarray(t2, order='C')
 
+
 def amplitudes_to_vector_s4(t1, t2, out=None):
     nocc, nvir = t1.shape
     nov = nocc * nvir
@@ -1097,9 +1116,9 @@ http://sunqm.net/pyscf/code-rule.html#api-rules for the details of API conventio
     _add_vvvv = _add_vvvv
     update_amps = update_amps
 
-    def kernel(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False):
-        return self.ccsd(t1, t2, eris, act_particle, act_hole, idx_s, idx_d, oo_mp2, pert_triples)
-    def ccsd(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False):
+    def kernel(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None):
+        return self.ccsd(t1, t2, eris, act_particle, act_hole, idx_s, idx_d, oo_mp2, pert_triples, t3old)
+    def ccsd(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None):
         assert (self.mo_coeff is not None)
         assert (self.mo_occ is not None)
 
@@ -1117,13 +1136,13 @@ http://sunqm.net/pyscf/code-rule.html#api-rules for the details of API conventio
                  kernel(self, eris, t1, t2, max_cycle=self.max_cycle,
                        tol=self.conv_tol, tolnormt=self.conv_tol_normt,
                        verbose=self.verbose, callback=self.callback, act_particle=act_particle, 
-                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples)
+                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples, t3old=t3old)
         else:
             self.converged, self.e_corr, self.t1, self.t2 = \
                  kernel(self, eris, t1, t2, max_cycle=self.max_cycle,
                        tol=self.conv_tol, tolnormt=self.conv_tol_normt,
                        verbose=self.verbose, callback=self.callback, act_particle=act_particle, 
-                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples)
+                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples, t3old=t3old)
 
         self._finalize()
         if pert_triples:
@@ -1281,6 +1300,22 @@ http://sunqm.net/pyscf/code-rule.html#api-rules for the details of API conventio
             logger.debug1(self, 'DIIS for step %d', istep)
         return t1, t2
 
+    def run_diis_t3(self, t3, istep, normt, de, adiis):
+
+        noccb,nocca,nocca,nvirb,nvira,nvira = t3[2].shape
+
+        nocc = nocca, noccb
+        nmo  = nocca+nvira, noccb+nvirb
+
+        if (adiis and
+            istep >= self.diis_start_cycle and
+            abs(de) < self.diis_start_energy_diff):
+            vec = self.amplitudes_to_vector_t3(t3)
+            t3 = self.vector_to_amplitudes_t3(adiis.update(vec),nmo,nocc)
+            logger.debug1(self, 'DIIS for step %d', istep)
+        return t3
+
+
     def amplitudes_to_vector(self, t1, t2, out=None):
         return amplitudes_to_vector(t1, t2, out)
 
@@ -1288,6 +1323,15 @@ http://sunqm.net/pyscf/code-rule.html#api-rules for the details of API conventio
         if nocc is None: nocc = self.nocc
         if nmo is None: nmo = self.nmo
         return vector_to_amplitudes(vec, nmo, nocc)
+
+    def amplitudes_to_vector_t3(self, t3, out=None):
+        return amplitudes_to_vector_t3(t3, out)
+
+    def vector_to_amplitudes_t3(self, vec, nmo=None, nocc=None):
+        if nocc is None: nocc = self.nocc
+        if nmo is None: nmo = self.nmo
+        return vector_to_amplitudes_t3(vec, nmo, nocc)
+
 
     def vector_size(self, nmo=None, nocc=None):
         if nocc is None: nocc = self.nocc

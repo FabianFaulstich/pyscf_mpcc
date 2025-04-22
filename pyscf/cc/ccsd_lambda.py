@@ -68,7 +68,7 @@ def kernel(mycc, eris=None, t1=None, t2=None, l1=None, l2=None,
                                mycc.amplitudes_to_vector(l1, l2))
            l1, l2 = l1new, l2new
         else:
-           l1new, l2new = fupdate(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle)
+           l1new, l2new = fupdate(mycc, t1, t2, l1, l2, eris, imds)
            normt = numpy.linalg.norm(mycc.amplitudes_to_vector(l1new, l2new) -
                                mycc.amplitudes_to_vector(l1, l2))
            l1, l2 = l1new, l2new
