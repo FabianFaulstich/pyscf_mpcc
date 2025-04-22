@@ -1,26 +1,8 @@
-#!/usr/bin/env python
-# Copyright 2014-2020 The PySCF Developers. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import numpy as np
 from pyscf import lib
 from pyscf import ao2mo
 from pyscf.cc.rintermediates import _get_vvvv  # noqa
 from pyscf.cc.ccsd import BLKMIN
-
-# Ref: Gauss and Stanton, J. Chem. Phys. 103, 3561 (1995) Table III
-
 
 def make_tau(t2, t1, r1, fac=1, out=None):
     t1a, t1b = t1
@@ -47,36 +29,78 @@ def make_tau_ab(t2ab, t1, r1, fac=1, out=None):
     tau1ab += t2ab
     return tau1ab
 
-def Foo(t1, t2, eris):
+def Foo(t1_mix, t1_env, t2_mix, t2_env, act_hole, act_particle, eris):
+    '''
+    Input t1 and t2 will be mixed and environment
+    '''
+
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
     nocca, noccb, nvira, nvirb = t2ab.shape
+
+    inact_particle_a = np.delete(np.arange(nvira), act_particle[0])
+    inact_particle_b = np.delete(np.arange(nvirb), act_particle[1])
+    inact_particle = [inact_particle_a, inact_particle_b]  
+
+    inact_hole_a = np.delete(np.arange(nocca), act_hole[0])
+    inact_hole_b = np.delete(np.arange(noccb), act_hole[1])
+    inact_hole = [inact_hole_a, inact_hole_b]
 
     eris_ovov = np.asarray(eris.ovov)
     eris_OVOV = np.asarray(eris.OVOV)
     eris_ovOV = np.asarray(eris.ovOV)
     tilaa, tilab, tilbb = make_tau(t2, t1, t1, fac=0.5)
-    Fooa  = lib.einsum('inef,menf->mi', tilaa, eris_ovov)
-    Fooa += lib.einsum('iNeF,meNF->mi', tilab, eris_ovOV)
-    Foob  = lib.einsum('inef,menf->mi', tilbb, eris_OVOV)
-    Foob += lib.einsum('nIfE,nfME->MI', tilab, eris_ovOV)
+
+    tau_Inef_aa = tilaa[np.ix_(act_hole[0],inact_hole[0], act_particle[0], act_particle[0])]
+    eri_Menf_aa = eris_ovov[np.ix_(act_hole[0], inact_particle[0], inact_hole[0], inact_particle[0])]
+    Fooa  = lib.einsum('inef,menf->mi', tau_Inef_aa, eris_Menf_aa)
+
+    tau_Inef_ab = tilab[np.ix_(act_hole[0],inact_hole[1], act_particle[0], act_particle[1])]
+    eri_Menf_ab = eris_ovOV[np.ix_(act_hole[0], inact_particle[0], inact_hole[1], inact_particle[1])]
+    Fooa += lib.einsum('iNeF,meNF->mi', tau_Inef_ab, eri_Menf_ab)
+    
+    tau_Inef_bb = tilbb[np.ix_(act_hole[1],inact_hole[1], act_particle[1], act_particle[1])]
+    eri_Menf_bb = eris_OVOV[np.ix_(act_hole[1], inact_particle[1], inact_hole[1], inact_particle[1])]
+    Foob  = lib.einsum('inef,menf->mi', tau_Inef_bb, eri_Menf_bb)
+  
+    Foob += lib.einsum('nIfE,nfME->MI', tau_Inef_ab, eri_Menf_ab)
 
     eris_ovoo = np.asarray(eris.ovoo)
     eris_OVOO = np.asarray(eris.OVOO)
     eris_OVoo = np.asarray(eris.OVoo)
     eris_ovOO = np.asarray(eris.ovOO)
-    Fooa += np.einsum('ne,nemi->mi', t1a, eris_ovoo)
-    Fooa -= np.einsum('ne,meni->mi', t1a, eris_ovoo)
-    Fooa += np.einsum('NE,NEmi->mi', t1b, eris_OVoo)
-    Foob += np.einsum('ne,nemi->mi', t1b, eris_OVOO)
-    Foob -= np.einsum('ne,meni->mi', t1b, eris_OVOO)
-    Foob += np.einsum('ne,neMI->MI', t1a, eris_ovOO)
 
-    fooa = eris.focka[:nocca,:nocca]
-    foob = eris.fockb[:noccb,:noccb]
-    fova = eris.focka[:nocca,nocca:]
-    fovb = eris.fockb[:noccb,noccb:]
-    Fova, Fovb = Fov(t1, t2, eris)
+    eri_neMI_aa = eris_ovoo[np.ix_(inact_hole[0], inact_particle[0], act_hole[0], act_hole[0])]
+    Fooa += np.einsum('ne,nemi->mi', t1_env[0], eri_neMI_aa) 
+
+    # Fooa -= np.einsum('ne,meni->mi', t1a, eris_ovoo)
+    eri_MenI_aa = eris_ovoo[np.ix_(act_hole[0], inact_particle[0], inact_hole[0], act_hole[0])]
+    Fooa -= np.einsum('ne,meni->mi', t1_env[0], eri_MenI_aa)
+
+    eri_neMI_ba = eris_OVoo[np.ix_(inact_hole[1], inact_particle[1], act_hole[0], act_hole[0])]
+    Fooa += np.einsum('NE,NEmi->mi', t1_enc[1], eri_neMI_ba)
+
+    eri_neMI_bb = eris_OVOO[np.ix_(inact_hole[1], inact_particle[1], act_hole[1], act_hole[1])]
+    Foob += np.einsum('ne,nemi->mi', t1_env[1], eri_neMI_bb)
+
+    # Foob -= np.einsum('ne,meni->mi', t1b, eris_OVOO)
+    eri_MenI_bb = eris_OVOO[np.ix_(act_hole[1], inact_particle[1], inact_hole[1], act_hole[1])]
+    Foob -= np.einsum('ne,meni->mi', t1_env[1], eri_MenI_bb)
+
+    eri_neMI_ab = eris_ovOO[np.ix_(inact_hole[0], inact_particle[0], act_hole[1], act_hole[1])]
+    Foob += np.einsum('ne,neMI->MI', t1_env[0], eri_neMI_ab)
+
+    fooa = eris.focka[np.ix_(act_hole[0], act_hole[0])]
+    foob = eris.fockb[np.ix_(act_hole[1], act_hole[1])]
+    fova = eris.focka[np.ix_(act_hole[0], inact_particle[0])]
+    fovb = eris.focka[np.ix_(act_hole[1], inact_particle[1])]
+
+    # NOTE stopped here!!
+    eri_MEnf_aa = eris.ovov[np.ix_(act_hole[0], inact_particle[0], inact_hole[0], act_particle[0])]
+    Fova = np.einsum('nf,menf->me', t1_env[0], eri_MEnf_aa)
+
+
+    Fova, Fovb = Fov(t1, t2, eris)  
 
     Fooa += fooa + 0.5*lib.einsum('me,ie->mi', Fova+fova, t1a)
     Foob += foob + 0.5*lib.einsum('me,ie->mi', Fovb+fovb, t1b)
@@ -159,6 +183,7 @@ def Fvv(t1, t2, eris):
     return Fvva, Fvvb
 
 def Fov(t1, t2, eris):
+    # FABIAN
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
     nocca, noccb, nvira, nvirb = t2ab.shape
@@ -181,6 +206,7 @@ def Fov(t1, t2, eris):
     return Fova, Fovb
 
 def Woooo(t1, t2, eris):
+    # FABIAN
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
     eris_ovoo = np.asarray(eris.ovoo)
@@ -214,6 +240,7 @@ def Woooo(t1, t2, eris):
     return woooo, wooOO, wOOoo, wOOOO
 
 def Wooov(t1, t2, eris):
+    # FABIAN
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
     dtype = np.result_type(t1a, t1b, t2aa, t2ab, t2bb)
@@ -241,50 +268,6 @@ def Wooov(t1, t2, eris):
     wooOV += lib.einsum('if,mfNE->miNE', t1a, eris_ovOV)
     wOOov += lib.einsum('IF,neMF->MIne', t1b, eris_ovOV)
     return wooov, wooOV, wOOov, wOOOV
-
-
-
-def Wovoo(t1, eris):
-    t1a, t1b = t1
-    dtype = np.result_type(t1a, t1b)
-
-    eris_ovoo = np.asarray(eris.ovoo)
-    eris_OVOO = np.asarray(eris.OVOO)
-    eris_OVoo = np.asarray(eris.OVoo)
-    eris_ovOO = np.asarray(eris.ovOO)
-    ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
-    OVOO = eris_OVOO - eris_OVOO.transpose(2,1,0,3)
-#   wooov = np.array(     ovoo.transpose(2,3,0,1), dtype=dtype)
-#   wOOOV = np.array(     OVOO.transpose(2,3,0,1), dtype=dtype)
-#   wooOV = np.array(eris_OVoo.transpose(2,3,0,1), dtype=dtype)
-#   wOOov = np.array(eris_ovOO.transpose(2,3,0,1), dtype=dtype)
-#   eris_ovoo = eris_OVOO = eris_ovOO = eris_OVoo = None
-
-    wovoo = np.array(ovoo, dtype=dtype)
-    wOVOO = np.array(OVOO, dtype=dtype)
-    wovOO = np.array(eris_ovOO, dtype=dtype)
-    wOVoo = np.array(eris_OVoo, dtype=dtype)
-
-
-    eris_ovov = np.asarray(eris.ovov)
-    eris_OVOV = np.asarray(eris.OVOV)
-    eris_ovOV = np.asarray(eris.ovOV)
-    ovov = eris_ovov - eris_ovov.transpose(0,3,2,1)
-    OVOV = eris_OVOV - eris_OVOV.transpose(0,3,2,1)
-
-#   wooov += lib.einsum('if,mfne->mine', t1a,      ovov)
-#   wOOOV += lib.einsum('if,mfne->mine', t1b,      OVOV)
-#   wooOV += lib.einsum('if,mfNE->miNE', t1a, eris_ovOV)
-#   wOOov += lib.einsum('IF,neMF->MIne', t1b, eris_ovOV)
-
-    wovoo += lib.einsum('if,nemf->nemi', t1a,      ovov)
-    wOVOO += lib.einsum('if,nemf->nemi', t1b,      OVOV)
-    wOVoo += lib.einsum('if,mfNE->NEmi', t1a, eris_ovOV) #may be a concern with complex algebra..
-    wovOO += lib.einsum('IF,neMF->neMI', t1b, eris_ovOV)
-
-    return wovoo, wOVoo, wovOO, wOVOO
-
-
 
 def Woovo(t1, t2, eris):
     t1a, t1b = t1
@@ -570,6 +553,7 @@ def Wovvo(t1, t2, eris):
     return wovvo, wovVO, wOVvo, wOVVO, woVVo, wOvvO
 
 def Wvvov(t1, t2, eris):
+    # FABIAN
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
     nocca, noccb, nvira, nvirb = t2ab.shape

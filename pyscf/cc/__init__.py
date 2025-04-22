@@ -78,6 +78,8 @@ from pyscf.cc import qcisd
 from pyscf import scf
 from pyscf.cc import rmpccsd_slow
 from pyscf.cc import umpccsd
+from pyscf.cc import umpccsd_lambda
+from pyscf.cc import umpcc_fast_driver
 
 def CCSD(mf, frozen=None, mo_coeff=None, mo_occ=None):
     if mf.istype('UHF'):
