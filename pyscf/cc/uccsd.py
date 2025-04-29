@@ -669,12 +669,11 @@ class UCCSD(ccsd.CCSDBase):
         return self.l1, self.l2
 
     def ccsd_t(self, t1=None, t2=None, eris=None):
-        from pyscf.cc import uccsd_t_slow
+        from pyscf.cc import uccsd_t
         if t1 is None: t1 = self.t1
         if t2 is None: t2 = self.t2
         if eris is None: eris = self.ao2mo(self.mo_coeff)
-#        return uccsd_t.kernel(self, eris, t1, t2, self.verbose)
-        return uccsd_t_slow.kernel(self, eris, t1, t2)
+        return uccsd_t.kernel(self, eris, t1, t2, self.verbose)
     uccsd_t = ccsd_t
 
     def make_rdm1(self, t1=None, t2=None, l1=None, l2=None, ao_repr=False,
