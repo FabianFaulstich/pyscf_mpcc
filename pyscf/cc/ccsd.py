@@ -105,7 +105,7 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
         normt = numpy.linalg.norm(tmpvec)
 
         if act_particle is not None and pert_triples:
-           tmpvec = mycc.amplitudes_to_vector_t3(t3act)
+           tmpvec = mycc.amplitudes_to_vector_t3(t3old)
            normt_t3 = numpy.linalg.norm(tmpvec)
 
         tmpvec = None
