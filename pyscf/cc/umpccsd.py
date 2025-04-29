@@ -904,7 +904,7 @@ def vector_to_amplitudes(vector, nmo, nocc):
 #T3
 
 def amplitudes_to_vector_t3(t3, out=None):
-    noccb,noccb,nocca,nvirb,nvirb,nvira = t3[2].shape
+    noccb,nocca,nocca,nvirb,nvira,nvira = t3[2].shape
     sizeaaa = (nocca**3) * (nvira**3)
     sizebbb = (noccb**3) * (nvirb**3)
     sizebba = (noccb**2) * (nvirb**2) * nocca * nvira
@@ -1159,8 +1159,8 @@ class UCCSD(ccsd.CCSD):
 
     def solve_lambda(self, act_hole, act_particle, t1=None, t2=None, l1=None, l2=None,
                      eris=None):
-#       from pyscf.cc import uccsd_lambda
         from pyscf.cc import umpccsd_lambda
+#       from pyscf.cc import uccsd_lambda
         if t1 is None: t1 = self.t1
         if t2 is None: t2 = self.t2
         if eris is None: eris = self.ao2mo(self.mo_coeff)

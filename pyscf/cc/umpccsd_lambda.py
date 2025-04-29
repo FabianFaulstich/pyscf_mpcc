@@ -1060,14 +1060,14 @@ def update_lambda_env(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle):
 
 #    tmpa  = t1a + numpy.einsum('kc,kjcb->jb', l1a_env, t2aa)
 #    tmpa += numpy.einsum('KC,jKbC->jb', l1b_env, t2ab)
-    tmpa  = numpy.einsum('KC,jKbC->jb', l1b_env, t2ab)
-    tmpa -= einsum('bd,jd->jb', mvv1, t1a)
+#    tmpa  = numpy.einsum('KC,jKbC->jb', l1b_env, t2ab)
+    tmpa = -einsum('bd,jd->jb', mvv1, t1a)
     tmpa -= einsum('lj,lb->jb', moo1, t1a)
 
 #    tmpb  = t1b + numpy.einsum('kc,kjcb->jb', l1b_env, t2bb)
 #    tmpb += numpy.einsum('kc,kJcB->JB', l1a_env, t2ab)
-    tmpb = numpy.einsum('kc,kJcB->JB', l1a_env, t2ab)
-    tmpb -= einsum('bd,jd->jb', mVV1, t1b)
+#    tmpb = numpy.einsum('kc,kJcB->JB', l1a_env, t2ab)
+    tmpb = -einsum('bd,jd->jb', mVV1, t1b)
     tmpb -= einsum('lj,lb->jb', mOO1, t1b)
     u1a += numpy.einsum('jbia,jb->ia', ovov, tmpa)
     u1a += numpy.einsum('iaJB,JB->ia', ovOV, tmpb)
