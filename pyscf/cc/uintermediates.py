@@ -242,6 +242,50 @@ def Wooov(t1, t2, eris):
     wOOov += lib.einsum('IF,neMF->MIne', t1b, eris_ovOV)
     return wooov, wooOV, wOOov, wOOOV
 
+
+
+def Wovoo(t1, eris):
+    t1a, t1b = t1
+    dtype = np.result_type(t1a, t1b)
+
+    eris_ovoo = np.asarray(eris.ovoo)
+    eris_OVOO = np.asarray(eris.OVOO)
+    eris_OVoo = np.asarray(eris.OVoo)
+    eris_ovOO = np.asarray(eris.ovOO)
+    ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
+    OVOO = eris_OVOO - eris_OVOO.transpose(2,1,0,3)
+#   wooov = np.array(     ovoo.transpose(2,3,0,1), dtype=dtype)
+#   wOOOV = np.array(     OVOO.transpose(2,3,0,1), dtype=dtype)
+#   wooOV = np.array(eris_OVoo.transpose(2,3,0,1), dtype=dtype)
+#   wOOov = np.array(eris_ovOO.transpose(2,3,0,1), dtype=dtype)
+#   eris_ovoo = eris_OVOO = eris_ovOO = eris_OVoo = None
+
+    wovoo = np.array(ovoo, dtype=dtype)
+    wOVOO = np.array(OVOO, dtype=dtype)
+    wovOO = np.array(eris_ovOO, dtype=dtype)
+    wOVoo = np.array(eris_OVoo, dtype=dtype)
+
+
+    eris_ovov = np.asarray(eris.ovov)
+    eris_OVOV = np.asarray(eris.OVOV)
+    eris_ovOV = np.asarray(eris.ovOV)
+    ovov = eris_ovov - eris_ovov.transpose(0,3,2,1)
+    OVOV = eris_OVOV - eris_OVOV.transpose(0,3,2,1)
+
+#   wooov += lib.einsum('if,mfne->mine', t1a,      ovov)
+#   wOOOV += lib.einsum('if,mfne->mine', t1b,      OVOV)
+#   wooOV += lib.einsum('if,mfNE->miNE', t1a, eris_ovOV)
+#   wOOov += lib.einsum('IF,neMF->MIne', t1b, eris_ovOV)
+
+    wovoo += lib.einsum('if,nemf->nemi', t1a,      ovov)
+    wOVOO += lib.einsum('if,nemf->nemi', t1b,      OVOV)
+    wOVoo += lib.einsum('if,mfNE->NEmi', t1a, eris_ovOV) #may be a concern with complex algebra..
+    wovOO += lib.einsum('IF,neMF->neMI', t1b, eris_ovOV)
+
+    return wovoo, wOVoo, wovOO, wOVOO
+
+
+
 def Woovo(t1, t2, eris):
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2

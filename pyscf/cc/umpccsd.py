@@ -29,6 +29,7 @@ from pyscf import lib
 from pyscf import ao2mo
 from pyscf.lib import logger
 from pyscf.cc import ccsd
+from pyscf.cc import umpcc_t_slow
 from pyscf.ao2mo import _ao2mo
 from pyscf.mp import ump2
 from pyscf import scf
@@ -388,10 +389,23 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     u2bb /= lib.direct_sum('ia+jb->ijab', eia_b, eia_b)
 
     # NOTE we only update the inactive orbitals!
-    idx_s_a, idx_d_a = get_index_tuples(act_hole[0], act_particle[0], nocca, nvira)
-    idx_s_b, idx_d_b = get_index_tuples(act_hole[1], act_particle[1], noccb, nvirb)
+   
+    idx_s_a_super = []
+    idx_s_b_super = []
+    idx_d_a_super = []
+    idx_d_b_super = []
+    idx_d_ab_super = []
+ 
+    for f in range(len(act_hole)):
+       idx_s_a, idx_d_a = get_index_tuples(act_hole[f][0], act_particle[f][0], nocca, nvira)
+       idx_s_b, idx_d_b = get_index_tuples(act_hole[f][1], act_particle[f][1], noccb, nvirb)
 
-    idx_d_ab = [(elem_a[0], elem_b[1],elem_a[2],elem_b[3]) for elem_a, elem_b in zip(idx_d_a,idx_d_b)]
+       idx_d_ab = [(elem_a[0], elem_b[1],elem_a[2],elem_b[3]) for elem_a, elem_b in zip(idx_d_a,idx_d_b)]
+       idx_s_a_super.append(idx_s_a)
+       idx_s_b_super.append(idx_s_b)
+       idx_d_a_super.append(idx_d_a)
+       idx_d_b_super.append(idx_d_b)
+       idx_d_ab_super.append(idx_d_ab)
 
     # NOTE that we have to pass the active indices in order to only
     #      update the inactive orbitals
@@ -400,19 +414,22 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     # u2aa_c = np.copy(u2aa)
     # u2bb_c = np.copy(u2bb)
     # u2ab_c = np.copy(u2ab)
+
+
+    for f in range(len(act_hole)):
     
-    for s in idx_singles[0]:
-        u1a[idx_s_a[s]] = t1[0][idx_s_a[s]]
-    for d in idx_doubles[0]:
-        u2aa[idx_d_a[d]] = t2[0][idx_d_a[d]]  
+        for s in idx_singles[0]:
+            u1a[idx_s_a_super[f][s]] = t1[0][idx_s_a_super[f][s]]
+        for d in idx_doubles[0]:
+            u2aa[idx_d_a_super[f][d]] = t2[0][idx_d_a_super[f][d]]  
 
-    for s in idx_singles[1]:
-        u1b[idx_s_b[s]] = t1[1][idx_s_b[s]]
-    for d in idx_doubles[1]: 
-        u2ab[idx_d_ab[d]] = t2[1][idx_d_ab[d]]  
+        for s in idx_singles[1]:
+            u1b[idx_s_b_super[f][s]] = t1[1][idx_s_b_super[f][s]]
+        for d in idx_doubles[1]: 
+            u2ab[idx_d_ab_super[f][d]] = t2[1][idx_d_ab_super[f][d]]  
 
-    for d in idx_doubles[2]: 
-        u2bb[idx_d_b[d]] = t2[2][idx_d_b[d]]  
+        for d in idx_doubles[2]: 
+            u2bb[idx_d_b_super[f][d]] = t2[2][idx_d_b_super[f][d]]  
 
     t1new = u1a, u1b
     t2new = u2aa, u2ab, u2bb
@@ -420,13 +437,16 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     return t1new, t2new
 
 
-
-def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles):
+def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles, pert_triples=False, t3old=None):
 
     time0 = logger.process_clock(), logger.perf_counter()
     log = logger.Logger(cc.stdout, cc.verbose)
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
+
+    DCA = False
+
+#    u3 = None
     nocca, noccb, nvira, nvirb = t2ab.shape
     mo_ea_o = eris.mo_energy[0][:nocca]
     mo_ea_v = eris.mo_energy[0][nocca:] + cc.level_shift
@@ -538,8 +558,33 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     Fooa += .5 * lib.einsum('inef,menf->mi', tilaa, ovov)
     Fova = np.einsum('nf,menf->me',t1a, ovov)
     u2aa += ovov.conj().transpose(0,2,1,3) * .5
-    wovvo -= 0.5*lib.einsum('jnfb,menf->mbej', t2aa, ovov)
-    woVvO += 0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, ovov)
+
+#Here we will construct the wovvo intermediate with two different approaches. For the active part we will construct the full d+e way.  
+
+#    wovvo -= 0.5*lib.einsum('jnfb,menf->mbej', t2aa, ovov)
+#    woVvO += 0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, ovov)
+
+
+    if (DCA):
+       DCA_ovvo = -0.5*lib.einsum('jnfb,menf->mbej', t2aa, eris_ovov)
+       DCA_oVvO = +0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, eris_ovov)
+
+# we will take only the active amplitudes to update with the antisymmetric term.. 
+
+       ovov_MENF = ovov[np.ix_(act_hole[0], act_particle[0], act_hole[0], act_particle[0])]
+
+       t2aa_act = t2aa[np.ix_(act_hole[0], act_hole[0], act_particle[0], act_particle[0])]   
+       t2ab_act = t2ab[np.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])]   
+
+       DCA_ovvo[np.ix_(act_hole[0], act_particle[0], act_particle[0], act_hole[0])] = -0.5*lib.einsum('jnfb,menf->mbej', t2aa_act, ovov_MENF)
+       DCA_oVvO[np.ix_(act_hole[0], act_particle[1], act_particle[0], act_hole[1])] = +0.5*lib.einsum('nJfB,menf->mBeJ', t2ab_act, ovov_MENF)
+       wovvo +=DCA_ovvo
+       woVvO +=DCA_oVvO
+    else:
+       wovvo -= 0.5*lib.einsum('jnfb,menf->mbej', t2aa, ovov)
+       woVvO += 0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, ovov)
+
+
     tmpaa = lib.einsum('jf,menf->mnej', t1a, ovov)
     wovvo -= lib.einsum('nb,mnej->mbej', t1a, tmpaa)
     eris_ovov = ovov = tmpaa = tilaa = None
@@ -564,8 +609,32 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     Foob += .5 * lib.einsum('inef,menf->mi', tilbb, OVOV)
     Fovb = np.einsum('nf,menf->me',t1b, OVOV)
     u2bb += OVOV.conj().transpose(0,2,1,3) * .5
-    wOVVO -= 0.5*lib.einsum('jnfb,menf->mbej', t2bb, OVOV)
-    wOvVo += 0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, OVOV)
+
+# we have to make the modifications here as well:
+
+#   wOVVO -= 0.5*lib.einsum('jnfb,menf->mbej', t2bb, OVOV)
+#   wOvVo += 0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, OVOV)
+
+    if (DCA):
+       DCA_OVVO = -0.5*lib.einsum('jnfb,menf->mbej', t2bb, eris_OVOV)
+       DCA_OvVo = +0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, eris_OVOV)
+
+# we will take only the active amplitudes to update with the antisymmetric term.. 
+
+       OVOV_MENF = OVOV[np.ix_(act_hole[1], act_particle[1], act_hole[1], act_particle[1])]
+
+       t2bb_act = t2aa[np.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])]   
+       t2ab_act = t2ab[np.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])]   
+
+       DCA_OVVO[np.ix_(act_hole[1], act_particle[1], act_particle[1], act_hole[1])] = -0.5*lib.einsum('jnfb,menf->mbej', t2bb_act, OVOV_MENF)
+       DCA_OvVo[np.ix_(act_hole[1], act_particle[0], act_particle[1], act_hole[0])] = +0.5*lib.einsum('jNbF,MENF->MbEj', t2ab_act, OVOV_MENF)
+
+       wOVVO +=DCA_OVVO
+       wOvVo +=DCA_OvVo
+    else:
+       wOVVO -= 0.5*lib.einsum('jnfb,menf->mbej', t2bb, OVOV)
+       wOvVo += 0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, OVOV)
+
     tmpbb = lib.einsum('jf,menf->mnej', t1b, OVOV)
     wOVVO -= lib.einsum('nb,mnej->mbej', t1b, tmpbb)
     eris_OVOV = OVOV = tmpbb = tilbb = None
@@ -604,6 +673,7 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     woVvO -= 0.5*lib.einsum('JNFB,meNF->mBeJ', t2bb, eris_ovOV)
     woVVo += 0.5*lib.einsum('jNfB,mfNE->mBEj', t2ab, eris_ovOV)
     wOvvO += 0.5*lib.einsum('nJbF,neMF->MbeJ', t2ab, eris_ovOV)
+
     tmpabab = lib.einsum('JF,meNF->mNeJ', t1b, eris_ovOV)
     tmpbaba = lib.einsum('jf,nfME->MnEj', t1a, eris_ovOV)
     woVvO -= lib.einsum('NB,mNeJ->mBeJ', t1b, tmpabab)
@@ -709,6 +779,17 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     u2bb = u2bb - u2bb.transpose(0,1,3,2)
     u2bb = u2bb - u2bb.transpose(1,0,2,3)
 
+    if (pert_triples):
+
+       u3new, u2_active = umpcc_t_slow.update_amps_t3(cc, t1, t2, t3old, eris, act_hole, act_particle)
+
+       u2_active_aa, u2_active_ab, u2_active_bb = u2_active
+
+       u2aa[np.ix_(act_hole[0], act_hole[0], act_particle[0], act_particle[0])] +=u2_active_aa   
+       u2ab[np.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])] +=u2_active_ab  
+       u2bb[np.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])] +=u2_active_bb  
+
+
     eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
     eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
     u1a /= eia_a
@@ -745,8 +826,11 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     t1new = u1a, u1b
     t2new = u2aa, u2ab, u2bb
 
-    return t1new, t2new
 
+    if (pert_triples):
+       return t1new, t2new, u3new
+    else:
+       return t1new, t2new
 
 def energy(cc, t1=None, t2=None, eris=None):
     '''UCCSD correlation energy'''
@@ -816,6 +900,49 @@ def vector_to_amplitudes(vector, nmo, nocc):
         t1b, t2bb = ccsd.vector_to_amplitudes_s4(vecb, nmob, noccb)
         t2ab = t2ab.copy().reshape(nocca,noccb,nvira,nvirb)
         return (t1a,t1b), (t2aa,t2ab,t2bb)
+
+#T3
+
+def amplitudes_to_vector_t3(t3, out=None):
+    noccb,nocca,nocca,nvirb,nvira,nvira = t3[2].shape
+    sizeaaa = (nocca**3) * (nvira**3)
+    sizebbb = (noccb**3) * (nvirb**3)
+    sizebba = (noccb**2) * (nvirb**2) * nocca * nvira
+    sizebaa = (nocca**2) * (nvira**2) * noccb * nvirb
+
+    vector = np.ndarray(sizeaaa+sizebbb+sizebaa+sizebba, t3[0].dtype, buffer=out)
+
+    vector[:sizeaaa] = t3[0].ravel().copy()
+    vector[sizeaaa:(sizeaaa+sizebbb)] = t3[1].ravel().copy()
+    vector[(sizeaaa+sizebbb):(sizeaaa+sizebbb+sizebaa)] = t3[2].ravel().copy()
+    vector[(sizeaaa+sizebbb+sizebaa):] = t3[3].ravel().copy()
+    return vector
+
+def vector_to_amplitudes_t3(vector, nmo, nocc):
+    nocca, noccb = nocc
+    nmoa, nmob = nmo
+    nvira, nvirb = nmoa-nocca, nmob-noccb
+    nocc = nocca + noccb
+    nvir = nvira + nvirb
+    nov = nocc * nvir
+    size = nov + nocc*(nocc-1)//2*nvir*(nvir-1)//2
+
+
+    sizeaaa = (nocca**3) * (nvira**3)
+    sizebbb = (noccb**3) * (nvirb**3)
+    sizebba = (noccb**2) * (nvirb**2) * nocca * nvira
+    sizebaa = (nocca**2) * (nvira**2) * noccb * nvirb
+
+    sections = np.cumsum([sizeaaa, sizebbb, sizebaa])
+    t3aaa, t3bbb, t3baa, t3bba = np.split(vector, sections)
+
+    t3aaa = t3aaa.copy().reshape(nocca,nocca,nocca,nvira,nvira,nvira)
+    t3bbb = t3bbb.copy().reshape(noccb,noccb,noccb,nvirb,nvirb,nvirb)
+    t3baa = t3baa.copy().reshape(noccb,nocca,nocca,nvirb,nvira,nvira)
+    t3bba = t3bba.copy().reshape(noccb,noccb,nocca,nvirb,nvirb,nvira)
+
+    return (t3aaa,t3bbb,t3baa,t3bba)
+
 
 def amplitudes_from_rccsd(t1, t2):
     t2aa = t2 - t2.transpose(0,1,3,2)
@@ -998,15 +1125,16 @@ class UCCSD(ccsd.CCSD):
         logger.timer(self, 'init mp2', *time0)
         return self.emp2, (t1a,t1b), (t2aa,t2ab,t2bb)
 
+
     energy = energy
     update_amps = update_amps
     update_amps_oomp2 = update_amps_oomp2
     _add_vvvv = _add_vvvv
     _add_vvVV = _add_vvVV
 
-    def kernel(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, t1=None, t2=None, eris=None, mbpt2=False):
-        return self.ccsd(act_hole, act_particle, idx_s, idx_d, oo_mp2, t1, t2, eris, mbpt2)
-    def ccsd(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, t1=None, t2=None, eris=None, mbpt2=False):
+    def kernel(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples=False, t1=None, t2=None, eris=None, mbpt2=False, t3old=None):
+        return self.ccsd(act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples, t1, t2, eris, mbpt2, t3old)
+    def ccsd(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples=False, t1=None, t2=None, eris=None, mbpt2=False, t3old=None):
         '''Ground-state unrestricted (U)CCSD.
 
         Kwargs:
@@ -1026,27 +1154,32 @@ class UCCSD(ccsd.CCSD):
                                 act_particle = act_particle,
                                 idx_s = idx_s, 
                                 idx_d = idx_d,
-                                oo_mp2 = oo_mp2)
+                                oo_mp2 = oo_mp2,
+                                pert_triples = pert_triples, t3old=t3old)
 
-    def solve_lambda(self, t1=None, t2=None, l1=None, l2=None,
+    def solve_lambda(self, act_hole, act_particle, t1=None, t2=None, l1=None, l2=None,
                      eris=None):
-        from pyscf.cc import uccsd_lambda
+        from pyscf.cc import umpccsd_lambda
+#       from pyscf.cc import uccsd_lambda
         if t1 is None: t1 = self.t1
         if t2 is None: t2 = self.t2
         if eris is None: eris = self.ao2mo(self.mo_coeff)
         self.converged_lambda, self.l1, self.l2 = \
-                uccsd_lambda.kernel(self, eris, t1, t2, l1, l2,
+                umpccsd_lambda.kernel(self, act_hole, act_particle, eris, t1, t2, l1, l2,
+#               uccsd_lambda.kernel(self, eris, t1, t2, l1, l2,
                                     max_cycle=self.max_cycle,
                                     tol=self.conv_tol_normt,
                                     verbose=self.verbose)
         return self.l1, self.l2
 
-    def ccsd_t(self, t1=None, t2=None, eris=None):
-        from pyscf.cc import uccsd_t
+    def ccsd_t(self, act_hole, act_particle, t3, t1=None, t2=None, l1=None, l2=None, eris=None):
+        from pyscf.cc import umpcc_t_slow
         if t1 is None: t1 = self.t1
         if t2 is None: t2 = self.t2
+        if l1 is None: t1 = self.l1
+        if l2 is None: t2 = self.l2
         if eris is None: eris = self.ao2mo(self.mo_coeff)
-        return uccsd_t.kernel(self, eris, t1, t2, self.verbose)
+        return umpcc_t_slow.lhs_umpcc_triples(self, t1, t2, l1, l2, t3, eris, act_hole, act_particle)
     uccsd_t = ccsd_t
 
     def make_rdm1(self, t1=None, t2=None, l1=None, l2=None, ao_repr=False,
@@ -1157,10 +1290,21 @@ class UCCSD(ccsd.CCSD):
     def amplitudes_to_vector(self, t1, t2, out=None):
         return amplitudes_to_vector(t1, t2, out)
 
+
+    def amplitudes_to_vector_t3(self, t3, out=None):
+        return amplitudes_to_vector_t3(t3, out)
+
+
     def vector_to_amplitudes(self, vector, nmo=None, nocc=None):
         if nocc is None: nocc = self.nocc
         if nmo is None: nmo = self.nmo
         return vector_to_amplitudes(vector, nmo, nocc)
+
+
+    def vector_to_amplitudes_t3(self, vector, nmo=None, nocc=None):
+        if nocc is None: nocc = self.nocc
+        if nmo is None: nmo = self.nmo
+        return vector_to_amplitudes_t3(vector, nmo, nocc)
 
     def vector_size(self, nmo=None, nocc=None):
         if nocc is None: nocc = self.nocc

@@ -388,6 +388,23 @@ def amplitudes_to_vector(t1, t2, out=None):
     vector[sizea+sizeb:] = t2[1].ravel()
     return vector
 
+
+def amplitudes_to_vector_t3(t3, out=None):
+    noccb,noccb,nocca,nvirb,nvirb,nvira = t3[2].shape
+    sizeaaa = (nocca**3) * (nvira**3)
+    sizebbb = (noccb**3) * (nvirb**3)
+    sizebba = (noccb**2) * (nvirb**2) * nocca * nvira
+    sizebaa = (nocca**2) * (nvira**2) * noccb * nvirb
+
+    vector = np.ndarray(sizeaaa+sizebbb+sizebaa+sizebba, t3[0].dtype, buffer=out)
+
+    vector[:sizeaaa] = t3[0].ravel()
+    vector[sizeaaa:(sizeaaa+sizebbb)] = t3[1].ravel()
+    vector[(sizeaaa+sizebbb):(sizeaaa+sizebbb+sizebaa)] = t3[2].ravel()
+    vector[(sizeaaa+sizebbb+sizebaa):] = t3[2].ravel()
+    return vector
+
+
 def vector_to_amplitudes(vector, nmo, nocc):
     nocca, noccb = nocc
     nmoa, nmob = nmo
@@ -408,6 +425,31 @@ def vector_to_amplitudes(vector, nmo, nocc):
         t1b, t2bb = ccsd.vector_to_amplitudes_s4(vecb, nmob, noccb)
         t2ab = t2ab.copy().reshape(nocca,noccb,nvira,nvirb)
         return (t1a,t1b), (t2aa,t2ab,t2bb)
+
+def vector_to_amplitudes_t3(vector, nmo, nocc):
+    nocca, noccb = nocc
+    nmoa, nmob = nmo
+    nvira, nvirb = nmoa-nocca, nmob-noccb
+    nocc = nocca + noccb
+    nvir = nvira + nvirb
+    nov = nocc * nvir
+    size = nov + nocc*(nocc-1)//2*nvir*(nvir-1)//2
+
+    sizeaaa = (nocca**3) * (nvira**3)
+    sizebbb = (noccb**3) * (nvirb**3)
+    sizebba = (noccb**2) * (nvirb**2) * nocca * nvira
+    sizebaa = (nocca**2) * (nvira**2) * noccb * nvirb
+
+    sections = np.cumsum([sizeaaa, sizebbb, sizebba])
+    t3aaa, t3bbb, t3bba, t3baa = np.split(vector, sections)
+    t3aaa = t3aaa.copy().reshape(nocca,nocca,nocca,nvira,nvira,nvira)
+    t3bbb = t3bbb.copy().reshape(noccb,noccb,noccb,nvirb,nvirb,nvirb)
+    t3baa = t3baa.copy().reshape(noccb,nocca,nocca,nvirb,nvira,nvira)
+    t3bba = t3bba.copy().reshape(noccb,noccb,nocca,nvirb,nvirb,nvira)
+
+    return (t3aaa,t3bbb,t3baa,t3bba)
+
+
 
 def amplitudes_from_rccsd(t1, t2):
     t2aa = t2 - t2.transpose(0,1,3,2)

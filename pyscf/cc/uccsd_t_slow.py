@@ -56,6 +56,8 @@ def kernel(mcc, eris, t1=None, t2=None):
     wvd = p6(w + v) / d3
     et = numpy.einsum('ijkabc,ijkabc', wvd.conj(), r)
 
+    print("value of et from t3aaa", et)
+
     # bbb
     d3 = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eIA)
     w = numpy.einsum('ijae,kceb->ijkabc', t2bb, numpy.asarray(eris.get_OVVV()).conj())
@@ -65,6 +67,8 @@ def kernel(mcc, eris, t1=None, t2=None):
     v+= numpy.einsum('jkbc,ai->ijkabc', t2bb, fVO) * .5
     wvd = p6(w + v) / d3
     et += numpy.einsum('ijkabc,ijkabc', wvd.conj(), r)
+
+    print("value of et from t3bbb", et)
 
     # baa
     w  = numpy.einsum('jIeA,kceb->IjkAbc', t2ab, numpy.asarray(eris.get_ovvv()).conj()) * 2
@@ -85,6 +89,10 @@ def kernel(mcc, eris, t1=None, t2=None):
     r /= d3
     et += numpy.einsum('ijkabc,ijkabc', w.conj(), r)
 
+
+    print("value of et from t3baa", et)
+
+
     # bba
     w  = numpy.einsum('ijae,kceb->ijkabc', t2ab, numpy.asarray(eris.get_OVVV()).conj()) * 2
     w += numpy.einsum('ijeb,kcea->ijkabc', t2ab, numpy.asarray(eris.get_OVvv()).conj()) * 2
@@ -103,6 +111,11 @@ def kernel(mcc, eris, t1=None, t2=None):
     d3 = lib.direct_sum('ia+jb+kc->ijkabc', eia, eIA, eIA)
     r /= d3
     et += numpy.einsum('ijkabc,ijkabc', w.conj(), r)
+
+
+
+    print("value of et from t3baa", et)
+
 
     et *= .25
     return et

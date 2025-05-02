@@ -26,6 +26,7 @@ from pyscf import lib
 from pyscf.lib import logger
 from pyscf import ao2mo
 from pyscf.ao2mo import _ao2mo
+from scipy.linalg import ldl
 from pyscf import __config__
 
 WITH_T2 = getattr(__config__, 'mp_mp2_with_t2', True)
@@ -45,7 +46,25 @@ def kernel(mp, mo_energy=None, mo_coeff=None, eris=None, with_t2=WITH_T2, verbos
 
     nocc = mp.nocc
     nvir = mp.nmo - nocc
-    eia = mo_energy[:nocc,None] - mo_energy[None,nocc:]
+    eia = -1.0*(mo_energy[:nocc,None] - mo_energy[None,nocc:])
+
+#   denom = lib.direct_sum('jb+ia->iajb', eia, eia)
+
+#   denom_transposed = numpy.transpose(denom, axes=(0, 2, 1, 3)) 
+
+#   denom_transposed = denom_transposed.reshape((nocc*nvir, nocc*nvir))
+#   denom = denom.reshape((nocc*nvir, nocc*nvir))
+
+#   lu, d, perm = ldl(denom, lower=0)  
+
+#   diagonal = numpy.diagonal(d)
+#   
+#   chol_thr = 1e-12
+#       
+#   num_chol = (abs(diagonal) > chol_thr).sum()
+#       
+#   print("number of cholesky vectors", num_chol, nocc*nvir)
+
 
     if with_t2:
         t2 = numpy.empty((nocc,nocc,nvir,nvir), dtype=eris.ovov.dtype)

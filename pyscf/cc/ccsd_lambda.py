@@ -34,7 +34,7 @@ from pyscf.cc import _ccsd
 # t2,l2 as ijab
 def kernel(mycc, eris=None, t1=None, t2=None, l1=None, l2=None,
            max_cycle=50, tol=1e-8, verbose=logger.INFO,
-           fintermediates=None, fupdate=None):
+           fintermediates=None, fupdate=None, act_hole=None, act_particle=None):
     if eris is None: eris = mycc.ao2mo()
     cput0 = (logger.process_clock(), logger.perf_counter())
     log = logger.new_logger(mycc, verbose)
@@ -50,6 +50,7 @@ def kernel(mycc, eris=None, t1=None, t2=None, l1=None, l2=None,
 
     imds = fintermediates(mycc, t1, t2, eris)
 
+
     if isinstance(mycc.diis, lib.diis.DIIS):
         adiis = mycc.diis
     elif mycc.diis:
@@ -61,17 +62,23 @@ def kernel(mycc, eris=None, t1=None, t2=None, l1=None, l2=None,
 
     conv = False
     for istep in range(max_cycle):
-        l1new, l2new = fupdate(mycc, t1, t2, l1, l2, eris, imds)
-        normt = numpy.linalg.norm(mycc.amplitudes_to_vector(l1new, l2new) -
-                                  mycc.amplitudes_to_vector(l1, l2))
-        l1, l2 = l1new, l2new
+        if act_particle is not None:
+           l1new, l2new = fupdate(mycc, t1, t2, l1, l2, eris, imds, act_hole, act_particle)
+           normt = numpy.linalg.norm(mycc.amplitudes_to_vector(l1new, l2new) -
+                               mycc.amplitudes_to_vector(l1, l2))
+           l1, l2 = l1new, l2new
+        else:
+           l1new, l2new = fupdate(mycc, t1, t2, l1, l2, eris, imds)
+           normt = numpy.linalg.norm(mycc.amplitudes_to_vector(l1new, l2new) -
+                               mycc.amplitudes_to_vector(l1, l2))
+           l1, l2 = l1new, l2new
         l1new = l2new = None
         l1, l2 = mycc.run_diis(l1, l2, istep, normt, 0, adiis)
         log.info('cycle = %d  norm(lambda1,lambda2) = %.6g', istep+1, normt)
         cput0 = log.timer('CCSD iter', *cput0)
         if normt < tol:
-            conv = True
-            break
+           conv = True
+           break
     return conv, l1, l2
 
 
