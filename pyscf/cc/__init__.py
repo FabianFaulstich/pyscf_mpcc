@@ -69,6 +69,7 @@ from pyscf.cc import ccsd_lambda
 from pyscf.cc import ccsd_rdm
 from pyscf.cc import addons
 from pyscf.cc import rccsd
+from pyscf.cc import rccsd_slow
 from pyscf.cc import uccsd
 from pyscf.cc import gccsd
 from pyscf.cc import eom_rccsd
@@ -115,7 +116,6 @@ def RCCSD(mf, frozen=None, mo_coeff=None, mo_occ=None):
 
     elif numpy.iscomplexobj(mo_coeff) or numpy.iscomplexobj(mf.mo_coeff):
         return rccsd.RCCSD(mf, frozen, mo_coeff, mo_occ)
-
     else:
         return ccsd.CCSD(mf, frozen, mo_coeff, mo_occ)
 RCCSD.__doc__ = ccsd.CCSD.__doc__
