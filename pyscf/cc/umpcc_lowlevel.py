@@ -6,7 +6,7 @@ from pyscf import df
 from pyscf.mp import ump2 as mp2
 from pyscf.mp.ump2 import make_rdm1, make_rdm2
 from pyscf import __config__
-from pyscf.mp.dfmp2_native import DFMP2
+from pyscf.mp.dfump2_native import DFMP2
 from pyscf.cc import ccsd
 
 
@@ -50,7 +50,7 @@ def kernel(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
     np.set_printoptions(linewidth=300, suppress=True)
     # NOTE have this in myll
     tol = 1e-6
-    maxcount = 50
+    maxcount = 100
 
     # NOTE initialize Ω
     # myll.t1 = np.zeros((myll.nocc, myll.nvir))
@@ -79,12 +79,12 @@ def kernel(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
         myll.t1 = t1
         myll.t2 = t2
      
-        print(f'Amplitude difference T1: {np.linalg.norm(t1[0] - t1[1])}')
-        print(f'Amplitude difference T2: {np.linalg.norm(mycc.t2[0] - mycc.t2[2])}')
+        # print(f'Amplitude difference T1: {np.linalg.norm(t1[0] - t1[1])}')
+        # print(f'Amplitude difference T2: {np.linalg.norm(mycc.t2[0] - mycc.t2[2])}')
         # breakpoint()
         count += 1
         err = res
-        print(f"It {count} Energy progress {DE:.6e} residual progress {res:.6e}")
+        print(f"It {count} Energy progress {DE:.8f} residual progress {res:.6e}")
     breakpoint()   
     return DE
 
@@ -130,9 +130,9 @@ def compute_CC2_energy(myll, t1, t2):
 def initialize_t1(myll):
 
     mymp = mp2.MP2(myll.mymf).run()
+    mydfmp = DFMP2(myll.mymf)
+    mydfmp.kernel()
 
-    #mydfmp = DFMP2(myll.mymf).run()
-    
     # t2 = myll.mycc.t2
     t2 = list(mymp.t2)
     # NOTE anti-symmetrized
@@ -147,7 +147,7 @@ def initialize_t1(myll):
 
     print(f"Computed MP2 initial guess")
     print(f"Comparing with UHF energy   : {myll.mymf.e_tot}")
-    print(f"Comparing with MP2 energy   : {mymp.e_tot} with {mymp.e_corr} corr. energy")
+    print(f"Comparing with DF MP2 energy: {mydfmp.e_tot} with {mydfmp.e_corr} corr. energy")
     # print(f"Comparing with DFMP2 energy : {mydfmp.e_tot} with {mymp.e_corr} corr. energy")
     print(
         f"Comparing with CCSD energy  : {myll.mycc.e_tot} with {myll.mycc.e_corr} corr. energy"
@@ -213,7 +213,7 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
     # Step 3
     Xa = np.einsum("Lia,ia->L", Lov, t1a)
     Xb = np.einsum("Lia,ia->L", LOV, t1b)
-    X = Xa + Xb
+    X = (Xa + Xb)
 
     # Step 4
     Ωvo += np.einsum("Ljk,ka,Lji->ai", Xoo, t1a, Joo)
@@ -223,7 +223,7 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
     ΩVO += np.einsum("Lai,L->ai", JVO, X)
 
     # NOTE singles contraction with F for non-diagonal basis
-    #Ωvo += np.einsum('ia,ia -> ai',t1, fock)q
+    #Ωvo += np.einsum('ia,ia -> ai',t1, fock)
     # NOTE include fov contractrion here 
     Ωvo += np.einsum('ib,ba -> ai',t1a,fvv)
     Ωvo -= np.einsum('ka,ik -> ai',t1a,foo)
@@ -251,11 +251,11 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
     YVO = np.einsum("aibj,Ljb->Lai", t2bb, LOV)
     YVO += np.einsum("aiBJ,Lia->LBJ", t2ab, Lov)
 
-    Ωvo += np.einsum("aijb,bj->ai", t2aa, Fov)
-    Ωvo += np.einsum("aijb,bj->ai", t2ab, FOV)
-    
-    ΩVO += np.einsum("aijb,bj->ai", t2bb, FOV)
-    ΩVO += np.einsum("aijb,bj->ai", t2ab, Fov)
+    Ωvo += np.einsum("aibj,jb->ai", t2aa, Fov)
+    Ωvo += np.einsum("aiBJ,JB->ai", t2ab, FOV)
+   
+    ΩVO += np.einsum("aibj,jb->ai", t2bb, FOV)
+    ΩVO += np.einsum("aiBJ,ia->BJ", t2ab, Fov)
 
     # Step 8
     Jvv = np.einsum("Ljb,ja->Lba", Lov, t1a) + Lvv
@@ -268,11 +268,24 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
 
     # Step 9
     # NOTE check the sign here!
-    e1a = np.einsum("Lij,ja->Lai", Xoo, t1a) + np.einsum("L,ia->Lai", X, t1a) + Jvo
-    e1b = np.einsum("Lij,ja->Lai", XOO, t1b) + np.einsum("L,ia->Lai", X, t1b) + JVO
+    #e1a = -1* np.einsum("Lij,ja->Lai", Xoo, t1a) + np.einsum("L,ia->Lai", X, t1a) + Jvo
+    #e1b = -1* np.einsum("Lij,ja->Lai", XOO, t1b) + np.einsum("L,ia->Lai", X, t1b) + JVO
+ 
+    #ΔEa = np.einsum("Lai,Lai", e1a, Yvo) 
+    #ΔEb = np.einsum("Lai,Lai", e1b, YVO)
+    
+    # -------------
+    # NOTE update 05/02
+    e1a = np.einsum("L,ia->Lia", X, t1a) + Lov
+    e1b = np.einsum("L,ia->Lia", X, t1b) + LOV
 
-    ΔEa = np.einsum("Lai,Lai", e1a, Yvo)
-    ΔEb = np.einsum("Lai,Lai", e1b, YVO)
+    ΔEa = np.einsum("Lia,Lai", e1a, Yvo) 
+    ΔEa -= np.einsum("Lai, Lia", np.einsum("Lij,ja->Lai", Xoo, t1a), Lov)
+    
+    ΔEb = np.einsum("Lia,Lai", e1b, YVO)
+    ΔEb -= np.einsum("Lai, Lia", np.einsum("Lij,ja->Lai", XOO, t1b), LOV)
+    # -------------
+
     ΔE = (ΔEa + ΔEb)/2 
 
     res = np.linalg.norm(myll.t1[0] + Ωvo.T / fock[0])
@@ -570,6 +583,50 @@ if __name__ == "__main__":
     from pyscf import gto
 
     test_co = True
+
+
+    # Testing CN
+
+    mol = gto.Mole()
+    mol.verbose = 0
+    mol.atom = [
+        ["C", [0.0, 0.0, 0.0]],
+        ["N", [1.177, 0.0, 0.0]]
+    ]
+
+    mol.spin = 1
+    mol.basis = "cc-pvdz"
+    mol.unit = 'Angstrom'
+    mol.build()
+
+    mf = mol.UHF().newton()
+    mf = mf.run()
+
+    mo1 = mf.stability()[0]
+    dm1 = mf.make_rdm1(mo1, mf.mo_occ)
+    mf = mf.run(dm1)
+    mo1 = mf.stability()[0]
+    mf = mf.newton().run(mo1, mf.mo_occ)
+    mf.stability()
+
+    mymp = mp2.MP2(mf).run()
+    mycc = cc.CCSD(mf).run()
+
+    print(f'Nuclear repulsion: {mol.get_enuc()}')
+    print(f'CFOUR reference  : 18.8831250637')
+
+    print(f'PySCF UHF energy : {mf.e_tot}')
+    print(f'CFOUR UHF energy : -92.212689093544')
+
+    print(f'PySCF MP2 corr. energy : {mymp.e_corr}')
+    print(f'CFOUR MP2 corr. energy : -0.225540711981')
+
+    mpccll = mpccLL(mf, mycc)
+    mpccll.diis = True
+    print(f'Reference CC2 Energy : -0.25842706596457')
+    mpccll.kernel()
+
+    breakpoint()
 
     if test_co:
         # Testing CO
