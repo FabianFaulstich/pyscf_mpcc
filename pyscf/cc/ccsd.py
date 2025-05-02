@@ -65,6 +65,7 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
         adiis = None
 
     conv = False
+
     for istep in range(max_cycle):
         if act_particle is not None and not oo_mp2:
             t1new, t2new = mycc.update_amps(t1, t2, eris, act_hole, act_particle, idx_s, idx_d)
