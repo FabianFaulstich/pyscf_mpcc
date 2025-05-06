@@ -673,10 +673,26 @@ scf.rohf.ROHF.MP2 = None
 
 
 def _mo_energy_without_core(mp, mo_energy):
-    return mo_energy[get_frozen_mask(mp)]
+    
+    # NOTE fixed here
+    if isinstance(mp._scf, scf.rhf.RHF):
+        return mo_energy[get_frozen_mask(mp)]
+    else:
+        mask = get_frozen_mask(mp)
+        maska = mask[:len(mask)//2]
+        maskb = mask[len(mask)//2:]
+        return [mo_energy[0][maska], mo_energy[1][maskb]]
+
 
 def _mo_without_core(mp, mo):
-    return mo[:,get_frozen_mask(mp)]
+    # NOTE fixed here
+    if isinstance(mp._scf, scf.rhf.RHF):
+        return mo[:,get_frozen_mask(mp)]
+    else:
+        mask = get_frozen_mask(mp)
+        maska = mask[:len(mask)//2]
+        maskb = mask[len(mask)//2:]
+        return [mo[0][:,maska], mo[1][:,maskb]]
 
 def _mem_usage(nocc, nvir):
     nmo = nocc + nvir
