@@ -236,14 +236,48 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
     FOV = np.einsum("Lbj,L->jb", JVO, X) - np.einsum("Lij,Lib->jb", XOO, LOV)
 
     # Step 6
-    erisaa = np.einsum("Lai,Ljb->aijb", Jvo, Jvo)
-    erisab = np.einsum("Lai,Ljb->aijb", Jvo, JVO)
-    erisbb = np.einsum("Lai,Ljb->aijb", JVO, JVO)
+    erisaa = np.einsum("Lai,Lbj->aibj", Jvo, Jvo)
+    erisab = np.einsum("Lai,Lbj->aibj", Jvo, JVO)
+    erisbb = np.einsum("Lai,Lbj->aibj", JVO, JVO)
 
     # Step 7
     t2aa = (erisaa - np.transpose(erisaa, (0, 3, 2, 1))) / myll.D[0]
     t2bb = (erisbb - np.transpose(erisbb, (0, 3, 2, 1))) / myll.D[2]
     t2ab = erisab / myll.D[1]
+
+    # ------------
+    # Update : 05/09 
+     
+    Erisaa = np.einsum("Lia,Ljb->aibj", Lov, Lov)
+    Erisbb = np.einsum("Lia,Ljb->aibj", LOV, LOV)
+
+    Erisaa = Erisaa - np.transpose(Erisaa, (0,3,2,1))
+    Erisbb = Erisbb - np.transpose(Erisbb, (0,3,2,1))
+
+    Erisab = np.einsum("Lia,LJB->aiBJ", Lov, LOV)
+
+    tau1aa = np.einsum('ia,jb->ijab', t1a, t1a)
+    tau1aa-= np.einsum('ia,jb->jiab', t1a, t1a)
+    tau1aa = tau1aa - tau1aa.transpose(0,1,3,2)
+    tau1aa *= .5
+    tau1aa = np.transpose(tau1aa, (2,0,3,1))
+    
+    tau1bb = np.einsum('ia,jb->ijab', t1b, t1b)
+    tau1bb-= np.einsum('ia,jb->jiab', t1b, t1b)
+    tau1bb = tau1bb - tau1bb.transpose(0,1,3,2)
+    tau1bb *= .5
+    tau1bb = np.transpose(tau1bb, (2,0,3,1))
+     
+    tau1ab = np.einsum('ia,JB->iJaB', t1a, t1b)
+    tau1ab += np.einsum('ia,JB->iJaB', t1a, t1b)
+    tau1ab *= .5
+    tau1ab = np.transpose(tau1ab, (2,0,3,1))
+
+    E2 = 0.25 * np.einsum('aibj, aibj', Erisaa, t2aa + tau1aa)
+    E2 += 0.25 * np.einsum('aibj, aibj', Erisbb, t2bb + tau1bb)
+    E2 += np.einsum('aibj, aibj', Erisab, t2ab + tau1ab)
+
+    # ------------
 
     Yvo = np.einsum("aibj,Ljb->Lai", t2aa, Lov)
     Yvo += np.einsum("aiBJ,LJB->Lai", t2ab, LOV)
@@ -296,6 +330,11 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
 
     t2 = [t2aa, t2ab, t2bb]
     # NOTE rename Ωvo to just Ω
+    
+    print(f'E2 :{E2} ')
+    print(f'ΔE :{ΔE} ')
+
+    breakpoint()
     return res, ΔE, myll.t1, t2
 
 
