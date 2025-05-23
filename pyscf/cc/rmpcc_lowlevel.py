@@ -191,6 +191,7 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
     Ωvo += np.einsum("Lba,Lbi->ai", Jvv, Yvo)
     Ωvo -= np.einsum("Lji,Laj->ai", Joo, Yvo)
 
+    # NOTE check the sign on the first term
     e1 = np.einsum("Lij,ja->Lai", Xoo, t1) + np.einsum("L,ia->Lai", X, t1) + Jvo
     ΔE = np.einsum("Lai,Lai", e1, Yvo)
 
