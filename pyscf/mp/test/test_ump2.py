@@ -53,7 +53,7 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(pt.e_corr_os, -0.12312431898078077, 8)
 
         pt.max_memory = 1
-        pt.frozen = None
+        pt.frozen = []
         emp2, t2 = pt.kernel()
         self.assertAlmostEqual(emp2, -0.16575150552336643, 8)
         self.assertAlmostEqual(pt.e_corr_ss, -0.042627186675330754, 8)
@@ -154,19 +154,20 @@ class KnownValues(unittest.TestCase):
         e = pt.kernel(with_t2=False)[0]
         self.assertAlmostEqual(e, -0.11264162733420097, 8)
 
-        #pt = mp.dfump2.DFUMP2(mf.density_fit('weigend'))
-        #pt.frozen = [1]
-        #e = pt.kernel()[0]
-        #self.assertAlmostEqual(e, -0.11264162733420097, 8)
+        pt = mp.dfump2.DFUMP2(mf.density_fit('weigend'))
+        pt.frozen = [1]
+        e = pt.kernel()[0]
+        self.assertAlmostEqual(e, -0.11264162733420097, 8)
 
-        #pt = mp.dfump2.DFUMP2(mf)
-        #pt.frozen = [1]
-        #pt.with_df = mf.density_fit('weigend').with_df
-        #e = pt.kernel()[0]
-        #self.assertAlmostEqual(e, -0.11264162733420097, 8)
+        pt = mp.dfump2.DFUMP2(mf)
+        pt.frozen = [1]
+        pt.with_df = mf.density_fit('weigend').with_df
+        e = pt.kernel()[0]
+        self.assertAlmostEqual(e, -0.11264162733420097, 8)
 
     def test_ump2_ao2mo_ovov(self):
         pt = mp.UMP2(mf)
+        pt.frozen = 0
         nocca, noccb = mol.nelec
         orboa = mf.mo_coeff[0][:,:nocca]
         orbva = mf.mo_coeff[0][:,nocca:]
@@ -272,7 +273,7 @@ class KnownValues(unittest.TestCase):
     def test_non_canonical_mp2(self):
         mf = scf.UHF(mol).run(max_cycle=1)
         pt = mp.MP2(mf)
-        self.assertAlmostEqual(pt.kernel()[0], -0.171693954168, 7)
+        self.assertAlmostEqual(pt.kernel()[0], -0.1707921460057042, 7)
 
 
 

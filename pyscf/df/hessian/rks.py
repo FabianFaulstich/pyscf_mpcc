@@ -42,8 +42,6 @@ def partial_hess_elec(hessobj, mo_energy=None, mo_coeff=None, mo_occ=None,
     mol = hessobj.mol
     mf = hessobj.base
     ni = mf._numint
-    if mf.nlc or ni.libxc.is_nlc(mf.xc):
-        raise NotImplementedError('RKS Hessian for NLC functional')
 
     if mo_energy is None: mo_energy = mf.mo_energy
     if mo_occ is None:    mo_occ = mf.mo_occ
@@ -84,6 +82,9 @@ def partial_hess_elec(hessobj, mo_energy=None, mo_coeff=None, mo_occ=None,
         for j0 in range(i0):
             de2[j0,i0] = de2[i0,j0].T
 
+    if mf.do_nlc():
+        de2 += rks_hess._get_enlc_deriv2(hessobj, mo_coeff, mo_occ, max_memory)
+
     log.timer('RKS partial hessian', *time0)
     return de2
 
@@ -98,6 +99,9 @@ def make_h1(hessobj, mo_coeff, mo_occ, chkfile=None, atmlst=None, verbose=None):
     mem_now = lib.current_memory()[0]
     max_memory = max(2000, mf.max_memory*.9-mem_now)
     h1ao = rks_hess._get_vxc_deriv1(hessobj, mo_coeff, mo_occ, max_memory)
+    if mf.do_nlc():
+        h1ao += rks_hess._get_vnlc_deriv1(hessobj, mo_coeff, mo_occ, max_memory)
+
     for ia, h1, vj1, vk1 in df_rhf_hess._gen_jk(
             hessobj, mo_coeff, mo_occ, chkfile, atmlst, verbose, with_k=hybrid):
         h1ao[ia] += h1 + vj1
@@ -109,21 +113,15 @@ def make_h1(hessobj, mo_coeff, mo_occ, chkfile=None, atmlst=None, verbose=None):
             for ia, h1, vj1, vk1 in df_rhf_hess._gen_jk(
                     hessobj, mo_coeff, mo_occ, chkfile, atmlst, verbose):
                 h1ao[ia] -= .5 * (alpha - hyb) * vk1
-
-    if chkfile is None:
-        return h1ao
-    else:
-        for ia in atmlst:
-            lib.chkfile.save(chkfile, 'scf_f1ao/%d'%ia, h1ao[ia])
-        return chkfile
+    return h1ao
 
 
 class Hessian(rks_hess.Hessian):
     '''Non-relativistic RKS hessian'''
     def __init__(self, mf):
-        self.auxbasis_response = 1
         rks_hess.Hessian.__init__(self, mf)
 
+    auxbasis_response = 1
     partial_hess_elec = partial_hess_elec
     make_h1 = make_h1
 
@@ -156,4 +154,3 @@ if __name__ == '__main__':
     hobj = Hessian(mf)
     e2 = hobj.kernel().transpose(0,2,1,3).reshape(n3,n3)
     print(lib.finger(e2) - -0.41387283263786201)
-

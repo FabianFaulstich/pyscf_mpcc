@@ -76,7 +76,7 @@ def energy_elec(mf, dm_kpts=None, h1e_kpts=None, vhf_kpts=None):
     mf.scf_summary['e1'] = e1.real
     mf.scf_summary['e2'] = e_coul.real
     logger.debug(mf, 'E1 = %s  E_coul = %s', e1, e_coul)
-    if khf.CHECK_COULOMB_IMAG and abs(e_coul.imag > mf.cell.precision*10):
+    if khf.CHECK_COULOMB_IMAG and abs(e_coul.imag) > mf.cell.precision*10:
         logger.warn(mf, "Coulomb energy has imaginary part %s. "
                     "Coulomb integrals (e-e, e-N) may not converge !",
                     e_coul.imag)
@@ -133,6 +133,13 @@ class KsymAdaptedKSCF(khf.KSCF):
     """
     KRHF with k-point symmetry
     """
+
+    _keys = {'use_ao_symmetry'}
+
+    get_occ = get_occ
+    get_rho = get_rho
+    energy_elec = energy_elec
+
     def __init__(self, cell, kpts=libkpts.KPoints(),
                  exxdiv=getattr(__config__, 'pbc_scf_SCF_exxdiv', 'ewald'),
                  use_ao_symmetry=True):
@@ -158,6 +165,20 @@ class KsymAdaptedKSCF(khf.KSCF):
         kpts_bz = kpts.kpts
         self.with_df.kpts = np.reshape(kpts_bz, (-1,3))
         self._kpts = kpts
+
+    @property
+    def kmesh(self):
+        from pyscf.pbc.tools.k2gamma import kpts_to_kmesh
+        kpts_bz = self._kpts.kpts
+        kmesh = kpts_to_kmesh(kpts_bz)
+        if len(kpts_bz) != np.prod(kmesh):
+            logger.WARN(self, 'K-points specified in %s are not Monkhorst-Pack %s grids',
+                        self, kmesh)
+        return kmesh
+
+    @kmesh.setter
+    def kmesh(self, x):
+        self.kpts = self.cell.make_kpts(x)
 
     def dump_flags(self, verbose=None):
         mol_hf.SCF.dump_flags(self, verbose)
@@ -186,27 +207,6 @@ class KsymAdaptedKSCF(khf.KSCF):
             self.with_df.dump_flags(verbose)
         return self
 
-    def get_init_guess(self, cell=None, key='minao'):
-        dm_kpts = khf.KSCF.get_init_guess(self, cell, key)
-        if dm_kpts.ndim == 2:
-            dm_kpts = np.asarray([dm_kpts]*self.kpts.nkpts_ibz)
-        elif len(dm_kpts) != self.kpts.nkpts_ibz:
-            dm_kpts = dm_kpts[self.kpts.ibz2bz]
-
-        ne = np.einsum('k,kij,kji', self.kpts.weights_ibz, dm_kpts, self.get_ovlp(cell)).real
-        nkpts = self.kpts.nkpts
-        ne *= nkpts
-        nelectron = float(self.cell.tot_electrons(nkpts))
-        if abs(ne - nelectron) > 0.01*nkpts:
-            logger.debug(self, 'Big error detected in the electron number '
-                         'of initial guess density matrix (Ne/cell = %g)!\n'
-                         '  This can cause huge error in Fock matrix and '
-                         'lead to instability in SCF for low-dimensional '
-                         'systems.\n  DM is normalized wrt the number '
-                         'of electrons %s', ne/nkpts, nelectron/nkpts)
-            dm_kpts *= (nelectron / ne).reshape(-1,1,1)
-        return dm_kpts
-
     @lib.with_doc(khf.get_ovlp.__doc__)
     def get_ovlp(self, cell=None, kpts=None):
         if isinstance(kpts, np.ndarray):
@@ -225,7 +225,7 @@ class KsymAdaptedKSCF(khf.KSCF):
     def get_jk(self, cell=None, dm_kpts=None, hermi=1, kpts=None, kpts_band=None,
                with_j=True, with_k=True, omega=None, **kwargs):
         if isinstance(kpts, np.ndarray):
-            return super(KsymAdaptedKSCF, self).get_jk(cell, dm_kpts, hermi, kpts, kpts_band,
+            return super().get_jk(cell, dm_kpts, hermi, kpts, kpts_band,
                                                        with_j, with_k, omega, **kwargs)
         if cell is None: cell = self.cell
         if kpts is None: kpts = self.kpts
@@ -252,14 +252,14 @@ class KsymAdaptedKSCF(khf.KSCF):
 
     def init_guess_by_chkfile(self, chk=None, project=None, kpts=None):
         if isinstance(kpts, np.ndarray):
-            return super(KsymAdaptedKSCF, self).init_guess_by_chkfile(chk, project, kpts)
+            return super().init_guess_by_chkfile(chk, project, kpts)
         if kpts is None: kpts = self.kpts
-        return super(KsymAdaptedKSCF, self).init_guess_by_chkfile(chk, project, kpts.kpts_ibz)
+        return super().init_guess_by_chkfile(chk, project, kpts.kpts_ibz)
 
     def dump_chk(self, envs):
         if self.chkfile:
             mol_hf.SCF.dump_chk(self, envs)
-            with h5py.File(self.chkfile, 'a') as fh5:
+            with lib.H5FileWrap(self.chkfile, 'a') as fh5:
                 fh5['scf/kpts'] = self.kpts.kpts_ibz #FIXME Shall we rebuild kpts? If so, more info is needed.
         return self
 
@@ -306,10 +306,6 @@ class KsymAdaptedKSCF(khf.KSCF):
                        'mo_coeff': self.mo_coeff, 'mo_occ': self.mo_occ})
         return self
 
-    get_occ = get_occ
-    get_rho = get_rho
-    energy_elec = energy_elec
-
     def to_khf(self):
         '''transform to non-symmetry object
         '''
@@ -347,14 +343,41 @@ class KsymAdaptedKSCF(khf.KSCF):
                      krks_ksymm.KRKS : krks.KRKS,
                      kuks_ksymm.KUKS : kuks.KUKS}
 
-        out = mol_addons._object_without_soscf(self, known_cls, remove_df=False)
+        out = mol_addons._object_without_soscf(self, known_cls, False)
         out.__dict__.pop('kpts', None)
-        out.with_df = self.with_df
         return update_mo_(self, out)
+
+    def sfx2c1e(self):
+        raise NotImplementedError
+    x2c = x2c1e = sfx2c1e
 
 
 class KsymAdaptedKRHF(KsymAdaptedKSCF, khf.KRHF):
-    def nuc_grad_method(self):
-        raise NotImplementedError()
+
+    to_ks = khf.KRHF.to_ks
+    convert_from_ = khf.KRHF.convert_from_
+
+    def get_init_guess(self, cell=None, key='minao', s1e=None):
+        if s1e is None:
+            s1e = self.get_ovlp(cell)
+        dm_kpts = mol_hf.SCF.get_init_guess(self, cell, key)
+        if dm_kpts.ndim == 2:
+            dm_kpts = np.asarray([dm_kpts]*self.kpts.nkpts_ibz)
+        elif len(dm_kpts) != self.kpts.nkpts_ibz:
+            dm_kpts = dm_kpts[self.kpts.ibz2bz]
+
+        ne = lib.einsum('k,kij,kji', self.kpts.weights_ibz, dm_kpts, s1e).real
+        nkpts = self.kpts.nkpts
+        ne *= nkpts
+        nelectron = float(self.cell.tot_electrons(nkpts))
+        if abs(ne - nelectron) > 0.01*nkpts:
+            logger.debug(self, 'Big error detected in the electron number '
+                         'of initial guess density matrix (Ne/cell = %g)!\n'
+                         '  This can cause huge error in Fock matrix and '
+                         'lead to instability in SCF for low-dimensional '
+                         'systems.\n  DM is normalized wrt the number '
+                         'of electrons %s', ne/nkpts, nelectron/nkpts)
+            dm_kpts *= (nelectron / ne).reshape(-1,1,1)
+        return dm_kpts
 
 KRHF = KsymAdaptedKRHF

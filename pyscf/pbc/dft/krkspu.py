@@ -55,7 +55,7 @@ def get_veff(ks, cell=None, dm=None, dm_last=0, vhf_last=0, hermi=1,
             A density matrix or a list of density matrices
 
     Returns:
-        Veff : (nkpts, nao, nao) or (*, nkpts, nao, nao) ndarray
+        Veff : ``(nkpts, nao, nao)`` or ``(*, nkpts, nao, nao)`` ndarray
         Veff = J + Vxc + V_U.
     """
     if cell is None: cell = ks.cell
@@ -63,7 +63,7 @@ def get_veff(ks, cell=None, dm=None, dm_last=0, vhf_last=0, hermi=1,
     if kpts is None: kpts = ks.kpts
 
     # J + V_xc
-    vxc = super(ks.__class__, ks).get_veff(cell=cell, dm=dm, dm_last=dm_last,
+    vxc = super(ks.__class__, ks).get_veff(cell, dm, dm_last=dm_last,
                                            vhf_last=vhf_last, hermi=hermi, kpts=kpts,
                                            kpts_band=kpts_band)
 
@@ -238,9 +238,16 @@ class KRKSpU(krks.KRKS):
     """
     RKSpU class adapted for PBCs with k-point sampling.
     """
+
+    _keys = {"U_idx", "U_val", "C_ao_lo", "U_lab"}
+
+    get_veff = get_veff
+    energy_elec = energy_elec
+    to_hf = lib.invalid_method('to_hf')
+
     def __init__(self, cell, kpts=np.zeros((1,3)), xc='LDA,VWN',
                  exxdiv=getattr(__config__, 'pbc_scf_SCF_exxdiv', 'ewald'),
-                 U_idx=[], U_val=[], C_ao_lo='minao', minao_ref='MINAO'):
+                 U_idx=[], U_val=[], C_ao_lo='minao', minao_ref='MINAO', **kwargs):
         """
         DFT+U args:
             U_idx: can be
@@ -257,7 +264,7 @@ class KRKSpU(krks.KRKS):
                      string, in 'minao'.
             minao_ref: reference for minao orbitals, default is 'MINAO'.
         """
-        super(self.__class__, self).__init__(cell, kpts, xc=xc, exxdiv=exxdiv)
+        super(self.__class__, self).__init__(cell, kpts, xc=xc, exxdiv=exxdiv, **kwargs)
 
         set_U(self, U_idx, U_val)
 
@@ -270,40 +277,6 @@ class KRKSpU(krks.KRKS):
             self.C_ao_lo = np.asarray(C_ao_lo)
         if self.C_ao_lo.ndim == 4:
             self.C_ao_lo = self.C_ao_lo[0]
-        self._keys = self._keys.union(["U_idx", "U_val", "C_ao_lo", "U_lab"])
-
-    get_veff = get_veff
-    energy_elec = energy_elec
 
     def nuc_grad_method(self):
         raise NotImplementedError
-
-if __name__ == '__main__':
-    from pyscf.pbc import gto
-    np.set_printoptions(3, linewidth=1000, suppress=True)
-    cell = gto.Cell()
-    cell.unit = 'A'
-    cell.atom = 'C 0.,  0.,  0.; C 0.8917,  0.8917,  0.8917'
-    cell.a = '''0.      1.7834  1.7834
-                1.7834  0.      1.7834
-                1.7834  1.7834  0.    '''
-
-    cell.basis = 'gth-dzvp'
-    cell.pseudo = 'gth-pade'
-    cell.verbose = 7
-    cell.build()
-    kmesh = [2, 2, 2]
-    kpts = cell.make_kpts(kmesh, wrap_around=True)
-    #U_idx = ["2p", "2s"]
-    #U_val = [5.0, 2.0]
-    U_idx = ["1 C 2p"]
-    U_val = [5.0]
-
-    mf = KRKSpU(cell, kpts, U_idx=U_idx, U_val=U_val, C_ao_lo='minao',
-                minao_ref='gth-szv')
-    mf.conv_tol = 1e-10
-    print (mf.U_idx)
-    print (mf.U_val)
-    print (mf.C_ao_lo.shape)
-    print (mf.kernel())
-

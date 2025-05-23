@@ -22,12 +22,10 @@ Ref:
 J. Chem. Phys. 147, 164119 (2017)
 '''
 
-import copy
 import numpy
 from pyscf.lib import logger
 from pyscf.pbc.df import df_jk
 from pyscf.pbc.df import aft_jk
-from pyscf.pbc.lib.kpts import KPoints
 
 #
 # Divide the Coulomb potential to two parts.  Computing short range part in
@@ -47,14 +45,13 @@ def density_fit(mf, auxbasis=None, mesh=None, with_df=None):
         with_df : MDF object
     '''
     from pyscf.pbc.df import mdf
+    from pyscf.pbc.scf.khf import KSCF
     if with_df is None:
-        if getattr(mf, 'kpts', None) is not None:
+        if isinstance(mf, KSCF):
             kpts = mf.kpts
         else:
             kpts = numpy.reshape(mf.kpt, (1,3))
 
-        if isinstance(kpts, KPoints):
-            kpts = kpts.kpts
         with_df = mdf.MDF(mf.cell, kpts)
         with_df.max_memory = mf.max_memory
         with_df.stdout = mf.stdout
@@ -63,7 +60,7 @@ def density_fit(mf, auxbasis=None, mesh=None, with_df=None):
         if mesh is not None:
             with_df.mesh = mesh
 
-    mf = copy.copy(mf)
+    mf = mf.copy()
     mf.with_df = with_df
     mf._eri = None
     return mf

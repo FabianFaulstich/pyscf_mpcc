@@ -19,7 +19,7 @@
 '''
 ddCOSMO TDA, TDHF, TDDFT gradients
 
-The implementaitons are based on modules
+The implementations are based on modules
 pyscf.grad.tdrhf
 pyscf.grad.tdrks
 pyscf.grad.tduhf
@@ -37,7 +37,7 @@ from pyscf import dft
 from pyscf import df
 from pyscf.dft import numint
 from pyscf.solvent import ddcosmo
-from pyscf.solvent import ddcosmo_grad
+from pyscf.solvent.grad import ddcosmo_grad
 from pyscf.solvent._attach_solvent import _Solvation
 from pyscf.grad import rks as rks_grad
 from pyscf.grad import tdrks as tdrks_grad
@@ -53,49 +53,57 @@ def make_grad_object(grad_method):
     if grad_method.base.with_solvent.frozen:
         raise RuntimeError('Frozen solvent model is not avialbe for energy gradients')
 
-    grad_method_class = grad_method.__class__
-    class WithSolventGrad(grad_method_class):
-        def __init__(self, grad_method):
-            self.__dict__.update(grad_method.__dict__)
-            self.de_solvent = None
-            self.de_solute = None
-            self._keys = self._keys.union(['de_solvent', 'de_solute'])
+    name = (grad_method.base.with_solvent.__class__.__name__
+            + grad_method.__class__.__name__)
+    return lib.set_class(WithSolventGrad(grad_method),
+                         (WithSolventGrad, grad_method.__class__), name)
 
-        def grad_elec(self, xy, singlet, atmlst=None):
-            if isinstance(self.base._scf, dft.uks.UKS):
-                return tduks_grad_elec(self, xy, atmlst, self.max_memory, self.verbose)
-            elif isinstance(self.base._scf, dft.rks.RKS):
-                return tdrks_grad_elec(self, xy, singlet, atmlst, self.max_memory, self.verbose)
-            elif isinstance(self.base._scf, scf.uhf.UHF):
-                return tduhf_grad_elec(self, xy, atmlst, self.max_memory, self.verbose)
-            elif isinstance(self.base._scf, scf.hf.RHF):
-                return tdrhf_grad_elec(self, xy, singlet, atmlst, self.max_memory, self.verbose)
+class WithSolventGrad:
+    _keys = {'de_solvent', 'de_solute'}
 
-        # TODO: if moving to python3, change signature to
-        # def kernel(self, *args, dm=None, atmlst=None, **kwargs):
-        def kernel(self, *args, **kwargs):
-            dm = kwargs.pop('dm', None)
-            if dm is None:
-                dm = self.base._scf.make_rdm1(ao_repr=True)
+    def __init__(self, grad_method):
+        self.__dict__.update(grad_method.__dict__)
+        self.de_solvent = None
+        self.de_solute = None
 
-            self.de_solvent = ddcosmo_grad.kernel(self.base.with_solvent, dm)
-            self.de_solute = grad_method_class.kernel(self, *args, **kwargs)
-            self.de = self.de_solute + self.de_solvent
+    def undo_solvent(self):
+        cls = self.__class__
+        name_mixin = self.base.with_solvent.__class__.__name__
+        obj = lib.view(self, lib.drop_class(cls, WithSolventGrad, name_mixin))
+        del obj.de_solvent
+        del obj.de_solute
+        return obj
 
-            if self.verbose >= logger.NOTE:
-                logger.note(self, '--------------- %s (+%s) gradients ---------------',
-                            self.base.__class__.__name__,
-                            self.base.with_solvent.__class__.__name__)
-                self._write(self.mol, self.de, self.atmlst)
-                logger.note(self, '----------------------------------------------')
-            return self.de
+    def grad_elec(self, xy, singlet, atmlst=None):
+        if isinstance(self.base._scf, dft.uks.UKS):
+            return tduks_grad_elec(self, xy, atmlst, self.max_memory, self.verbose)
+        elif isinstance(self.base._scf, dft.rks.RKS):
+            return tdrks_grad_elec(self, xy, singlet, atmlst, self.max_memory, self.verbose)
+        elif isinstance(self.base._scf, scf.uhf.UHF):
+            return tduhf_grad_elec(self, xy, atmlst, self.max_memory, self.verbose)
+        elif isinstance(self.base._scf, scf.hf.RHF):
+            return tdrhf_grad_elec(self, xy, singlet, atmlst, self.max_memory, self.verbose)
 
-        def _finalize(self):
-            # disable _finalize. It is called in grad_method.kernel method
-            # where self.de was not yet initialized.
-            pass
+    def kernel(self, *args, dm=None, **kwargs):
+        if dm is None:
+            dm = self.base._scf.make_rdm1(ao_repr=True)
 
-    return WithSolventGrad(grad_method)
+        self.de_solvent = ddcosmo_grad.kernel(self.base.with_solvent, dm)
+        self.de_solute = super().kernel(*args, **kwargs)
+        self.de = self.de_solute + self.de_solvent
+
+        if self.verbose >= logger.NOTE:
+            logger.note(self, '--------------- %s (+%s) gradients ---------------',
+                        self.base.__class__.__name__,
+                        self.base.with_solvent.__class__.__name__)
+            self._write(self.mol, self.de, self.atmlst)
+            logger.note(self, '----------------------------------------------')
+        return self.de
+
+    def _finalize(self):
+        # disable _finalize. It is called in grad_method.kernel method
+        # where self.de was not yet initialized.
+        pass
 
 
 def tdrhf_grad_elec(td_grad, x_y, singlet=True, atmlst=None,
@@ -153,7 +161,8 @@ def tdrhf_grad_elec(td_grad, x_y, singlet=True, atmlst=None,
 
     with lib.temporary_env(mf.with_solvent, equilibrium_solvation=True):
         # set singlet=None, generate function for CPHF type response kernel
-        vresp = mf.gen_response(singlet=None, hermi=1)
+        vresp = mf.gen_response(singlet=None, hermi=1,
+                                with_nlc=not td_grad.base.exclude_nlc)
         def fvind(x):  # For singlet, closed shell ground state
             dm = reduce(numpy.dot, (orbv, x.reshape(nvir,nocc)*2, orbo.T))
             v1ao = vresp(dm+dm.T)
@@ -324,7 +333,8 @@ def tdrks_grad_elec(td_grad, x_y, singlet=True, atmlst=None,
 
     with lib.temporary_env(mf.with_solvent, equilibrium_solvation=True):
         # set singlet=None, generate function for CPHF type response kernel
-        vresp = mf.gen_response(singlet=None, hermi=1)
+        vresp = mf.gen_response(singlet=None, hermi=1,
+                                with_nlc=not td_grad.base.exclude_nlc)
         def fvind(x):
             dm = reduce(numpy.dot, (orbv, x.reshape(nvir,nocc)*2, orbo.T))
             v1ao = vresp(dm+dm.T)
@@ -505,7 +515,7 @@ def tduhf_grad_elec(td_grad, x_y, atmlst=None, max_memory=2000, verbose=logger.I
     wvob += numpy.einsum('ac,ai->ci', veff0momb[noccb:,noccb:], xmyb) * 2
 
     with lib.temporary_env(mf.with_solvent, equilibrium_solvation=True):
-        vresp = mf.gen_response(hermi=1)
+        vresp = mf.gen_response(hermi=1, with_nlc=not td_grad.base.exclude_nlc)
         def fvind(x):
             dm1 = numpy.empty((2,nao,nao))
             xa = x[0,:nvira*nocca].reshape(nvira,nocca)
@@ -746,7 +756,7 @@ def tduks_grad_elec(td_grad, x_y, atmlst=None, max_memory=2000, verbose=logger.I
         veff0momb = numpy.zeros((nmob,nmob))
 
     with lib.temporary_env(mf.with_solvent, equilibrium_solvation=True):
-        vresp = mf.gen_response(hermi=1)
+        vresp = mf.gen_response(hermi=1, with_nlc=not td_grad.base.exclude_nlc)
         def fvind(x):
             dm1 = numpy.empty((2,nao,nao))
             xa = x[0,:nvira*nocca].reshape(nvira,nocca)

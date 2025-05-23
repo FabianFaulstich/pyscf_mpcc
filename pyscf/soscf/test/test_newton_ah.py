@@ -103,6 +103,15 @@ def tearDownModule():
     del h2o_z0, h2o_z1, h2o_z0_s, h2o_z1_s, h4_z0_s, h4_z1_s
 
 class KnownValues(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
+        dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
+
+    @classmethod
+    def tearDownClass(cls):
+        dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = cls.original_grids
+
     def test_nr_rhf(self):
         mf = scf.RHF(h2o_z0)
         mf.max_cycle = 1
@@ -133,6 +142,15 @@ class KnownValues(unittest.TestCase):
         nr.max_cycle = 2
         nr.conv_tol_grad = 1e-5
         self.assertAlmostEqual(nr.kernel(), -75.58051984397145, 9)
+
+        nr1 = scf.newton(mf)
+        nr1.max_cycle = 0 # Should reproduce energy of the initial guess
+        nr1.kernel()
+        self.assertAlmostEqual(nr1.e_tot, mf.e_tot, 10)
+
+        nr1.max_cycle = 2
+        nr1.kernel()
+        self.assertAlmostEqual(nr1.e_tot, nr.e_tot, 10)
 
     def test_nr_uhf_cart(self):
         mol = h2o_z1.copy()
@@ -320,12 +338,14 @@ class KnownValues(unittest.TestCase):
         self.assertTrue(mf._eri is None)
         self.assertTrue(mf._scf._eri is None)
         self.assertAlmostEqual(mf.e_tot, -75.983944727996, 9)
+        self.assertEqual(mf.__class__.__name__, 'SecondOrderDFRHF')
 
         mf = scf.RHF(h2o_z0).newton().density_fit().run()
         self.assertTrue(mf._eri is None)
         self.assertTrue(mf._scf._eri is not None)
         self.assertAlmostEqual(mf.e_tot, -75.9839484980661, 9)
-
+        mf = mf.undo_newton()
+        self.assertEqual(mf.__class__.__name__, 'RHF')
 
     def test_rohf_dinfh(self):
         mol = gto.M(atom='Ti 0 0 0; O 0 0 1.9',
@@ -338,6 +358,7 @@ class KnownValues(unittest.TestCase):
         mf = mf.newton().run()
         self.assertTrue(mf.converged)
         self.assertAlmostEqual(mf.e_tot, -914.539361470649, 9)
+        self.assertEqual(mf.undo_newton().__class__.__name__, 'SymAdaptedROHF')
 
     def test_rohf_so3(self):
         mol = gto.M(atom='C', basis='ccpvdz', spin=4, symmetry=True)
@@ -362,6 +383,11 @@ class KnownValues(unittest.TestCase):
         mf = mol.ROHF().newton().run()
         mf.irrep_nelec = {'s+0': 4}
         self.assertAlmostEqual(mf.e_tot, -54.3973578450836, 9)
+
+    def test_no_virtual(self):
+        mol = gto.M(atom='He', basis='sto3g')
+        mf = mol.RHF().newton().run()
+        self.assertAlmostEqual(mf.e_tot, -2.80778395753997, 9)
 
 
 if __name__ == "__main__":

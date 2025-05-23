@@ -1033,9 +1033,9 @@ void PBCVHF_direct_drv_nodddd(
         free(qidx_iijj);
 }
 
-void PBCVHFsetnr_direct_scf(int (*intor)(), CINTOpt *cintopt, int16_t *qindex,
-                            int *ao_loc, int *atm, int natm,
-                            int *bas, int nbas, double *env)
+void PBCVHFnr_int2e_q_cond(int (*intor)(), CINTOpt *cintopt, int16_t *qindex,
+                           int *ao_loc, int *atm, int natm,
+                           int *bas, int nbas, double *env)
 {
         size_t Nbas = nbas;
         size_t Nbas2 = Nbas * Nbas;
@@ -1109,8 +1109,15 @@ void PBCVHFsetnr_direct_scf(int (*intor)(), CINTOpt *cintopt, int16_t *qindex,
 }
 }
 
-void PBCVHFsetnr_sindex(int16_t *sindex, int *atm, int natm,
-                        int *bas, int nbas, double *env)
+void PBCVHFsetnr_direct_scf(int (*intor)(), CINTOpt *cintopt, int16_t *qindex,
+                            int *ao_loc, int *atm, int natm,
+                            int *bas, int nbas, double *env)
+{
+        PBCVHFnr_int2e_q_cond(intor, cintopt, qindex, ao_loc, atm, natm, bas, nbas, env);
+}
+
+void PBCVHFnr_sindex(int16_t *sindex, int *atm, int natm,
+                     int *bas, int nbas, double *env)
 {
         size_t Nbas = nbas;
         size_t Nbas1 = nbas + 1;
@@ -1167,7 +1174,7 @@ void PBCVHFsetnr_sindex(int16_t *sindex, int *atm, int natm,
 {
         float fac_guess = .5f - logf(omega2)/4;
         int ijb, ib, jb, i0, j0, i1, j1, i, j, li, lj;
-        float dx, dy, dz, ai, aj, ci, cj, aij, a1, fi, fj, rr, rij, dri, drj;
+        float dx, dy, dz, ai, aj, ci, cj, aij, a1, rr;
         float log_fac, theta, theta_r, r_guess, v;
 #pragma omp for schedule(dynamic, 1)
         for (ijb = 0; ijb < ngroups*(ngroups+1)/2; ijb++) {
@@ -1186,8 +1193,6 @@ void PBCVHFsetnr_sindex(int16_t *sindex, int *atm, int natm,
                 cj = cs[jb];
 
                 aij = ai + aj;
-                fi = ai / aij;
-                fj = aj / aij;
                 a1 = ai * aj / aij;
                 theta = omega2/(omega2+aij);
                 r_guess = sqrtf(-logf(1e-9f) / (aij * theta));
@@ -1202,10 +1207,7 @@ void PBCVHFsetnr_sindex(int16_t *sindex, int *atm, int natm,
                         dy = ry[i] - ry[j];
                         dz = rz[i] - rz[j];
                         rr = dx * dx + dy * dy + dz * dz;
-                        rij = sqrtf(rr);
-                        dri = fj * rij + theta_r;
-                        drj = fi * rij + theta_r;
-                        v = li*logf(dri) + lj*logf(drj) - a1*rr + log_fac;
+                        v = (li+lj)*logf(MAX(theta_r, 1.f)) - a1*rr + log_fac;
                         sindex[i*Nbas+j] = v * LOG_ADJUST;
                 } }
                 if (ib > jb) {
@@ -1219,4 +1221,10 @@ void PBCVHFsetnr_sindex(int16_t *sindex, int *atm, int natm,
 }
         free(exps);
         free(exps_group_loc);
+}
+
+void PBCVHFsetnr_sindex(int16_t *sindex, int *atm, int natm,
+                        int *bas, int nbas, double *env)
+{
+        PBCVHFnr_sindex(sindex, atm, natm, bas, nbas, env);
 }

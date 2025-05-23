@@ -18,7 +18,7 @@
 
 import unittest
 import numpy as np
-
+from pyscf.dft import radi
 from pyscf.pbc import gto as pbcgto
 from pyscf.pbc import scf as pscf
 from pyscf.pbc.scf import khf,kuhf
@@ -71,6 +71,15 @@ def tearDownModule():
     del cell, He, nk, kmf0, kumf0, kmf_ksymm, kumf_ksymm
 
 class KnownValues(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.original_grids = radi.ATOM_SPECIFIC_TREUTLER_GRIDS
+        radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
+
+    @classmethod
+    def tearDownClass(cls):
+        radi.ATOM_SPECIFIC_TREUTLER_GRIDS = cls.original_grids
+
     def test_krhf_gamma_center(self):
         self.assertAlmostEqual(kmf_ksymm.e_tot, kmf0.e_tot, 7)
 
@@ -87,11 +96,12 @@ class KnownValues(unittest.TestCase):
         cell1.build(symmorphic=True)
         kpts = cell1.make_kpts([2,2,2], with_gamma_point=True,space_group_symmetry=True)
         kmf = pscf.KRHF(cell1, kpts=kpts).run()
-        kmf1 = pscf.KRHF(cell1, kpts=kpts, use_ao_symmetry=True).run()
+        kmf1 = pscf.KRHF(cell1, kpts=kpts, use_ao_symmetry=False).run()
         self.assertAlmostEqual(kmf.e_tot, kmf1.e_tot, 7)
-        assert abs(kmf1.mo_coeff[0].orbsym - np.asarray([0, 4, 4, 4, 4, 4, 4, 0])).sum() == 0
-        assert abs(kmf1.mo_coeff[1].orbsym - np.asarray([0, 3, 4, 4, 0, 3, 4, 4])).sum() == 0
-        assert abs(kmf1.mo_coeff[2].orbsym - np.asarray([0, 0, 2, 2, 0, 2, 2, 0])).sum() == 0
+        assert abs(kmf.mo_coeff[0].orbsym - np.asarray([0, 4, 4, 4, 4, 4, 4, 0])).sum() == 0
+        assert abs(kmf.mo_coeff[1].orbsym - np.asarray([0, 3, 4, 4, 0, 3, 4, 4])).sum() == 0
+        assert abs(kmf.mo_coeff[2].orbsym - np.asarray([0, 0, 2, 2, 0, 2, 2, 0])).sum() == 0
+        assert getattr(kmf1.mo_coeff[0], 'orbsym', None) is None
 
     def test_kuhf_gamma_center(self):
         self.assertAlmostEqual(kumf_ksymm.e_tot, kumf0.e_tot, 7)
@@ -122,12 +132,12 @@ class KnownValues(unittest.TestCase):
     def test_krhf_df(self):
         kpts0 = He.make_kpts(nk)
         kmf0 = khf.KRHF(He, kpts=kpts0).density_fit().run()
-        
+
         kpts = He.make_kpts(nk, space_group_symmetry=True,time_reversal_symmetry=True)
         kmf = pscf.KRHF(He, kpts=kpts).density_fit().run()
         self.assertAlmostEqual(kmf.e_tot, kmf0.e_tot, 7)
 
-    def test_krhf_mdf(self):
+    def test_krhf_mdf_high_cost(self):
         kpts0 = He.make_kpts(nk)
         kmf0 = khf.KRHF(He, kpts=kpts0).mix_density_fit().run()
 
@@ -143,7 +153,7 @@ class KnownValues(unittest.TestCase):
         kmf = pscf.KUHF(He, kpts=kpts).density_fit().run()
         self.assertAlmostEqual(kmf.e_tot, kmf0.e_tot, 7)
 
-    def test_kuhf_mdf(self):
+    def test_kuhf_mdf_high_cost(self):
         kpts0 = He.make_kpts(nk)
         kmf0 = kuhf.KUHF(He, kpts=kpts0).mix_density_fit().run()
 

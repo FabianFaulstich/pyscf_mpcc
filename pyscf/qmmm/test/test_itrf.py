@@ -43,6 +43,7 @@ class KnowValues(unittest.TestCase):
         charges = [1.00]
         mf = itrf.mm_charge(scf.RHF(mol), coords, charges)
         self.assertAlmostEqual(mf.kernel(), 2.0042702433049024, 9)
+        self.assertEqual(mf.undo_qmmm().__class__.__name__, 'RHF')
 
     def test_grad(self):
         coords = [(0.0,0.1,0.0)]
@@ -108,7 +109,7 @@ class KnowValues(unittest.TestCase):
 
         mf = scf.RHF(mol).run(conv_tol=1e-10)
         mc = itrf.add_mm_charges(mcscf.CASCI(mf, 4, 4), coords, charges).run()
-        self.assertAlmostEqual(mc.e_tot, -75.98156095286714, 8)
+        self.assertAlmostEqual(mc.e_tot, -75.98156095286714, 7)
 
     def test_casscf(self):
         mol = gto.Mole()

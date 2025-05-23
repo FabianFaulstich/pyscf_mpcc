@@ -107,6 +107,21 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(e, -76.025166662910223, 9)
         self.assertAlmostEqual(lib.fp(g1), 0.12457973399092415, 6)
 
+        pt = mf.MP2()
+        pt.frozen = [0, 1]
+        gscan = pt.nuc_grad_method().as_scanner()
+        e, g1 = gscan(mol)
+        self.assertTrue(gscan.converged)
+        self.assertAlmostEqual(e, -76.07095754926583, 9)
+        self.assertAlmostEqual(lib.fp(g1), -0.028399476189179818, 6)
+
+        pt.frozen = 2
+        gscan = pt.nuc_grad_method().as_scanner()
+        e, g1 = gscan(mol)
+        self.assertTrue(gscan.converged)
+        self.assertAlmostEqual(e, -76.07095754926583, 9)
+        self.assertAlmostEqual(lib.fp(g1), -0.028399476189179818, 6)
+
     def test_with_x2c_scanner(self):
         with lib.light_speed(20.):
             pt = mp.mp2.MP2(mf.x2c())
@@ -152,6 +167,14 @@ class KnownValues(unittest.TestCase):
         mol = gto.M(atom='N 0 0 0; N 0 0 1.2', basis='631g', symmetry=True)
         g = mol.RHF.run().MP2().run().Gradients().kernel()
         self.assertAlmostEqual(lib.fp(g), 0.049987975650731625, 6)
+
+    # issue 1985
+    def test_cart_gto(self):
+        mol1 = mol.copy()
+        mol1.cart = True
+        mol1.basis = '6-31g*'
+        g = mol.RHF.run().MP2().run().Gradients().kernel()
+        self.assertAlmostEqual(lib.fp(g), -0.03568120792884476, 6)
 
 
 if __name__ == "__main__":

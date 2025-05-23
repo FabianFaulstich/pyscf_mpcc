@@ -67,8 +67,8 @@ class KnownValues(unittest.TestCase):
         mf.kernel()
 
         popa, popb = mf.mulliken_meta()[0]
-        self.assertAlmostEqual(lib.fp(popa), 1.5403023058, 7)
-        self.assertAlmostEqual(lib.fp(popb), 1.5403023058, 7)
+        self.assertAlmostEqual(lib.fp(popa), 1.2700920989, 7)
+        self.assertAlmostEqual(lib.fp(popb), 1.2700920989, 7)
 
         popa, popb = k2gamma.k2gamma(mf).mulliken_meta()[0]
         self.assertAlmostEqual(lib.fp(popa), 0.8007278745, 7)
@@ -88,10 +88,14 @@ class KnownValues(unittest.TestCase):
         kpts = cell.make_kpts(kmesh, space_group_symmetry=True)
         kmf = scf.KRKS(cell, kpts).density_fit()
         kmf.kernel()
-        c_g_ao = k2gamma.k2gamma(kmf).mo_coeff
+        mf = k2gamma.k2gamma(kmf)
+        c_g_ao = mf.mo_coeff
 
         scell = tools.super_cell(cell, kmesh)
         mf_sc = scf.RKS(scell).density_fit()
+        self.assertEqual(mf.__class__, mf_sc.__class__)
+        self.assertEqual(mf.xc, kmf.xc)
+
         s = mf_sc.get_ovlp()
         mf_sc.run()
         sc_mo = mf_sc.mo_coeff
@@ -139,6 +143,11 @@ class KnownValues(unittest.TestCase):
         kpts = cell.get_abs_kpts(scaled_kpts)
         kmesh = k2gamma.kpts_to_kmesh(cell, kpts)
         self.assertEqual(kmesh.tolist(), [2, 4, 11])
+
+        cell = gto.M(atom='He 0 0 0', basis=[[0, (2.3, 1)]], a=np.eye(3)*3, verbose=0)
+        kpts = cell.make_kpts([6,1,1])
+        kmesh = k2gamma.kpts_to_kmesh(cell, kpts)
+        self.assertEqual(kmesh.tolist(), [3, 1, 1])
 
 
 if __name__ == '__main__':
