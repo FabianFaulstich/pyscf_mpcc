@@ -8,6 +8,10 @@ class MPCC(lib.StreamObject):
         self._scf = mf
 
         self.lowlevel = lowlevel.MPCC_LL(mf)
+        self.lowlevel.con_tol = 1e-6
+        self.lowlevel.max_its = 50
+
+        self.lowlevel.kernel()
 
         # Setting MPCC attributes 
         # Do NOT modify these attributes, they are not input options

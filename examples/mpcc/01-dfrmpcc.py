@@ -19,4 +19,7 @@ if __name__ == "__main__":
     #mycc = cc.CCSD(mf).density_fit().run()
 
     mympcc = mpcc.MPCC(mf)
+    
     breakpoint()
+    mympcc.compute_three_center_ints()
+
