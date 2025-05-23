@@ -28,12 +28,6 @@ class MPCC_LL:
         self.mo_energy = mf.mo_energy
         self.mo_coeff = mf.mo_coeff
 
-        # NOTE Keeping this just for now as look-up table, remove later!
-        # self.moa = self.eris.mo_coeff
-        # self.nocca = self.eris.nocc
-        # self.nao = self.moa.shape[0]
-        # self.nmoa = self.moa.shape[1]
-
         self.nvir = self.nao - self.nocc
         self.nvir_pair = self.nvir * (self.nvir + 1) // 2
         self.compute_three_center_ints()
@@ -133,9 +127,6 @@ class MPCC_LL:
         Ω += np.einsum("Ljk,ka,Lji->ai", Xoo, t1, Joo)
         Ω += np.einsum("Lai,L->ai", Jvo, X)
 
-        # NOTE singles contraction with F for non-diagonal basis
-        #Ωvo += np.einsum('ia,ia -> ai',t1, fock)
-        # NOTE include fov contractrion here 
         Ω += np.einsum('ib,ba -> ai',t1,fvv)
         Ω -= np.einsum('ka,ik -> ai',t1,foo)
 

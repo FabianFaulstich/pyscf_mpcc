@@ -11,3 +11,6 @@ class RMPCC(mpcc.MPCC):
             self.with_df.auxbasis = df.make_auxbasis(mf.mol, mp2fit=True)
         self._keys.update(['with_df'])
 
+        # Call integral construction in here
+        # assigne Chemistry ERI object
+

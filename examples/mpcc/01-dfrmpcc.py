@@ -18,8 +18,9 @@ if __name__ == "__main__":
     mymp = DFMP2(mf).run()
     #mycc = cc.CCSD(mf).density_fit().run()
 
+    # No computation
     mympcc = mpcc.MPCC(mf)
-    
-    breakpoint()
-    mympcc.compute_three_center_ints()
 
+    breakpoint()
+    # Computation (incl. computing integrals, etc)
+    mympcc.kernel()

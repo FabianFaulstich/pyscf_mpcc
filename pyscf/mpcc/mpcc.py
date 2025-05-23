@@ -7,6 +7,9 @@ class MPCC(lib.StreamObject):
         self.mol = mf.mol
         self._scf = mf
 
+        # Hold the integrals here? -> ChemistryERI
+
+
         self.lowlevel = lowlevel.MPCC_LL(mf)
         self.lowlevel.con_tol = 1e-6
         self.lowlevel.max_its = 50
@@ -15,3 +18,7 @@ class MPCC(lib.StreamObject):
 
         # Setting MPCC attributes 
         # Do NOT modify these attributes, they are not input options
+
+        # "Screened_interaction"
+        # "High-level"
+
