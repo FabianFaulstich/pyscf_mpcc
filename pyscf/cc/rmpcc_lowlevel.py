@@ -180,6 +180,7 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
     Ωvo -= np.einsum('ka,ik -> ai',t1,foo)
 
     Fov = np.einsum("Lbj,L->jb", Jvo, X) - np.einsum("Lij,Lib->jb", Xoo, Lov)
+#    Fov = np.einsum("Ljb,L->jb", Lov, X) - np.einsum("Lij,Lib->jb", Xoo, Lov)
 
     eris = np.einsum("Lai,Ljb->aijb", Jvo, Jvo)
 
@@ -446,6 +447,82 @@ if __name__ == "__main__":
     from pyscf import scf
     from pyscf import gto
 
+
+
+    # Testing LiF
+    
+    mol = gto.Mole()
+    mol.verbose = 3
+#    mol.unit = 'bohr'
+    mol.atom = [
+        ["Li", [0.0, 0.0, 0.0]],
+        ["F", [0.0, 0.0, 1.564]]
+    ]
+
+    mol.basis = "cc-pvtz"
+    mol.build()
+    mf = df.density_fit(scf.RHF(mol), auxbasis='ccpvtzfit')
+    mf = mf.newton().run()
+    mo1 = mf.stability()[0]
+    dm1 = mf.make_rdm1(mo1, mf.mo_occ)
+    mf = mf.run(dm1)
+
+    mycc = cc.CCSD(mf).run()
+
+    mpccll = mpccLL(mf, mycc)
+    mpccll.diis = True
+    print(f'Reference Energy : -0.371111485169')
+    ecc2 = mpccll.kernel()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # Testing H2S
+    
+    mol = gto.Mole()
+    mol.verbose = 3
+    mol.atom = [
+        ["S", [0.000,  0.0000,  0.1030]],
+        ["H", [0.000,  0.9616, -0.8239]],
+        ["H", [0.000, -0.9616, -0.8239]],
+    ]
+
+    mol.basis = "cc-pvtz"
+    mol.build()
+    mf = df.density_fit(scf.RHF(mol), auxbasis='ccpvtz_ri')
+    mf = mf.run()
+    mycc = cc.CCSD(mf).run()
+
+    mpccll = mpccLL(mf, mycc)
+    mpccll.diis = True
+    print(f'Reference Energy, PVDZ: -0.204867860525')
+    print(f'Reference Energy, PVTZ: -0.228008960828')
+    ecc2 = mpccll.kernel()
+
+
+
+
+
+
+
+
+
+
+
     # Testing CO
     
     mol = gto.Mole()
@@ -455,21 +532,23 @@ if __name__ == "__main__":
         ["O", [0.0, 0.0, 1.4]]
     ]
 
-    mol.basis = "cc-pvdz"
+    mol.basis = "cc-pvtz"
     mol.build()
-    mf = scf.RHF(mol).run()
+    mf = df.density_fit(scf.RHF(mol), auxbasis='ccpvtzfit')
+    mf = mf.run()
     mycc = cc.CCSD(mf).run()
 
     mpccll = mpccLL(mf, mycc)
     mpccll.diis = True
     print(f'Reference Energy : -0.371111485169')
-    mpccll.kernel()
+    ecc2 = mpccll.kernel()
 
 
     # Testing H2O
     
     mol = gto.Mole()
-    mol.verbose = 0
+#    mol.unit = 'bohr'
+    mol.verbose = 3
     mol.atom = [
         [8, (0.0, 0.0, 0.0)],
         [1, (0.0, -0.757, 0.587)],
@@ -478,11 +557,15 @@ if __name__ == "__main__":
 
     mol.basis = "cc-pvdz"
     mol.build()
-    mf = scf.RHF(mol).run()
+    mf = df.density_fit(scf.RHF(mol), auxbasis='ccpvtzfit')
+    mf = mf.run()
+#    mf = scf.RHF(mol).run()
     mycc = cc.CCSD(mf).run()
 
     mpccll = mpccLL(mf, mycc)
-    mpccll.diis = False
-    print(f'Reference Energy -0.204867860525')
+    mpccll.diis = True
+    print(f'Reference Energy, PVDZ: -0.204867860525')
+    print(f'Reference Energy, PVTZ: -0.276890412759')
     ecc2 = mpccll.kernel()
+
 
