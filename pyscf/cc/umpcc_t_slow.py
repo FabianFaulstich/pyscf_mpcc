@@ -332,10 +332,6 @@ def update_amps_t3(mcc, t1, t2, t3, eris, act_hole, act_particle):
     v += u3bba - u3bba.transpose(1,0,2,3,4,5)
     v -= lib.einsum('IJmABc,mk->IJkABc',t3bba, imds.Foo_act)  
 
-#Now add symmetrization of the u3 tensors:
-#    x = r6(u3aaa)     
-#    y = r6(u3bbb)     
-
 # divide by denominator..
 
     u3aaa /=d3aaa_active
@@ -440,10 +436,10 @@ def _iterative_kernel(mcc, w, t1 = None, t2 = None, verbose=None):
 
 
 def make_intermediates(mcc, t1, t2, eris, act_hole, act_particle):
-#    cput0 = (logger.process_clock(), logger.perf_counter())
-#    log = logger.Logger(self.stdout, self.verbose)
+#   cput0 = (logger.process_clock(), logger.perf_counter())
+#   log = logger.Logger(self.stdout, self.verbose)
 
-#    t1, t2, eris = self.t1, self.t2, self.eris
+#   t1, t2, eris = self.t1, self.t2, self.eris
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
     nocca, noccb, nvira, nvirb = t2ab.shape
@@ -477,12 +473,15 @@ def make_intermediates(mcc, t1, t2, eris, act_hole, act_particle):
 # Woovo 
     Woovo, WooVO, WOOvo, WOOVO = uintermediates.Woovo(t1, t2, eris)
 #Wvvvo
-    Wvvvo, WvvVO, WVVvo, WVVVO = uintermediates.Wvvvo(t1, t2, eris)
-
+    Wvvvo, WvvVO, WVVvo, WVVVO = uintermediates.Wvvvo_t3(t1, t2, eris)
+#    Wvvvo, WvvVO, WVVvo, WVVVO = uintermediates.Wvvvo(t1, t2, eris)
+#Wvvvo_act
+###    Wvvvo_act, WvvVO_act, WVVvo_act, WVVVO_act = get_vvvv_to_imds(mcc, t1, eris, act_hole, act_particle)
 #Wvvov and Wovoo
 
     Wvvov, WvvOV, WVVov, WVVOV = uintermediates.Wvvov(t1, t2, eris)
     Wovoo, WOVoo, WovOO, WOVOO = uintermediates.Wovoo(t1, eris)
+
 
 #Wovov
 #anti-symmetrize this array:
@@ -509,11 +508,10 @@ def make_intermediates(mcc, t1, t2, eris, act_hole, act_particle):
     imds.WOOvo_act = WOOvo[numpy.ix_(numpy.arange(noccb), act_hole[1], act_particle[0], act_hole[0])]
     imds.WOOVO_act = WOOVO[numpy.ix_(numpy.arange(noccb), act_hole[1], act_particle[1], act_hole[1])]
 
-    imds.Wvvvo_act = Wvvvo[numpy.ix_(act_particle[0],numpy.arange(nvira), act_particle[0], act_hole[0])]
-    imds.WvvVO_act = WvvVO[numpy.ix_(act_particle[0],numpy.arange(nvira), act_particle[1], act_hole[1])]
-    imds.WVVvo_act = WVVvo[numpy.ix_(act_particle[1],numpy.arange(nvirb), act_particle[0], act_hole[0])]
-    imds.WVVVO_act = WVVVO[numpy.ix_(act_particle[1],numpy.arange(nvirb), act_particle[1], act_hole[1])]
-
+    imds.Wvvvo_act =  Wvvvo[numpy.ix_(act_particle[0],numpy.arange(nvira), act_particle[0], act_hole[0])] #+ Wvvvo_act
+    imds.WvvVO_act =  WvvVO[numpy.ix_(act_particle[0],numpy.arange(nvira), act_particle[1], act_hole[1])] #+ WvvVO_act
+    imds.WVVvo_act =  WVVvo[numpy.ix_(act_particle[1],numpy.arange(nvirb), act_particle[0], act_hole[0])]#+ WVVvo_act
+    imds.WVVVO_act =  WVVVO[numpy.ix_(act_particle[1],numpy.arange(nvirb), act_particle[1], act_hole[1])]#+ WVVVO_act
 
     imds.Wvvov_act = Wvvov[numpy.ix_(act_particle[0], act_particle[0], act_hole[0], act_particle[0])]
     imds.WvvOV_act = WvvOV[numpy.ix_(act_particle[0], act_particle[0], act_hole[1], act_particle[1])]
@@ -741,6 +739,54 @@ def lhs_umpcc_triples(mcc, t1, t2, l1, l2, t3, eris, act_hole, act_particle):
     return et
 
 
+def pert_doubles(mcc, t1, t2, l1, l2, eris, act_hole, act_particle):
+    from pyscf import ao2mo
+
+    l1a,l1b = l1
+    l2aa,l2ab,l2bb = l2
+
+    t1a,t1b = l1
+    t2aa,t2ab,t2bb = t2
+
+    nocca, noccb, nvira, nvirb = l2ab.shape
+    dtype = numpy.result_type(l1a, l1b, l2aa, l2ab, l2bb)
+
+    inact_particle_a = numpy.delete(numpy.arange(nvira), act_particle[0])
+    inact_particle_b = numpy.delete(numpy.arange(nvirb), act_particle[1])
+
+    inact_hole_a = numpy.delete(numpy.arange(nocca), act_hole[0])
+    inact_hole_b = numpy.delete(numpy.arange(noccb), act_hole[1])
+
+    inact_particle = (inact_particle_a, inact_particle_b)
+    inact_hole = (inact_hole_a, inact_hole_b)
+
+    vvvv = ao2mo.restore(1, numpy.asarray(eris.vvvv), nvira)
+    VVVV = ao2mo.restore(1, numpy.asarray(eris.VVVV), nvirb)
+
+    vvvv_new = vvvv - vvvv.transpose(0,3,2,1)
+    VVVV_new = VVVV - VVVV.transpose(0,3,2,1)
+    vvVV = uintermediates._get_vvVV(eris)
+
+    et = 0.0
+
+    #aa
+    v  = lib.einsum("acbd, ijcd ->ijab", vvvv_new[numpy.ix_(inact_particle[0], act_particle[0], inact_particle[0], act_particle[0])], t2aa[numpy.ix_(act_hole[0], act_hole[0], act_particle[0], act_particle[0])])
+    v += lib.einsum("aikc, kjcb ->ijab", voov_new[numpy.ix_(inact_particle[0], act_particle[0], inact_particle[0], act_particle[0])], t2aa[numpy.ix_(act_hole[0], act_hole[0], act_particle[0], act_particle[0])])
+    et = lib.einsum('ijab,ijab', l2aa[numpy.ix_(act_hole[0], act_hole[0], inact_particle[0], inact_particle[0])], v)*(1.0/4)
+
+    #bb
+
+    v = lib.einsum("acbd, ijcd ->ijab", VVVV_new[numpy.ix_(inact_particle[1], act_particle[1], inact_particle[1], act_particle[1])], t2bb[numpy.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])])
+    et += lib.einsum('ijab,ijab', l2bb[numpy.ix_(act_hole[1], act_hole[1], inact_particle[1], inact_particle[1])], v)*(1.0/4)
+
+    #ab
+    v = lib.einsum("acbd, ijcd ->ijab", vvVV[numpy.ix_(inact_particle[0], act_particle[0], inact_particle[1], act_particle[1])], t2ab[numpy.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])])
+    et += lib.einsum('ijab,ijab', l2ab[numpy.ix_(act_hole[0], act_hole[1], inact_particle[0], inact_particle[1])], v)
+
+
+    return et
+
+
 
 def iterative_update_amps_t3(mcc, t1, t2, t3, eris, act_hole, act_particle):
     '''Update non-canonical MP2 amplitudes'''
@@ -760,7 +806,6 @@ def iterative_update_amps_t3(mcc, t1, t2, t3, eris, act_hole, act_particle):
 
     def cyclic_particle(u):
         return (u + u.transpose(0,1,2,4,5,3)+u.transpose(0,1,2,5,3,4))     
-
 
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
@@ -962,56 +1007,55 @@ def iterative_update_amps_t3(mcc, t1, t2, t3, eris, act_hole, act_particle):
 #                    (1)                                  (1)
 # contribution of T_3   to the residue of T_2: [w_vvov, T_3   ]
 
- #  res  = lib.einsum('ijmace,bcme->ijab', t3aaa, imds.Wvvov_act)*0.5
- #  res  += lib.einsum('MijEac,bcME->ijab', t3baa, imds.WvvOV_act)
+    res  = lib.einsum('ijmace,bcme->ijab', t3aaa, imds.Wvvov_act)*0.5
+    res  += lib.einsum('MijEac,bcME->ijab', t3baa, imds.WvvOV_act)
 
- #  u2aa += res - res.transpose(0,1,3,2) 
+    u2aa += res - res.transpose(0,1,3,2) 
 
 
- #  res   = lib.einsum('IJMACE,BCME->IJAB', t3bbb, imds.WVVOV_act)*0.5
- #  res  += lib.einsum('IJmACe,BCme->IJAB', t3bba, imds.WVVov_act)
+    res   = lib.einsum('IJMACE,BCME->IJAB', t3bbb, imds.WVVOV_act)*0.5
+    res  += lib.einsum('IJmACe,BCme->IJAB', t3bba, imds.WVVov_act)
 
- #  u2bb += res - res.transpose(0,1,3,2) 
+    u2bb += res - res.transpose(0,1,3,2) 
 
- #  u2ab += lib.einsum('MIjEAc,bcME->jIbA', t3bba, imds.WvvOV_act)
- #  u2ab += lib.einsum('JimCae,BCme->iJaB', t3baa, imds.WVVov_act)
- #  u2ab += lib.einsum('IjmAce,bcme->jIbA', t3baa, imds.Wvvov_act)*0.5
- #  u2ab += lib.einsum('MJiECa,BCME->iJaB', t3bba, imds.WVVOV_act)*0.5
+    u2ab += lib.einsum('MIjEAc,bcME->jIbA', t3bba, imds.WvvOV_act)
+    u2ab += lib.einsum('JimCae,BCme->iJaB', t3baa, imds.WVVov_act)
+    u2ab += lib.einsum('IjmAce,bcme->jIbA', t3baa, imds.Wvvov_act)*0.5
+    u2ab += lib.einsum('MJiECa,BCME->iJaB', t3bba, imds.WVVOV_act)*0.5
 
 #                    (1)                                  (1)
 # contribution of T_3   to the residue of T_2: [w_ovoo, T_3   ]
 
- #  res   = -lib.einsum('inmabe,menj->ijab', t3aaa, imds.Wovoo_act)*0.5
- #  res  -= lib.einsum('MniEba,MEnj->ijab', t3baa, imds.WOVoo_act)
+    res   = -lib.einsum('inmabe,menj->ijab', t3aaa, imds.Wovoo_act)*0.5
+    res  -= lib.einsum('MniEba,MEnj->ijab', t3baa, imds.WOVoo_act)
 
- #  u2aa += res - res.transpose(1,0,2,3)
+    u2aa += res - res.transpose(1,0,2,3)
 
- #  res   = -lib.einsum('INMABE,MENJ->IJAB', t3bbb, imds.WOVOO_act)*0.5
- #  res  -= lib.einsum('INmABe,meNJ->IJAB', t3bba, imds.WovOO_act)
+    res   = -lib.einsum('INMABE,MENJ->IJAB', t3bbb, imds.WOVOO_act)*0.5
+    res  -= lib.einsum('INmABe,meNJ->IJAB', t3bba, imds.WovOO_act)
 
- #  u2bb += res - res.transpose(1,0,2,3) 
+    u2bb += res - res.transpose(1,0,2,3) 
 
- #  u2ab -= lib.einsum('MInEAb,MEnj->jIbA', t3bba, imds.WOVoo_act)
- #  u2ab -= lib.einsum('NimBae,meNJ->iJaB', t3baa, imds.WovOO_act)
- #  u2ab -= lib.einsum('InmAbe,menj->jIbA', t3baa, imds.Wovoo_act)*0.5
- #  u2ab -= lib.einsum('MNiEBa,MENJ->iJaB', t3bba, imds.WOVOO_act)*0.5
+    u2ab -= lib.einsum('MInEAb,MEnj->jIbA', t3bba, imds.WOVoo_act)
+    u2ab -= lib.einsum('NimBae,meNJ->iJaB', t3baa, imds.WovOO_act)
+    u2ab -= lib.einsum('InmAbe,menj->jIbA', t3baa, imds.Wovoo_act)*0.5
+    u2ab -= lib.einsum('MNiEBa,MENJ->iJaB', t3bba, imds.WOVOO_act)*0.5
 
     print("norm of u2aa", numpy.linalg.norm(u2aa))
     print("norm of u2bb", numpy.linalg.norm(u2bb))
-
 
     u2_active = u2aa, u2ab, u2bb  
 
 #                    (1)                                  (1)
 # contribution of T_3   to the residue of T_1: [w_ovov, T_3   ]
      
-#   u1a  = lib.einsum('ijmabe,jbme->ia', t3aaa, imds.Wovov_act)*0.25
-#   u1a += lib.einsum('MijEab,jbME->ia', t3baa, imds.WovOV_act)
-#   u1a += lib.einsum('MIjEAb,MEIA->jb', t3bba, imds.WOVOV_act)*0.25
+    u1a  = lib.einsum('ijmabe,jbme->ia', t3aaa, imds.Wovov_act)*0.25
+    u1a += lib.einsum('MijEab,jbME->ia', t3baa, imds.WovOV_act)
+    u1a += lib.einsum('MIjEAb,MEIA->jb', t3bba, imds.WOVOV_act)*0.25
 
-#   u1b = lib.einsum('ijmabe,jbme->ia', t3bbb, imds.WOVOV_act)*0.25
-#   u1b += lib.einsum('IJmABe,meJB->IA',t3bba, imds.WovOV_act)
-#   u1b += lib.einsum('IjmAbe,jbme->IA',t3baa, imds.Wovov_act)*0.25
+    u1b = lib.einsum('ijmabe,jbme->ia', t3bbb, imds.WOVOV_act)*0.25
+    u1b += lib.einsum('IJmABe,meJB->IA',t3bba, imds.WovOV_act)
+    u1b += lib.einsum('IjmAbe,jbme->IA',t3baa, imds.Wovov_act)*0.25
 
     print("norm of u1a", numpy.linalg.norm(u1a))
     print("norm of u1b", numpy.linalg.norm(u1b))
@@ -1027,6 +1071,110 @@ def iterative_update_amps_t3(mcc, t1, t2, t3, eris, act_hole, act_particle):
 
     return t3new, u2_active, u1_active 
 
+
+def get_vvvv_to_imds(mcc, t1, eris, act_hole, act_particle):
+    from pyscf import ao2mo
+
+    t1a, t1b = t1
+    nocca, nvira = t1a.shape
+    noccb, nvirb = t1b.shape
+    dtype = numpy.result_type(t1a, t1b)
+
+
+    inact_particle_a = numpy.delete(numpy.arange(nvira), act_particle[0])
+    inact_particle_b = numpy.delete(numpy.arange(nvirb), act_particle[1])
+
+    inact_hole_a = numpy.delete(numpy.arange(nocca), act_hole[0])
+    inact_hole_b = numpy.delete(numpy.arange(noccb), act_hole[1])
+
+    inact_particle = (inact_particle_a, inact_particle_b)
+    inact_hole = (inact_hole_a, inact_hole_b)
+
+    # get the active dimensions
+
+    nact_vir_a = act_particle[0].size
+    nact_vir_b = act_particle[1].size
+    nact_occ_a = act_hole[0].size
+    nact_occ_b = act_hole[1].size
+
+    vvvv_act = numpy.empty((nvira,nact_vir_a,nvira,nact_vir_a), dtype=dtype)
+    VVVV_act = numpy.empty((nvirb,nact_vir_b,nvirb,nact_vir_b), dtype=dtype)
+    vvVV_act = numpy.empty((nvira,nact_vir_a,nvirb,nact_vir_b), dtype=dtype)
+
+
+    vvvv = ao2mo.restore(1, numpy.asarray(eris.vvvv), nvira)
+    VVVV = ao2mo.restore(1, numpy.asarray(eris.VVVV), nvirb)
+#    eris_vvVV = _restore(numpy.asarray(eris.vvVV), nvira, nvirb)
+
+    #vvvv
+
+#    vvvv = uintermediates._get_vvvv(eris)
+##   vvVV = uintermediates._get_vvVV(eris)
+#    VVVV = uintermediates._get_VVVV(eris)
+
+    sqa = lib.square_mat_in_trilu_indices(nvira)
+    sqb = lib.square_mat_in_trilu_indices(nvirb)
+    vvVV = numpy.asarray(eris.vvVV)[:,sqb][sqa]
+
+    print("check whether vvvv and VVVV are the same: ", lib.einsum('eafb,eafb', vvvv, vvvv)) 
+    print("check whether vvvv and VVVV are the same: ", lib.einsum('eafb,eafb', VVVV, VVVV)) 
+    
+#   for a in range(nvira):
+#      X = eris.vvvv[a]
+#      X = X.reshape(nvira,nvira,nvira)
+#      vvvv_act[a] = X[numpy.ix_(act_particle[0], numpy.arange(nvira), act_particle[0])]
+
+    vvvv_act = vvvv[numpy.ix_(numpy.arange(nvira),act_particle[0], numpy.arange(nvira), act_particle[0])]
+##    vvvv_act = vvvv
+    #VVVV
+
+#   for a in range(nvirb):
+#       X = eris.VVVV[a]
+#       X = X.reshape(nvirb,nvirb,nvirb)
+#       VVVV_act[a] = X[numpy.ix_(act_particle[1], numpy.arange(nvirb), act_particle[1])]
+    VVVV_act = VVVV[numpy.ix_(numpy.arange(nvirb),act_particle[1], numpy.arange(nvirb), act_particle[1])]
+##    VVVV_act = VVVV
+    #vvVV
+   
+#   for a in range(nvira):
+#       X = eris.vvVV[a]
+#       X = X.reshape(nvira,nvirb,nvirb)
+#       vvVV_act[a] = X[numpy.ix_(act_particle[0], numpy.arange(nvirb), act_particle[1])]
+    vvVV_act = vvVV[numpy.ix_(numpy.arange(nvira), act_particle[0], numpy.arange(nvirb), act_particle[1])]
+##    vvVV_act = vvVV
+
+    #anti-symmetrize the integrals:
+
+    vvvv_act_new = vvvv_act - vvvv_act.transpose(0,3,2,1)
+    VVVV_act_new = VVVV_act - VVVV_act.transpose(0,3,2,1)
+
+    #construct the intermediate
+
+    # [insert 4 terms here]
+
+    wvovv = lib.einsum('eafb,if->eiab', vvvv_act, t1a)
+    wVOVV = lib.einsum('eafb,if->eiab', VVVV_act, t1b)
+
+#    wvovv = lib.einsum('aebf,if->eiab', vvvv_act_new, t1a)
+#    wVOVV = lib.einsum('aebf,if->eiab', VVVV_act_new, t1b)
+
+
+    wVoVv = lib.einsum('fbEA,if->EiAb', vvVV_act, t1a) 
+    wvOvV = lib.einsum('eaFB,IF->eIaB', vvVV_act, t1b)
+#    wvOvV = lib.einsum('aeBF,IF->eIaB', vvVV_act, t1b)
+
+
+#    Wvvvo  = lib.einsum('abef,if->abei', vvvv_act_new, t1a)
+#    WvvVO  = lib.einsum('abef,if->abei', vvVV_act, t1b)
+#    WVVvo  = lib.einsum('efab,if->abei', vvVV_act, t1a)
+#    WVVVO  = lib.einsum('abef,if->abei', VVVV_act_new, t1b)
+
+    Wvvvo = wvovv.transpose(2,0,3,1)
+    WVVvo = wVoVv.transpose(2,0,3,1)
+    WvvVO = wvOvV.transpose(2,0,3,1)
+    WVVVO = wVOVV.transpose(2,0,3,1)
+
+    return Wvvvo, WvvVO, WVVvo, WVVVO   
 
 if __name__ == '__main__':
     from pyscf import gto

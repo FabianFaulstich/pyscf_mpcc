@@ -285,7 +285,6 @@ def Wovoo(t1, eris):
     return wovoo, wOVoo, wovOO, wOVOO
 
 
-
 def Woovo(t1, t2, eris):
     t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
@@ -535,12 +534,12 @@ def Wovvo(t1, t2, eris):
     eris_ovOO = eris_ovOO + np.einsum('menf,jf->menj', eris_ovOV, t1b)
     ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
     OVOO = eris_OVOO - eris_OVOO.transpose(2,1,0,3)
-    wovvo += lib.einsum('nb,nemj->mbej', t1a,      ovoo)
-    wOVVO += lib.einsum('nb,nemj->mbej', t1b,      OVOO)
-    woVvO -= lib.einsum('NB,meNJ->mBeJ', t1b, eris_ovOO)
-    wOvVo -= lib.einsum('nb,MEnj->MbEj', t1a, eris_OVoo)
-    woVVo += lib.einsum('NB,NEmj->mBEj', t1b, eris_OVoo)
-    wOvvO += lib.einsum('nb,neMJ->MbeJ', t1a, eris_ovOO)
+    wovvo += lib.einsum('nb,nemj->mbej', t1a,      ovoo)*(-0.5)
+    wOVVO += lib.einsum('nb,nemj->mbej', t1b,      OVOO)*(-0.5)
+    woVvO -= lib.einsum('NB,meNJ->mBeJ', t1b, eris_ovOO)*(-1.0)
+    wOvVo -= lib.einsum('nb,MEnj->MbEj', t1a, eris_OVoo)*(-1.0)
+    woVVo += lib.einsum('NB,NEmj->mBEj', t1b, eris_OVoo)*(-1.0)
+    wOvvO += lib.einsum('nb,neMJ->MbeJ', t1a, eris_ovOO)*(-1.0)
     eris_ovoo = eris_OVOO = eris_ovOO = eris_OVoo = None
 
     eris_ovvo = np.asarray(eris.ovvo)
@@ -568,6 +567,117 @@ def Wovvo(t1, t2, eris):
     woVVo -= eris_ooVV.transpose(0,3,2,1)
     wOvvO -= eris_OOvv.transpose(0,3,2,1)
     return wovvo, wovVO, wOVvo, wOVVO, woVVo, wOvvO
+
+
+
+def Woovv(t1, t2, eris):
+
+# <AM|EI> intermediate -> <MA|IE> -> <MI|AE> 
+
+    t1a, t1b = t1
+    t2aa, t2ab, t2bb = t2
+    nocca, noccb, nvira, nvirb = t2ab.shape
+    dtype = np.result_type(t1a, t1b, t2aa, t2ab, t2bb)
+
+    wovvo = np.zeros((nocca,nvira,nvira,nocca), dtype=dtype)
+    wOVVO = np.zeros((noccb,nvirb,nvirb,noccb), dtype=dtype)
+    woVvO = np.zeros((nocca,nvirb,nvira,noccb), dtype=dtype)
+    woVVo = np.zeros((nocca,nvirb,nvirb,nocca), dtype=dtype)
+    wOvVo = np.zeros((noccb,nvira,nvirb,nocca), dtype=dtype)
+    wOvvO = np.zeros((noccb,nvira,nvira,noccb), dtype=dtype)
+
+
+#ovvv contribution:
+
+#   ovvv = eris.get_ovvv()  # ovvv = eris.ovvv[p0:p1]
+    ovvv = np.asarray(eris.get_ovvv())
+    ovvv = ovvv - ovvv.transpose(0,3,2,1)
+
+    wovov = lib.einsum('jf,mebf->mbje', t1a, ovvv)
+    ovvv = None
+
+
+#   OVVV = eris.get_OVVV()  # OVVV = eris.OVVV[p0:p1]
+    OVVV = np.asarray(eris.get_OVVV())
+    OVVV = OVVV - OVVV.transpose(0,3,2,1)
+    wOVOV = lib.einsum('jf,mebf->mbje', t1b, OVVV)
+    OVVV = None
+
+#   ovVV = eris.get_ovVV()  # ovVV = eris.ovVV[p0:p1]
+    ovVV = np.asarray(eris.get_ovVV())
+    woVOv = lib.einsum('JF,meBF->mBJe', t1b, ovVV)
+    woVoV = lib.einsum('jf,mfBE->mBjE',-t1a, ovVV)
+    ovVV = None
+
+#   OVvv = eris.get_OVvv()  # OVvv = eris.OVvv[p0:p1]
+    OVvv = np.asarray(eris.get_OVvv())
+    wOvoV = lib.einsum('jf,MEbf->MbjE', t1a, OVvv)
+    wOvOv = lib.einsum('JF,MFbe->MbJe',-t1b, OVvv)
+    OVvv = None
+
+# oovv contribution:
+    eris_ovov = np.asarray(eris.ovov)
+    eris_OVOV = np.asarray(eris.OVOV)
+    eris_ovOV = np.asarray(eris.ovOV)
+    ovov = eris_ovov - eris_ovov.transpose(0,3,2,1)
+    OVOV = eris_OVOV - eris_OVOV.transpose(0,3,2,1)
+    wovov -= lib.einsum('jnfb,menf->mbje', t2aa,      ovov)
+    wovov += lib.einsum('jNbF,meNF->mbje', t2ab, eris_ovOV)
+    wOVOV -= lib.einsum('jnfb,menf->mbje', t2bb,      OVOV)
+    wOVOV += lib.einsum('nJfB,nfME->MBJE', t2ab, eris_ovOV)
+    woVOv += lib.einsum('nJfB,menf->mBJe', t2ab,      ovov)
+    woVOv -= lib.einsum('JNFB,meNF->mBJe', t2bb, eris_ovOV)
+    wOvoV -= lib.einsum('jnfb,nfME->MbjE', t2aa, eris_ovOV)
+    wOvoV += lib.einsum('jNbF,MENF->MbjE', t2ab,      OVOV)
+    woVoV += lib.einsum('jNfB,mfNE->mBjE', t2ab, eris_ovOV)
+    wOvOv += lib.einsum('nJbF,neMF->MbJe', t2ab, eris_ovOV)
+
+
+# ovoo contribution:
+    eris_ovoo = np.asarray(eris.ovoo)
+    eris_OVOO = np.asarray(eris.OVOO)
+    eris_OVoo = np.asarray(eris.OVoo)
+    eris_ovOO = np.asarray(eris.ovOO)
+    eris_ovoo = eris_ovoo + np.einsum('nfme,jf->menj', eris_ovov, t1a)
+    eris_OVOO = eris_OVOO + np.einsum('nfme,jf->menj', eris_OVOV, t1b)
+    eris_OVoo = eris_OVoo + np.einsum('nfme,jf->menj', eris_ovOV, t1a)
+    eris_ovOO = eris_ovOO + np.einsum('menf,jf->menj', eris_ovOV, t1b)
+    ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
+    OVOO = eris_OVOO - eris_OVOO.transpose(2,1,0,3)
+
+
+    wovov += lib.einsum('nb,nemj->mbje', t1a, ovoo)*(+0.5)
+    wOVOV += lib.einsum('nb,nemj->mbje', t1b, OVOO)*(+0.5)
+    woVOv -= lib.einsum('NB,meNJ->mBJe', t1b, eris_ovOO)*(+1.0)
+    wOvoV -= lib.einsum('nb,MEnj->MbjE', t1a, eris_OVoo)*(+1.0)
+    woVoV += lib.einsum('NB,NEmj->mBjE', t1b, eris_OVoo)*(+1.0)
+    wOvOv += lib.einsum('nb,neMJ->MbJe', t1a, eris_ovOO)*(+1.0)
+
+
+    eris_oovv = np.asarray(eris.oovv)
+    eris_ovvo = np.asarray(eris.ovvo)
+    oovv = eris_oovv - eris_ovvo.transpose(0,3,2,1)
+
+    eris_OOVV = np.asarray(eris.OOVV)
+    eris_OVVO = np.asarray(eris.OVVO)
+    OOVV = eris_OOVV - eris_OVVO.transpose(0,3,2,1)
+
+    eris_OOvv = np.asarray(eris.OOvv)
+    eris_ovVO = np.asarray(eris.ovVO)
+
+    eris_ooVV = np.asarray(eris.ooVV)
+    eris_OVvo = np.asarray(eris.OVvo)
+
+
+    woovv = wovov.transpose(0,2,1,3) + oovv
+    wOOVV = wOVOV.transpose(0,2,1,3) + OOVV
+    wOOvv = wOvOv.transpose(0,2,1,3) + eris_OOvv 
+    wooVV = woVoV.transpose(0,2,1,3) + eris_ooVV
+    wovVO = woVOv.transpose(0,3,1,2) + eris_ovVO
+    wOVvo = wOvoV.transpose(0,3,1,2) + eris_OVvo
+          
+    return woovv, wOOVV, wOOvv, wooVV, wovVO, wOVvo
+
 
 def Wvvov(t1, t2, eris):
     t1a, t1b = t1
@@ -606,6 +716,10 @@ def Wvvvo(t1, t2, eris):
     _wVoVv = np.empty((nvirb,nocca,nvirb,nvira), dtype=dtype)
 
     Fova, Fovb = Fov(t1, t2, eris)
+
+    Fova = 0.0*Fova
+    Fovb = 0.0*Fovb
+
 
     # 3 or 4 virtuals
     eris_ovoo = np.asarray(eris.ovoo)
@@ -840,6 +954,215 @@ def Wvvvo(t1, t2, eris):
     wVVVO = _wVOVV.transpose(2,0,3,1)
     return wvvvo, wvvVO, wVVvo, wVVVO
 
+def Wvvvo_t3(t1, t2, eris):
+    t1a, t1b = t1
+    t2aa, t2ab, t2bb = t2
+    nocca, noccb, nvira, nvirb = t2ab.shape
+    dtype = np.result_type(t1a, t1b, t2aa, t2ab, t2bb)
+
+    _wvovv = np.empty((nvira,nocca,nvira,nvira), dtype=dtype)
+    _wVOVV = np.empty((nvirb,noccb,nvirb,nvirb), dtype=dtype)
+    _wvOvV = np.empty((nvira,noccb,nvira,nvirb), dtype=dtype)
+    _wVoVv = np.empty((nvirb,nocca,nvirb,nvira), dtype=dtype)
+
+
+    # 3 or 4 virtuals
+
+# Wamei * T2
+# Wmnej * T2
+
+#   ovvo, ovVO, OVvo, OVVO, oVVo, OvvO = Wovvo(t1, t2, eris)
+
+
+ #  for p0, p1 in lib.prange(0, nvira, nocca):
+ #      wvovv  = .5*lib.einsum('meni,mnab->eiab', ovoo[:,p0:p1], t2aa)
+##      wvovv += lib.einsum('ma,mbei->eiab', t1a, ovvo[:,:,p0:p1])
+ #      _wvovv[p0:p1] = wvovv
+
+# Wamef*T1
+
+    mem_now = lib.current_memory()[0]
+    max_memory = max(0, lib.param.MAX_MEMORY - mem_now)
+    blksize = min(nocca, max(BLKMIN, int(max_memory*1e6/8/(nvira**3*6))))
+
+    for i0,i1 in lib.prange(0, nocca, blksize):
+        wvovv = _wvovv[:,i0:i1]
+        for p0,p1 in lib.prange(0, noccb, blksize):
+            OVvv = eris.get_OVvv(slice(p0,p1))  # OVvv = eris.OVvv[p0:p1]
+            wvovv -= lib.einsum('MFbe,iMaF->eiab', OVvv, t2ab[i0:i1,p0:p1])
+            OVvv = None
+        for p0,p1 in lib.prange(0, nocca, blksize):
+            ovvv = eris.get_ovvv(slice(p0,p1))  # ovvv = eris.ovvv[p0:p1]
+            if p0 == i0:
+                wvovv += ovvv.transpose(2,0,3,1).conj()
+            ovvv = ovvv - ovvv.transpose(0,3,2,1)
+            wvovv -= lib.einsum('mebf,miaf->eiab', ovvv, t2aa[p0:p1,i0:i1])
+            ovvv = None
+        wvovv = wvovv - wvovv.transpose(0,1,3,2)
+        _wvovv[:,i0:i1] = wvovv
+
+# Wamei * T2
+# Wmnej * T2
+
+ #  for p0, p1 in lib.prange(0, nvirb, noccb):
+ #      wVOVV  = .5*lib.einsum('meni,mnab->eiab', OVOO[:,p0:p1], t2bb)
+
+##       wVOVV += lib.einsum('ma,mbei->eiab', t1b, OVVO[:,:,p0:p1])
+ #      _wVOVV[p0:p1] = wVOVV
+
+# Wamef*T1
+    blksize = min(noccb, max(BLKMIN, int(max_memory*1e6/8/(nvirb**3*6))))
+    for i0,i1 in lib.prange(0, noccb, blksize):
+        wVOVV = _wVOVV[:,i0:i1]
+        for p0,p1 in lib.prange(0, nocca, blksize):
+            ovVV = eris.get_ovVV(slice(p0,p1))  # ovVV = eris.ovVV[p0:p1]
+            wVOVV -= lib.einsum('mfBE,mIfA->EIAB', ovVV, t2ab[p0:p1,i0:i1])
+            ovVV = None
+        for p0,p1 in lib.prange(0, noccb, blksize):
+            OVVV = eris.get_OVVV(slice(p0,p1))  # OVVV = eris.OVVV[p0:p1]
+            if p0 == i0:
+                wVOVV += OVVV.transpose(2,0,3,1).conj()
+            OVVV = OVVV - OVVV.transpose(0,3,2,1)
+            wVOVV -= lib.einsum('mebf,miaf->eiab', OVVV, t2bb[p0:p1,i0:i1])
+            OVVV = None
+        wVOVV = wVOVV - wVOVV.transpose(0,1,3,2)
+        _wVOVV[:,i0:i1] = wVOVV
+
+
+# Wamei * T2
+# Wmnej * T2
+
+ #  for p0, p1 in lib.prange(0, nvira, nocca):
+ #      wvOvV  = lib.einsum('meNI,mNaB->eIaB', ovOO[:,p0:p1], t2ab)
+
+##       wvOvV+= lib.einsum('ma,mBeI->eIaB', t1a, oVvO) #change the permutation
+##       wvOvV+= lib.einsum('ma,meBI->eIaB', t1a, ovVO[:,p0:p1]) #change the permutation
+##       wvOvV+= lib.einsum('MA,MbeI->eIbA', t1b, OvvO[:,:,p0:p1])
+ #      _wvOvV[p0:p1] = wvOvV
+ #  eris_ovOV = eris_ovOO = eris_OOvv = eris_ovVO = None
+
+
+# Wamef*T1
+    blksize = min(noccb, max(BLKMIN, int(max_memory*1e6/8/(nvira**3*6))))
+    for i0,i1 in lib.prange(0, noccb, blksize):
+        wvOvV = _wvOvV[:,i0:i1]
+        for p0,p1 in lib.prange(0, nocca, blksize):
+            ovVV = eris.get_ovVV(slice(p0,p1))  # ovVV = eris.ovVV[p0:p1]
+            wvOvV -= lib.einsum('meBF,mIaF->eIaB', ovVV, t2ab[p0:p1,i0:i1])
+            ovVV = None
+        for p0,p1 in lib.prange(0, nocca, blksize):
+            ovvv = eris.get_ovvv(slice(p0,p1))  # ovvv = eris.ovvv[p0:p1]
+            ovvv = ovvv - ovvv.transpose(0,3,2,1)
+            wvOvV -= lib.einsum('mebf,mIfA->eIbA',ovvv, t2ab[p0:p1,i0:i1])
+            ovvv = None
+        _wvOvV[:,i0:i1] = wvOvV
+
+    blksize = min(noccb, max(BLKMIN, int(max_memory*1e6/8/(nvirb*nvira**2*3))))
+    for i0,i1 in lib.prange(0, noccb, blksize):
+        wvOvV = _wvOvV[:,i0:i1]
+        for p0,p1 in lib.prange(0, noccb, blksize):
+            OVvv = eris.get_OVvv(slice(p0,p1))  # OVvv = eris.OVvv[p0:p1]
+            if p0 == i0:
+                wvOvV += OVvv.transpose(2,0,3,1).conj()
+            wvOvV -= lib.einsum('MFbe,MIAF->eIbA', OVvv, t2bb[p0:p1,i0:i1])
+            OVvv = None
+        _wvOvV[:,i0:i1] = wvOvV
+
+
+# Wamei * T2
+# Wmnej * T2
+
+ #  for p0, p1 in lib.prange(0, nvirb, noccb):
+ #      wVoVv  = lib.einsum('MEni,nMbA->EiAb', OVoo[:,p0:p1], t2ab)
+
+##       wVoVv += lib.einsum('MA,MEbi->EiAb', t1b, OVvo[:,p0:p1]) #change the permutation
+##       wVoVv += lib.einsum('ma,mBEi->EiBa', t1a, oVVo[:,:,p0:p1])
+ #      _wVoVv[p0:p1] = wVoVv
+
+# Wamef*T1
+    blksize = min(noccb, max(BLKMIN, int(max_memory*1e6/8/(nvirb**3*6))))
+    for i0,i1 in lib.prange(0, nocca, blksize):
+        wVoVv = _wVoVv[:,i0:i1]
+        for p0,p1 in lib.prange(0, noccb, blksize):
+            OVvv = eris.get_OVvv(slice(p0,p1))  # OVvv = eris.OVvv[p0:p1]
+            wVoVv -= lib.einsum('MEbf,iMfA->EiAb', OVvv, t2ab[i0:i1,p0:p1])
+            OVvv = None
+        for p0,p1 in lib.prange(0, noccb, blksize):
+            OVVV = eris.get_OVVV(slice(p0,p1))  # OVVV = eris.OVVV[p0:p1]
+            OVVV = OVVV - OVVV.transpose(0,3,2,1)
+            wVoVv -= lib.einsum('MEBF,iMaF->EiBa', OVVV, t2ab[i0:i1,p0:p1])
+            OVVV = None
+        _wVoVv[:,i0:i1] = wVoVv
+
+    blksize = min(nocca, max(BLKMIN, int(max_memory*1e6/8/(nvira*nvirb**2*3))))
+    for i0,i1 in lib.prange(0, nocca, blksize):
+        wVoVv = _wVoVv[:,i0:i1]
+        for p0,p1 in lib.prange(0, nocca, blksize):
+            ovVV = eris.get_ovVV(slice(p0,p1))  # ovVV = eris.ovVV[p0:p1]
+            if p0 == i0:
+                wVoVv += ovVV.transpose(2,0,3,1).conj()
+            wVoVv -= lib.einsum('mfBE,miaf->EiBa', ovVV, t2aa[p0:p1,i0:i1])
+            ovVV = None
+        _wVoVv[:,i0:i1] = wVoVv
+
+
+
+    ovoo, OVoo, ovOO, OVOO = Wovoo(t1, eris)
+    oovv, OOVV, OOvv, ooVV, ovVO, OVvo = Woovv(t1, t2, eris)  
+
+##  eris_oovv = np.asarray(eris.oovv)
+##  eris_ovvo = np.asarray(eris.ovvo)
+##  oovv = eris_oovv - eris_ovvo.transpose(0,3,2,1)
+
+##  eris_OOVV = np.asarray(eris.OOVV)
+##  eris_OVVO = np.asarray(eris.OVVO)
+##  OOVV = eris_OOVV - eris_OVVO.transpose(0,3,2,1)
+
+##  eris_OOvv = np.asarray(eris.OOvv)
+##  eris_ovVO = np.asarray(eris.ovVO)
+
+##  eris_ooVV = np.asarray(eris.ooVV)
+##  eris_OVvo = np.asarray(eris.OVvo)
+
+    tmp = lib.einsum('ma,mibe->eiab', t1a, oovv)
+    _wvovv += tmp - tmp.transpose(0,1,3,2)
+
+    tmp= lib.einsum('ma,mibe->eiab', t1b, OOVV)
+    _wVOVV += tmp - tmp.transpose(0,1,3,2)
+
+    _wvOvV -= lib.einsum('MA,MIbe->eIbA', t1b, OOvv)
+    _wvOvV -= lib.einsum('ma,meBI->eIaB', t1a, ovVO)
+
+    _wVoVv -= lib.einsum('ma,miBE->EiBa', t1a, ooVV)
+    _wVoVv -= lib.einsum('MA,MEbi->EiAb', t1b, OVvo)
+
+    wvvvo = _wvovv.transpose(2,0,3,1)
+    wVVvo = _wVoVv.transpose(2,0,3,1)
+    wvvVO = _wvOvV.transpose(2,0,3,1)
+    wVVVO = _wVOVV.transpose(2,0,3,1)
+
+    wvvvo += lib.einsum('meni,mnab->aebi', ovoo, t2aa)*0.5
+    wVVVO += lib.einsum('meni,mnab->aebi', OVOO, t2bb)*0.5
+    wvvVO += lib.einsum('meni,mnab->aebi', ovOO, t2ab)
+    wVVvo += lib.einsum('meni,nmba->aebi', OVoo, t2ab)
+
+    eris_vvvv = ao2mo.restore(1, np.asarray(eris.vvvv), nvira)
+    eris_VVVV = ao2mo.restore(1, np.asarray(eris.VVVV), nvirb)
+
+    sqa = lib.square_mat_in_trilu_indices(nvira)
+    sqb = lib.square_mat_in_trilu_indices(nvirb)
+    eris_vvVV = np.asarray(eris.vvVV)[:,sqb][sqa]
+
+    vvvv = eris_vvvv - eris_vvvv.transpose(0,3,2,1)
+    VVVV = eris_VVVV - eris_VVVV.transpose(0,3,2,1)
+    wvvvo += lib.einsum('abef,if->abei',      vvvv, t1a)
+    wvvVO += lib.einsum('abef,if->abei', eris_vvVV, t1b)
+    wVVvo += lib.einsum('efab,if->abei', eris_vvVV, t1a)
+    wVVVO += lib.einsum('abef,if->abei',      VVVV, t1b)
+
+    return wvvvo, wvvVO, wVVvo, wVVVO
+
+
 def _get_vvVV(eris):
     if eris.vvVV is None and getattr(eris, 'VVL', None) is not None:  # DF eris
         vvL = np.asarray(eris.vvL)
@@ -871,3 +1194,15 @@ def _get_VVVV(eris):
         return ao2mo.restore(1, np.asarray(eris.VVVV), nvir)
     else:
         return eris.VVVV
+
+def _get_vvvv(eris):
+    if eris.vvvv is None and getattr(eris, 'VVL', None) is not None:  # DF eris
+        VVL = np.asarray(eris.VVL)
+        nvir = int(np.sqrt(eris.VVL.shape[0]*2))
+        return ao2mo.restore(1, lib.dot(VVL, VVL.T), nvir)
+    elif len(eris.vvvv.shape) == 2:
+        nvir = int(np.sqrt(eris.vvvv.shape[0]*2))
+        return ao2mo.restore(1, np.asarray(eris.vvvv), nvir)
+    else:
+        return eris.vvvv
+

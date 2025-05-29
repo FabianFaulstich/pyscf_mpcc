@@ -86,7 +86,6 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
           adiis_t3 = None
 
 
-    conv = False
 
     converged = False
     mycc.cycles = 0
@@ -95,7 +94,6 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
             t1new, t2new = mycc.update_amps(t1, t2, eris, act_hole, act_particle, idx_s, idx_d)
         elif act_particle is not None and pert_triples:
             t1new, t2new, t3act = mycc.update_amps(t1, t2, eris, act_hole, act_particle, idx_s, idx_d, pert_triples, t3old)
-            t3old = t3act
         elif oo_mp2:
             t1new, t2new = mycc.update_amps_oomp2(t1, t2, eris, act_hole, act_particle, idx_s, idx_d)
         else:
@@ -108,6 +106,7 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
 
         if act_particle is not None and pert_triples:
            tmpvec = mycc.amplitudes_to_vector_t3(t3act)
+           tmpvec -= mycc.amplitudes_to_vector_t3(t3old)
            normt_t3 = numpy.linalg.norm(tmpvec)
 
         tmpvec = None
@@ -126,6 +125,10 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
         t1new = t2new = None
         t1, t2 = mycc.run_diis(t1, t2, istep, normt, eccsd-eold, adiis)
         if act_particle is not None and pert_triples:
+
+            print("we are here to extrapolate t3 amplitudes")
+
+            t3old = t3act
             t3act = None
             t3old = mycc.run_diis_t3(t3old, istep, normt_t3, eccsd-eold, adiis_t3)
 

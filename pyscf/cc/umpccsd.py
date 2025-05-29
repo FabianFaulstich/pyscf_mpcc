@@ -781,7 +781,8 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
 
     if (pert_triples):
 
-       u3new, u2_active, u1_active = umpcc_t_slow.iterative_update_amps_t3(cc, t1, t2, t3old, eris, act_hole, act_particle)
+#      u3new, u2_active, u1_active = umpcc_t_slow.iterative_update_amps_t3(cc, t1, t2, t3old, eris, act_hole, act_particle)
+       u3new, u2_active, u1_active = umpcc_t_slow.update_amps_t3(cc, t1, t2, t3old, eris, act_hole, act_particle)
 
        u2_active_aa, u2_active_ab, u2_active_bb = u2_active
        u1a_active, u1b_active = u1_active 
