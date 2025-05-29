@@ -4,7 +4,7 @@ import numpy as np
 
 
 class MPCC_LL:
-    def __init__(self, mf):
+    def __init__(self, mf, eris):
         self.mf = mf
 
         if getattr(mf, "with_df", None):
@@ -28,10 +28,6 @@ class MPCC_LL:
         self.mo_energy = mf.mo_energy
         self.mo_coeff = mf.mo_coeff
 
-        self.nvir = self.nao - self.nocc
-        self.nvir_pair = self.nvir * (self.nvir + 1) // 2
-        self.compute_three_center_ints()
-
         fock_mo = self.mo_coeff.T @ self.mf.get_fock() @ self.mo_coeff
         self.foo = fock_mo[: self.nocc, : self.nocc]
         self.fvv = fock_mo[self.nocc : self.nao, self.nocc : self.nao]
@@ -41,34 +37,8 @@ class MPCC_LL:
             "a-i->ia", self.mo_energy[self.nocc :], self.mo_energy[: self.nocc]
         )
         self.D = lib.direct_sum("-ia-jb->aibj", self.eia, self.eia)
-
-
-    def compute_three_center_ints(self):
-
-        Loo = np.empty((self.naux, self.nocc, self.nocc))
-        Lov = np.empty((self.naux, self.nocc, self.nvir))
-        Lvo = np.empty((self.naux, self.nvir, self.nocc))
-        Lvv = np.empty((self.naux, self.nvir, self.nvir))
-
-        p1 = 0
-        occ, vir = np.s_[: self.nocc], np.s_[self.nocc :]
-
-        for eri1 in self.with_df.loop():
-            eri1 = lib.unpack_tril(eri1).reshape(-1, self.nao, self.nao)
-            Lpq = lib.einsum("Lab,ap,bq->Lpq", eri1, self.mo_coeff, self.mo_coeff)
-            p0, p1 = p1, p1 + Lpq.shape[0]
-            blk = np.s_[p0:p1]
-            Loo[blk] = Lpq[:, occ, occ]
-            Lov[blk] = Lpq[:, occ, vir]
-            Lvo[blk] = Lpq[:, vir, occ]
-            Lvv[blk] = Lpq[:, vir, vir]
-
-        self.Loo = Loo
-        self.Lov = Lov
-        self.Lvo = Lvo
-        self.Lvv = Lvv
-
-            
+        self.eris = eris
+ 
     def kernel(self):
 
         # NOTE Do we want to initialize t1 and t2?
@@ -94,9 +64,9 @@ class MPCC_LL:
             err = res
             print(f"It {count} Energy progress {DE:.6e} residual progress {res:.6e}")
   
-        print("In Kernel!")
+        self.e_corr = DE
+        self.e_tot =self.mf.e_tot + DE
         breakpoint()
- 
         return DE
 
 
@@ -107,9 +77,9 @@ class MPCC_LL:
        
         # NOTE do we want the local copies?
         t1 = self.t1
-        Loo = self.Loo
-        Lov = self.Lov
-        Lvv = self.Lvv
+        Loo = self.eris.Loo
+        Lov = self.eris.Lov
+        Lvv = self.eris.Lvv
 
         fock = self.eia
         foo = self.foo

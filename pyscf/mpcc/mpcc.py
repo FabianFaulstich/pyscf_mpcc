@@ -2,15 +2,14 @@ from pyscf import lib
 
 class MPCC(lib.StreamObject):
 
-    def __init__(self, mf, lowlevel):
+    def __init__(self, mf, lowlevel, eri):
 
         self.mol = mf.mol
         self._scf = mf
 
-        # Hold the integrals here? -> ChemistryERI
+        self.eris = eri.ERIs(mf)
 
-
-        self.lowlevel = lowlevel.MPCC_LL(mf)
+        self.lowlevel = lowlevel.MPCC_LL(mf, self.eris)
         self.lowlevel.con_tol = 1e-6
         self.lowlevel.max_its = 50
 
