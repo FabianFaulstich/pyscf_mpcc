@@ -20,7 +20,4 @@ if __name__ == "__main__":
 
     # No computation
     mympcc = mpcc.MPCC(mf)
-
-    breakpoint()
-    # Computation (incl. computing integrals, etc)
     mympcc.kernel()

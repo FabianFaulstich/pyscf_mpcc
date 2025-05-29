@@ -17,10 +17,9 @@ class ERIs:
         self.naux = self.with_df.get_naoaux()
 
         self.mo_coeff = mf.mo_coeff
-        self.compute_three_center_ints()
 
 
-    def compute_three_center_ints(self):
+    def make_eri(self):
 
         Loo = np.empty((self.naux, self.nocc, self.nocc))
         Lov = np.empty((self.naux, self.nocc, self.nvir))

@@ -13,7 +13,6 @@ class MPCC(lib.StreamObject):
         self.lowlevel.con_tol = 1e-6
         self.lowlevel.max_its = 50
 
-        self.lowlevel.kernel()
 
         # Setting MPCC attributes 
         # Do NOT modify these attributes, they are not input options
@@ -21,3 +20,8 @@ class MPCC(lib.StreamObject):
         # "Screened_interaction"
         # "High-level"
 
+    def kernel(self):
+
+        self.eris.make_eri()
+        
+        self.lowlevel.kernel()
