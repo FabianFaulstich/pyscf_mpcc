@@ -25,9 +25,11 @@ class MPCC_LL:
         self.nvir = self.nao - self.nocc
         self.naux = self.with_df.get_naoaux()
 
+        '''
         self.mo_energy = mf.mo_energy
         self.mo_coeff = mf.mo_coeff
 
+        # NOTE move these to eri object
         fock_mo = self.mo_coeff.T @ self.mf.get_fock() @ self.mo_coeff
         self.foo = fock_mo[: self.nocc, : self.nocc]
         self.fvv = fock_mo[self.nocc : self.nao, self.nocc : self.nao]
@@ -37,6 +39,7 @@ class MPCC_LL:
             "a-i->ia", self.mo_energy[self.nocc :], self.mo_energy[: self.nocc]
         )
         self.D = lib.direct_sum("-ia-jb->aibj", self.eia, self.eia)
+        '''
         self.eris = eris
  
     def kernel(self):
@@ -81,37 +84,23 @@ class MPCC_LL:
         Lov = self.eris.Lov
         Lvv = self.eris.Lvv
 
-        fock = self.eia
-        foo = self.foo
-        fvv = self.fvv
+        fock = self.eris.eia
+        foo = self.eris.foo
+        fvv = self.eris.fvv
 
         # Contractions
-        Xvo = np.einsum("Lab,ib->Lai", Lvv, t1)
-        Xoo = np.einsum("Lia,ja->Lij", Lov, t1)
-        X = np.einsum("Lia,ia->L", Lov, t1)
+        X, Xoo, Xvo = self.eris.get_X(t1)
+
+        Joo, Jvo = self.eris.get_J(Xoo, Xvo, t1)
+       
+        Ω = self.eris.get_Ω(X, Xoo, Xvo, Joo, Jvo, t1)
         
-        Joo = Xoo + Loo
-        Jvo = Xvo + np.transpose(Lov, (0, 2, 1)) - np.einsum("Lij,ja->Lai", Joo, t1)
-        
-        Ω = -1 * np.einsum("Laj,Lji->ai", Xvo, Joo)
-        Ω += np.einsum("Ljk,ka,Lji->ai", Xoo, t1, Joo)
-        Ω += np.einsum("Lai,L->ai", Jvo, X)
+        Fov = self.eris.get_F(X, Xoo, Jvo) 
 
-        Ω += np.einsum('ib,ba -> ai',t1,fvv)
-        Ω -= np.einsum('ka,ik -> ai',t1,foo)
+        t2, Yvo = self.eris.get_t2_Yvo(Jvo)
 
-        Fov = np.einsum("Lbj,L->jb", Jvo, X) - np.einsum("Lij,Lib->jb", Xoo, Lov)
-
-        eris = np.einsum("Lai,Ljb->aijb", Jvo, Jvo)
-
-        t2 = (2 * eris - np.transpose(eris, (0, 3, 2, 1))) / self.D
-        Yvo = np.einsum("aibj,Ljb->Lai", t2, Lov)
-        Ω += np.einsum("aijb,bj->ai", t2, Fov)
-
-        Jvv = np.einsum("Ljb,ja->Lba", Lov, t1) + Lvv
-        Ω += np.einsum("Lba,Lbi->ai", Jvv, Yvo)
-        Ω -= np.einsum("Lji,Laj->ai", Joo, Yvo)
-
+        Ω = self.eris.update_Ω(Ω, Yvo, Fov, t2, t1, Joo)
+       
         # NOTE check the sign on the first term
         e1 = np.einsum("Lij,ja->Lai", Xoo, t1) + np.einsum("L,ia->Lai", X, t1) + Jvo
         ΔE = np.einsum("Lai,Lai", e1, Yvo)

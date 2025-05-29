@@ -16,8 +16,17 @@ class ERIs:
         self.nvir = mf.mol.nao - self.nocc
         self.naux = self.with_df.get_naoaux()
 
-        self.mo_coeff = mf.mo_coeff
+        self.mo_coeff = mf.mo_coeff        
+        self.mo_energy = mf.mo_energy
 
+        fock_mo = self.mo_coeff.T @ mf.get_fock() @ self.mo_coeff
+        self.foo = fock_mo[: self.nocc, : self.nocc]
+        self.fvv = fock_mo[self.nocc : self.nao, self.nocc : self.nao]
+
+        self.eia = lib.direct_sum(
+            "a-i->ia", self.mo_energy[self.nocc :], self.mo_energy[: self.nocc]
+        )
+        self.D = lib.direct_sum("-ia-jb->aibj", self.eia, self.eia)
 
     def make_eri(self):
 
@@ -43,4 +52,50 @@ class ERIs:
         self.Lov = Lov
         self.Lvo = Lvo
         self.Lvv = Lvv
+
+    def get_X(self, t1):
+        
+        Xvo = np.einsum("Lab,ib->Lai", self.Lvv, t1)
+        Xoo = np.einsum("Lia,ja->Lij", self.Lov, t1)
+        X = np.einsum("Lia,ia->L", self.Lov, t1)
+       
+        return X, Xoo, Xvo
+
+    def get_J(self, Xoo, Xvo, t1):
+        
+        Joo = Xoo + self.Loo
+        Jvo = Xvo + np.transpose(self.Lov, (0, 2, 1)) - np.einsum("Lij,ja->Lai", Joo, t1)
+
+        return Joo, Jvo
+        
+    def get_Ω(self, X, Xoo, Xvo, Joo, Jvo, t1):
+        
+        Ω = -1 * np.einsum("Laj,Lji->ai", Xvo, Joo)
+        Ω += np.einsum("Ljk,ka,Lji->ai", Xoo, t1, Joo)
+        Ω += np.einsum("Lai,L->ai", Jvo, X)
+
+        Ω += np.einsum('ib,ba -> ai',t1,self.fvv)
+        Ω -= np.einsum('ka,ik -> ai',t1,self.foo)
+
+        return Ω
+    
+    def get_F(self, X, Xoo, Jvo):
+        return np.einsum("Lbj,L->jb", Jvo, X) - np.einsum("Lij,Lib->jb", Xoo, self.Lov)
+
+    def get_t2_Yvo(self, Jvo):
+        eris = np.einsum("Lai,Ljb->aijb", Jvo, Jvo)
+        t2 = (2 * eris - np.transpose(eris, (0, 3, 2, 1))) / self.D
+        Yvo = np.einsum("aibj,Ljb->Lai", t2, self.Lov)
+        return t2, Yvo
+
+    
+    def update_Ω(self, Ω, Yvo, Fov, t2, t1, Joo):
+        Ω += np.einsum("aijb,bj->ai", t2, Fov)
+
+        Jvv = np.einsum("Ljb,ja->Lba", self.Lov, t1) + self.Lvv
+        Ω += np.einsum("Lba,Lbi->ai", Jvv, Yvo)
+        Ω -= np.einsum("Lji,Laj->ai", Joo, Yvo)
+        return Ω 
+
+
 
