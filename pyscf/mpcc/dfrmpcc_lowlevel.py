@@ -56,20 +56,12 @@ class MPCC_LL:
         breakpoint()
         return DE
 
-    def updated_amps(self):
+    def updated_amps2(self):
         """
         Following Table XXX in Future Paper
         """
-
-        # NOTE do we want the local copies?
+        # NOTE do we want the local copy?
         t1 = self.t1
-        Loo = self.eris.Loo
-        Lov = self.eris.Lov
-        Lvv = self.eris.Lvv
-
-        fock = self.eris.eia
-        foo = self.eris.foo
-        fvv = self.eris.fvv
 
         # Contractions
         X, Xoo, Xvo = self.eris.get_X(t1)
@@ -88,9 +80,41 @@ class MPCC_LL:
         e1 = np.einsum("Lij,ja->Lai", Xoo, t1) + np.einsum("L,ia->Lai", X, t1) + Jvo
         ΔE = np.einsum("Lai,Lai", e1, Yvo)
 
-        res = np.linalg.norm(self.t1 + Ω.T / fock)
+        res = np.linalg.norm(self.t1 + Ω.T / self.eris.eia)
 
-        t1 = -Ω.T / fock
+        t1 = -Ω.T / self.eris.eia
+        return res, ΔE, t1, t2
+
+
+
+    def updated_amps(self):
+        """
+        Following Table XXX in Future Paper
+        """
+
+        # NOTE do we want the local copy?
+        t1 = self.t1
+
+        # Contractions
+        X, Xoo, Xvo = self.eris.get_X(t1)
+
+        Joo, Jvo = self.eris.get_J(Xoo, Xvo, t1)
+        
+        Ω = self.eris.get_Ω(X, Xoo, Xvo, Joo, Jvo, t1)
+        
+        Fov = self.eris.get_F(X, Xoo, Jvo)
+        
+        t2, Yvo = self.eris.get_t2_Yvo(Jvo)
+        
+        Ω = self.eris.update_Ω(Ω, Yvo, Fov, t2, t1, Joo)
+
+        # NOTE check the sign on the first term
+        e1 = np.einsum("Lij,ja->Lai", Xoo, t1) + np.einsum("L,ia->Lai", X, t1) + Jvo
+        ΔE = np.einsum("Lai,Lai", e1, Yvo)
+
+        res = np.linalg.norm(self.t1 + Ω.T / self.eris.eia)
+
+        t1 = -Ω.T / self.eris.eia
         return res, ΔE, t1, t2
 
     def run_diis(self, t1, t2, adiis):
