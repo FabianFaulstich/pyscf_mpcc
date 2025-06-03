@@ -450,30 +450,30 @@ def make_intermediates(mcc, t1, t2, eris, act_hole, act_particle):
     class _IMDS: pass
     imds = _IMDS()
 
-    t1anew = t1a*0.0
-    t1bnew = t1b*0.0
-    t2aanew = t2aa*0.0
-    t2bbnew = t2bb*0.0
-    t2abnew = t2ab*0.0
+#   t1anew = t1a*0.0
+#   t1bnew = t1b*0.0
+#   t2aanew = t2aa*0.0
+#   t2bbnew = t2bb*0.0
+#   t2abnew = t2ab*0.0
 
-    t1new = t1anew, t1bnew
-    t2new = t2aanew, t2abnew, t2bbnew
+#   t1new = t1anew, t1bnew
+#   t2new = t2aanew, t2abnew, t2bbnew
 
 # Foo, Fvv and Fov
-    Foo, FOO = uintermediates.Foo(t1new, t2new, eris)
-    Fvv, FVV = uintermediates.Fvv(t1new, t2new, eris)
-    Fov, FOV = uintermediates.Fov(t1new, t2new, eris)
+    Foo, FOO = uintermediates.Foo(t1, t2, eris)
+    Fvv, FVV = uintermediates.Fvv(t1, t2, eris)
+    Fov, FOV = uintermediates.Fov(t1, t2, eris)
 # Woovo 
-    Woovo, WooVO, WOOvo, WOOVO = uintermediates.Woovo(t1new, t2new, eris)
+    Woovo, WooVO, WOOvo, WOOVO = uintermediates.Woovo(t1, t2, eris)
 #Wvvvo
-    Wvvvo, WvvVO, WVVvo, WVVVO = uintermediates.Wvvvo_t3(t1new, t2new, eris)
+    Wvvvo, WvvVO, WVVvo, WVVVO = uintermediates.Wvvvo_t3(t1, t2, eris)
 
-    Wvvvo_act, WvvVO_act, WVVvo_act, WVVVO_act = get_vvvv_to_imds(mcc, t1new, eris, act_hole, act_particle)
+    Wvvvo_act, WvvVO_act, WVVvo_act, WVVVO_act = get_vvvv_to_imds(mcc, t1, eris, act_hole, act_particle)
 
 #Wvvov and Wovoo
 
-    Wvvov, WvvOV, WVVov, WVVOV = uintermediates.Wvvov(t1new, t2new, eris)
-    Wovoo, WOVoo, WovOO, WOVOO = uintermediates.Wovoo(t1new, eris)
+    Wvvov, WvvOV, WVVov, WVVOV = uintermediates.Wvvov(t1, t2, eris)
+    Wovoo, WOVoo, WovOO, WOVOO = uintermediates.Wovoo(t1, eris)
 
 #Wovov
 #anti-symmetrize this array:
@@ -540,18 +540,18 @@ def make_intermediates_energy(mcc, t1, t2, eris, act_hole, act_particle):
     class _IMDS: pass
     imds = _IMDS()
 
-    t1anew = t1a*0.0
-    t1bnew = t1b*0.0
-    t2aanew = t2aa*0.0
-    t2bbnew = t2bb*0.0
-    t2abnew = t2ab*0.0
+#   t1anew = t1a*0.0
+#   t1bnew = t1b*0.0
+#   t2aanew = t2aa*0.0
+#   t2bbnew = t2bb*0.0
+#   t2abnew = t2ab*0.0
 
-    t1new = t1anew, t1bnew
-    t2new = t2aanew, t2abnew, t2bbnew
+#   t1new = t1anew, t1bnew
+#   t2new = t2aanew, t2abnew, t2bbnew
 
-    Wvvov, WvvOV, WVVov, WVVOV = uintermediates.Wvvov(t1new, t2new, eris)
-    Wovoo, WOVoo, WovOO, WOVOO = uintermediates.Wovoo(t1new, eris)
-    Fova, Fovb = uintermediates.Fov(t1new, t2new, eris)
+    Wvvov, WvvOV, WVVov, WVVOV = uintermediates.Wvvov(t1, t2, eris)
+    Wovoo, WOVoo, WovOO, WOVOO = uintermediates.Wovoo(t1, eris)
+    Fova, Fovb = uintermediates.Fov(t1, t2, eris)
 
     imds.Fova_active = Fova[numpy.ix_(act_hole[0], act_particle[0])]
     imds.Fovb_active = Fovb[numpy.ix_(act_hole[1], act_particle[1])]
