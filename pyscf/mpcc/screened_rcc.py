@@ -52,17 +52,59 @@ class screened:
         Fov += lib.einsum("Lia,L->ia",Lov,M)
         Fov += lib.einsum("Lma,Lmi->ia",Lov,Moo)
 
+        return 
+     
+
 
     def t2_transform_linear():
+
+
+       # reconstruct antisymmetrized t2:
+
+       # Aia
+       M = lib.einsum("Lkc, kicd -> Lid",Jov,t2)  
+
+       # generate two types of M: inactive-active, active-inactive
+
+
+       A = lib.einsum("Lid, Lad -> ia",M,Jvv) #NauxNoNv^2
+
+       # Bia
+
+       B = lib.einsum("Lka,Lki -> ia", M, Joo)
+
+
+       # Cia
+
+       C = lib.einsum("kc, ikac -> ia", Fov, t2)
+
+       
+    
+       
+ 
+
+
+        return
 
 
     def t2_transform_quadratic():
 
 
+        # We will build DCA terms first:  
+
+        #step 1:
+
+        u = 2*t - t.transpose(0,1,3,2)
+
+        
 
 
 
 
+
+
+
+        return
 
 
 
