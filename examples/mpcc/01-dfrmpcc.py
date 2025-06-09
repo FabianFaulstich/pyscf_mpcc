@@ -20,4 +20,26 @@ if __name__ == "__main__":
 
     # No computation
     mympcc = mpcc.MPCC(mf)
+
+    # NOTE setting the following variables explicitly to the default value
+    # This can also be passed through mpcc.MPCC(mf, 'arg'= value)
+    # mympcc = mpcc.MPCC(mf, ll_con_tol = 1e-6, ll_max_its = 50)
+    
+    mympcc.lowlevel.ll_max_its = 50
+    mympcc.lowlevel.ll_con_tol = 1e-6
+
+
     mympcc.kernel()
+
+    print("Left MPCC")
+    print(mympcc.lowlevel.e_tot)
+    breakpoint()
+    # localization, where?
+    # a-a, i-a do this in ERIs
+    # 
+
+    # NOTE what we want:
+    #mympcc.lowlevel set #its, tol, 
+    #   "ll method" set this RPA here 
+
+
