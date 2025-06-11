@@ -1,5 +1,5 @@
 import numpy as np
-from pyscf import lib
+from pyscf import lib, df
 
 
 class ERIs:
@@ -55,58 +55,13 @@ class ERIs:
         self.Lvo = Lvo
         self.Lvv = Lvv
 
-    #####
-    # NOTE following are the first set of contactions
-    def get_X(self, t1):
+        # NOTE 06/04 debate about cache 
 
-        Xvo = np.einsum("Lab,ib->Lai", self.Lvv, t1)
-        Xoo = np.einsum("Lia,ja->Lij", self.Lov, t1)
-        X = np.einsum("Lia,ia->L", self.Lov, t1)
+    # hold all a-a, a-i, i-i tensor segments here 
+    # compute Lvv on the fly *lazy?
 
-        return X, Xoo, Xvo
-
-    def get_J(self, Xoo, Xvo, t1):
-
-        Joo = Xoo + self.Loo
-        Jvo = (
-            Xvo + np.transpose(self.Lov, (0, 2, 1)) - np.einsum("Lij,ja->Lai", Joo, t1)
-        )
-
-        return Joo, Jvo
-
-    def get_Ω(self, X, Xoo, Xvo, Joo, Jvo, t1):
-
-        Ω = -1 * np.einsum("Laj,Lji->ai", Xvo, Joo)
-        Ω += np.einsum("Ljk,ka,Lji->ai", Xoo, t1, Joo)
-        Ω += np.einsum("Lai,L->ai", Jvo, X)
-
-        Ω += np.einsum("ib,ba -> ai", t1, self.fvv)
-        Ω -= np.einsum("ka,ik -> ai", t1, self.foo)
-
-        return Ω
-
-    def get_F(self, X, Xoo, Jvo):
-
-        return np.einsum("Lbj,L->jb", Jvo, X) - np.einsum("Lij,Lib->jb", Xoo, self.Lov)
-
-    def get_t2_Yvo(self, Jvo):
-
-        eris = np.einsum("Lai,Ljb->aijb", Jvo, Jvo)
-        t2 = (2 * eris - np.transpose(eris, (0, 3, 2, 1))) / self.D
-        Yvo = np.einsum("aibj,Ljb->Lai", t2, self.Lov)
-
-        return t2, Yvo
-
-    def update_Ω(self, Ω, Yvo, Fov, t2, t1, Joo):
-
-        Ω += np.einsum("aijb,bj->ai", t2, Fov)
-        Jvv = np.einsum("Ljb,ja->Lba", self.Lov, t1) + self.Lvv
-        Ω += np.einsum("Lba,Lbi->ai", Jvv, Yvo)
-        Ω -= np.einsum("Lji,Laj->ai", Joo, Yvo)
-
-        return Ω
-
-    #####
+    # NOTE Remove after discussion on 06/11
+    # NOTE move contractions into the "class"
     # NOTE Now comes the second set of equations
     def get_Aia(self, u):
 
@@ -126,15 +81,15 @@ class ERIs:
 
     def get_Aijab(self, t):
 
-        tmp_eri = np.einsum("Lac, Lbd->acbd", Lvv, Lvv)
+        tmp_eri = np.einsum("Lac, Lbd->acbd", self.Lvv, self.Lvv)
 
         return np.einsum("ijcd, acbd -> ijab", t, tmp_eri)
 
     def get_Bijab(self, t):
 
-        tmp_eri = np.einsum("Lkc, Lld -> kcld", self.Lov, self.Lov)
+        tmp_eri = np.einsum("Lkc, Lld -> kcld", self.self.Lov, self.self.Lov)
         B = np.einsum("ijcd, kcld -> ijkl", t, tmp_eri)
-        tmp_eri = np.einsum("Lki, Ljl -> ijkl", Loo, Loo)
+        tmp_eri = np.einsum("Lki, Ljl -> ijkl", self.Loo, self.Loo)
         B = tmp_eri + B
 
         return np.einsum("klab, ijkl -> ijab", t, B)
@@ -144,10 +99,10 @@ class ERIs:
         # NOTE tmp_eri is the same as in get_Bijab
         tmp_eri = np.einsum("Lkc, Lld -> kcld", self.Lov, self.Lov)
         C = np.einsum("liad, kcld -> kiac", t, tmp_eri)
-        tmp_eri = np.einsum("Lki, Lac -> kiac", Loo, Lvv)
+        tmp_eri = np.einsum("Lki, Lac -> kiac", self.Loo, self.Lvv)
         C = tmp_eri - 0.5 * C
 
-        return np.einsum("kjbc, kiac -> ijab", t, B)
+        return np.einsum("kjbc, kiac -> ijab", t, C)
 
     def get_Dijab(self, t):
 
