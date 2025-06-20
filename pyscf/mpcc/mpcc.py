@@ -9,25 +9,23 @@ class MPCC(lib.StreamObject):
 
         self.eris = eri.ERIs(mf)
 
-        self.lowlevel = lowlevel.MPCC_LL(mf, self.eris)
-        
-        if 'll_max_its' in kwargs:
-            self.lowlevel.ll_max_its = kwargs['ll_max_its']
-        else:    
-            self.lowlevel.ll_max_its = 50
-
-        if 'll_con_tol' in kwargs:
-            self.lowlevel.ll_con_tol = kwargs['ll_con_tol']
-        else:
-            self.lowlevel.ll_con_tol = 1e-6
-        
+        self.lowlevel = lowlevel.MPCC_LL(mf, self.eris, **kwargs)
+       
         # Setting MPCC attributes 
         # use "_" for variable protection 
 
         # "Screened_interaction"
         # "High-level"
 
-    def kernel(self):
+    def kernel(self, localization = False, **kwargs):
+
+        if localization:
+            try:
+                c_lo = kwargs['c_lo']
+                frag = kwargs['frag']
+            except:
+                print('Localization orbital transformation and fragments not provided. \nDefaulting to AVAS!')
+                breakpoint() 
 
         self.eris.make_eri()
         

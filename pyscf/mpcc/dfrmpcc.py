@@ -7,3 +7,4 @@ class RMPCC(mpcc.MPCC):
 
         mpcc.MPCC.__init__(self, mf, dfrmpcc_lowlevel, df_eri, **kwargs)
 
+    # NOTE need to define a kernel

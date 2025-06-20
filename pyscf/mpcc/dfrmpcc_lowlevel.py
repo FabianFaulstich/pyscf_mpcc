@@ -1,4 +1,6 @@
 from pyscf import lib, df
+from pyscf.lib import logger
+
 
 import numpy as np
 
@@ -30,9 +32,6 @@ class MPCC_LL:
         # NOTE use DIIS as default
         self.diis = True
 
-        # Protected variables
-        self._nao = getattr(mf.mol, 'nao')
-        self._nelec = getattr(mf.mol, 'nelec')
         self._eris = eris
         self._e_corr = None
 
@@ -46,11 +45,11 @@ class MPCC_LL:
 
     @property
     def nvir(self):
-        return self._nao - self.nocc
+        return self.mf.mol.nao - self.nocc
     
     @property
     def nocc(self):
-        return self._nelec[0]
+        return self.mf.mol.nelec[0]
 
     def kernel(self):
 
