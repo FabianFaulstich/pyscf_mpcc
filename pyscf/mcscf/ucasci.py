@@ -54,7 +54,7 @@ def extract_orbs(mo_coeff, ncas, nelecas, ncore):
     return mo_core, mo_cas, mo_vir
 
 def h1e_for_cas(casci, mo_coeff=None, ncas=None, ncore=None):
-    '''CAS sapce one-electron hamiltonian for UHF-CASCI or UHF-CASSCF
+    '''CAS space one-electron hamiltonian for UHF-CASCI or UHF-CASSCF
 
     Args:
         casci : a U-CASSCF/U-CASCI object or UHF object
@@ -119,7 +119,7 @@ def kernel(casci, mo_coeff=None, ci0=None, verbose=logger.NOTE, envs=None):
 
 class UCASBase(CASBase):
     # nelecas is tuple of (nelecas_alpha, nelecas_beta)
-    def __init__(self, mf_or_mol, ncas, nelecas, ncore=None):
+    def __init__(self, mf_or_mol, ncas=0, nelecas=0, ncore=None):
         #assert ('UHF' == mf.__class__.__name__)
         if isinstance(mf_or_mol, gto.Mole):
             mf = scf.UHF(mf_or_mol)

@@ -91,13 +91,17 @@ class _SmearingKSCF(mol_addons._SmearingSCF):
 
         This is a k-point version of scf.hf.SCF.get_occ
         '''
+        from pyscf.pbc import scf
         if (self.sigma == 0) or (not self.sigma) or (not self.smearing_method):
             mo_occ_kpts = super().get_occ(mo_energy_kpts, mo_coeff_kpts)
             return mo_occ_kpts
 
         is_uhf = self.istype('KUHF')
         is_rhf = self.istype('KRHF')
-        is_rohf = self.istype('KROHF')
+        if isinstance(self, scf.krohf.KROHF):
+            # ROHF leads to two Fock matrices. It's not clear how to define the
+            # Roothaan effective Fock matrix from the two.
+            raise NotImplementedError('Smearing-ROHF')
 
         sigma = self.sigma
         if self.smearing_method.lower() == 'fermi':
@@ -112,21 +116,24 @@ class _SmearingKSCF(mol_addons._SmearingSCF):
         else:
             nkpts = len(kpts)
 
-        if self.fix_spin and (is_uhf or is_rohf): # spin separated fermi level
-            if is_rohf: # treat rohf as uhf
-                mo_energy_kpts = (mo_energy_kpts, mo_energy_kpts)
+        if self.fix_spin and is_uhf: # spin separated fermi level
             mo_es = [numpy.hstack(mo_energy_kpts[0]),
                      numpy.hstack(mo_energy_kpts[1])]
             nocc = self.nelec
             if self.mu0 is None:
                 mu_a, occa = mol_addons._smearing_optimize(f_occ, mo_es[0], nocc[0], sigma)
                 mu_b, occb = mol_addons._smearing_optimize(f_occ, mo_es[1], nocc[1], sigma)
-                mu = [mu_a, mu_b]
-                mo_occs = [occa, occb]
             else:
-                mu = self.mu0
-                mo_occs = f_occ(mu[0], mo_es[0], sigma)
-                mo_occs = f_occ(mu[1], mo_es[1], sigma)
+                if numpy.isscalar(self.mu0):
+                    mu_a = mu_b = self.mu0
+                elif len(self.mu0) == 2:
+                    mu_a, mu_b = self.mu0
+                else:
+                    raise TypeError(f'Unsupported mu0: {self.mu0}')
+                occa = f_occ(mu_a, mo_es[0], sigma)
+                occb = f_occ(mu_b, mo_es[1], sigma)
+            mu = [mu_a, mu_b]
+            mo_occs = [occa, occb]
             self.entropy  = self._get_entropy(mo_es[0], mo_occs[0], mu[0])
             self.entropy += self._get_entropy(mo_es[1], mo_occs[1], mu[1])
             self.entropy /= nkpts
@@ -145,8 +152,6 @@ class _SmearingKSCF(mol_addons._SmearingSCF):
             mo_occ_kpts =(_partition_occ(mo_occs[0], mo_energy_kpts[0]),
                           _partition_occ(mo_occs[1], mo_energy_kpts[1]))
             tools.print_mo_energy_occ_kpts(self, mo_energy_kpts, mo_occ_kpts, True)
-            if is_rohf:
-                mo_occ_kpts = numpy.array(mo_occ_kpts, dtype=numpy.float64).sum(axis=0)
         else:
             nocc = nelectron = self.mol.tot_electrons(nkpts)
             if is_uhf:
@@ -163,6 +168,7 @@ class _SmearingKSCF(mol_addons._SmearingSCF):
             else:
                 # If mu0 is given, fix mu instead of electron number. XXX -Chong Sun
                 mu = self.mu0
+                assert numpy.isscalar(mu)
                 mo_occs = f_occ(mu, mo_es, sigma)
             self.entropy = self._get_entropy(mo_es, mo_occs, mu) / nkpts
             if is_rhf:
@@ -482,14 +488,18 @@ def convert_to_kscf(mf, out=None):
         }
         mf = mol_addons._object_without_soscf(mf, known_cls, False)
         if mf.mo_energy is not None:
-            if mf.istype('UHF'):
-                mf.mo_occ = mf.mo_occ[:,numpy.newaxis]
-                mf.mo_coeff = mf.mo_coeff[:,numpy.newaxis]
-                mf.mo_energy = mf.mo_energy[:,numpy.newaxis]
+            if isinstance(mf, scf.kuhf.KUHF):
+                mf.mo_occ = mf.mo_occ[:, numpy.newaxis]
+                mf.mo_coeff = mf.mo_coeff[:, numpy.newaxis]
+                mf.mo_energy = mf.mo_energy[:, numpy.newaxis]
             else:
                 mf.mo_occ = mf.mo_occ[numpy.newaxis]
                 mf.mo_coeff = mf.mo_coeff[numpy.newaxis]
                 mf.mo_energy = mf.mo_energy[numpy.newaxis]
+
+        if hasattr(mf, '_numint'):
+            kpts = getattr(mf.kpts, 'kpts', mf.kpts)
+            mf._numint = dft.numint.KNumInt(kpts)
 
     if out is None:
         return mf
@@ -516,7 +526,7 @@ def mo_energy_with_exxdiv_none(mf, mo_coeff=None):
         fockao = mf.get_fock(vhf=vhf, dm=dm)
 
     def _get_moe1(C, fao):
-        return lib.einsum('pi,pq,qi->i', C.conj(), fao, C)
+        return lib.einsum('pi,pq,qi->i', C.conj(), fao, C).real
     def _get_moek(kC, kfao):
         return [_get_moe1(C, fao) for C,fao in zip(kC, kfao)]
 

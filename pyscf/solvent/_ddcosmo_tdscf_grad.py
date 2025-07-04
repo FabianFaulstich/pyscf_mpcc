@@ -19,7 +19,7 @@
 '''
 ddCOSMO TDA, TDHF, TDDFT gradients
 
-The implementaitons are based on modules
+The implementations are based on modules
 pyscf.grad.tdrhf
 pyscf.grad.tdrks
 pyscf.grad.tduhf
@@ -37,7 +37,7 @@ from pyscf import dft
 from pyscf import df
 from pyscf.dft import numint
 from pyscf.solvent import ddcosmo
-from pyscf.solvent import ddcosmo_grad
+from pyscf.solvent.grad import ddcosmo_grad
 from pyscf.solvent._attach_solvent import _Solvation
 from pyscf.grad import rks as rks_grad
 from pyscf.grad import tdrks as tdrks_grad
@@ -161,7 +161,8 @@ def tdrhf_grad_elec(td_grad, x_y, singlet=True, atmlst=None,
 
     with lib.temporary_env(mf.with_solvent, equilibrium_solvation=True):
         # set singlet=None, generate function for CPHF type response kernel
-        vresp = mf.gen_response(singlet=None, hermi=1)
+        vresp = mf.gen_response(singlet=None, hermi=1,
+                                with_nlc=not td_grad.base.exclude_nlc)
         def fvind(x):  # For singlet, closed shell ground state
             dm = reduce(numpy.dot, (orbv, x.reshape(nvir,nocc)*2, orbo.T))
             v1ao = vresp(dm+dm.T)
@@ -332,7 +333,8 @@ def tdrks_grad_elec(td_grad, x_y, singlet=True, atmlst=None,
 
     with lib.temporary_env(mf.with_solvent, equilibrium_solvation=True):
         # set singlet=None, generate function for CPHF type response kernel
-        vresp = mf.gen_response(singlet=None, hermi=1)
+        vresp = mf.gen_response(singlet=None, hermi=1,
+                                with_nlc=not td_grad.base.exclude_nlc)
         def fvind(x):
             dm = reduce(numpy.dot, (orbv, x.reshape(nvir,nocc)*2, orbo.T))
             v1ao = vresp(dm+dm.T)
@@ -513,7 +515,7 @@ def tduhf_grad_elec(td_grad, x_y, atmlst=None, max_memory=2000, verbose=logger.I
     wvob += numpy.einsum('ac,ai->ci', veff0momb[noccb:,noccb:], xmyb) * 2
 
     with lib.temporary_env(mf.with_solvent, equilibrium_solvation=True):
-        vresp = mf.gen_response(hermi=1)
+        vresp = mf.gen_response(hermi=1, with_nlc=not td_grad.base.exclude_nlc)
         def fvind(x):
             dm1 = numpy.empty((2,nao,nao))
             xa = x[0,:nvira*nocca].reshape(nvira,nocca)
@@ -754,7 +756,7 @@ def tduks_grad_elec(td_grad, x_y, atmlst=None, max_memory=2000, verbose=logger.I
         veff0momb = numpy.zeros((nmob,nmob))
 
     with lib.temporary_env(mf.with_solvent, equilibrium_solvation=True):
-        vresp = mf.gen_response(hermi=1)
+        vresp = mf.gen_response(hermi=1, with_nlc=not td_grad.base.exclude_nlc)
         def fvind(x):
             dm1 = numpy.empty((2,nao,nao))
             xa = x[0,:nvira*nocca].reshape(nvira,nocca)

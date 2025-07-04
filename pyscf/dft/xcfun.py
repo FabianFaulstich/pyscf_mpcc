@@ -36,9 +36,60 @@ _itrf = lib.load_library('libxcfun_itrf')
 _itrf.xcfun_splash.restype = ctypes.c_char_p
 _itrf.xcfun_version.restype = ctypes.c_char_p
 _itrf.XCFUN_eval_xc.restype = ctypes.c_int
+_itrf.xcfun_enumerate_parameters.restype = ctypes.c_char_p
+_itrf.XCFUN_xc_type.restype = ctypes.c_int
+_itrf.xcfun_describe_short.restype = ctypes.c_char_p
+_itrf.xcfun_describe_short.argtype = [ctypes.c_char_p]
+_itrf.xcfun_describe_long.restype = ctypes.c_char_p
+_itrf.xcfun_describe_long.argtype = [ctypes.c_char_p]
 
 __version__ = _itrf.xcfun_version().decode("UTF-8")
 __reference__ = _itrf.xcfun_splash().decode("UTF-8")
+
+def print_XC_CODES():
+    '''
+    Dump the built-in xcfun XC_CODES in a readable format.
+    '''
+    lda_ids = []
+    gga_ids = []
+    mgga_ids = []
+    xc_codes = {}
+
+    print('XC = XC_CODES = {')
+    for i in range(78):
+        name = _itrf.xcfun_enumerate_parameters(ctypes.c_int(i))
+        sdescr = _itrf.xcfun_describe_short(name)
+        #ldescr = _itrf.xcfun_describe_long(ctypes.c_int(i))
+        if sdescr is not None:
+            name = name.decode('UTF-8')
+            key = f"'{name}'"
+            sdescr = sdescr.decode('UTF-8')
+            print(f'{key:<16s}: {i:2d},  #{sdescr}')
+            xc_codes[name] = i
+
+        fntype = _itrf.XCFUN_xc_type(ctypes.c_int(i))
+        if fntype == 0:
+            lda_ids.append(i)
+        elif fntype == 1:
+            gga_ids.append(i)
+        elif fntype == 2:
+            mgga_ids.append(i)
+
+    alias = {
+        'SLATER': 'SLATERX',
+        'LDA'   : 'SLATERX',
+        'VWN'   : 'VWN5C',
+        'VWN5'  : 'VWN5C',
+        'B88'   : 'BECKEX',
+        'LYP'   : 'LYPC',
+    }
+    for k, v in alias.items():
+        key = f"'{k}'"
+        print(f'{key:<16s}: {xc_codes[v]:2d},  # {v}')
+    print('}')
+    print('LDA_IDS = %s' % lda_ids)
+    print('GGA_IDS = %s' % gga_ids)
+    print('MGGA_IDS = %s' % mgga_ids)
 
 XC = XC_CODES = {
 'SLATERX'       :  0,  #Slater LDA exchange
@@ -420,6 +471,12 @@ def parse_xc(description):
     elif not isinstance(description, str): #isinstance(description, (tuple,list)):
         return parse_xc('%s,%s' % tuple(description))
 
+    description = description.upper()
+    if '-D3' in description or '-D4' in description:
+        from pyscf.scf.dispersion import parse_dft
+        description, _, _ = parse_dft(description)
+        description = description.upper()
+
     def assign_omega(omega, hyb_or_sr, lr=0):
         if hyb[2] == omega or omega == 0:
             hyb[0] += hyb_or_sr
@@ -430,6 +487,7 @@ def parse_xc(description):
             hyb[2] = omega
         else:
             raise ValueError('Different values of omega found for RSH functionals')
+
     fn_facs = []
     def parse_token(token, suffix, search_xc_alias=False):
         if token:
@@ -442,7 +500,7 @@ def parse_xc(description):
                 fac, key = token.split('*')
                 if fac[0].isalpha():
                     fac, key = key, fac
-                fac = sign * float(fac.replace('_', '-'))
+                fac = sign * float(fac.replace('E_', 'E-'))
             else:
                 fac, key = sign, token
 
@@ -503,6 +561,8 @@ def parse_xc(description):
             parse_token(token, 'C')
     else:
         for token in description.replace('-', '+-').replace(';+', ';').split('+'):
+            # dftd3 cannot be used in a custom xc description
+            assert '-d3' not in token
             parse_token(token, 'XC', search_xc_alias=True)
     if hyb[2] == 0: # No omega is assigned. LR_HF is 0 for normal Coulomb operator
         hyb[1] = 0
@@ -824,7 +884,7 @@ XC_D0000003 = 119
 
 def eval_xc(xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
     r'''Interface to call xcfun library to evaluate XC functional, potential
-    and functional derivatives. Return deriviates following libxc convention.
+    and functional derivatives. Return derivatives following libxc convention.
 
     See also :func:`pyscf.dft.libxc.eval_xc`
     '''

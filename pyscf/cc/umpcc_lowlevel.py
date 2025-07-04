@@ -133,16 +133,16 @@ def initialize_t1(myll):
     mydfmp = DFMP2(myll.mymf)
     mydfmp.kernel()
 
-    # t2 = myll.mycc.t2
-    t2 = list(mymp.t2)
-    # NOTE anti-symmetrized
-    t2[0] = t2[0] - np.transpose(t2[0], [0, 1, 3, 2])
-    t2[2] = t2[2] - np.transpose(t2[2], [0, 1, 3, 2])
+#   # t2 = myll.mycc.t2
+#   t2 = list(mymp.t2)
+#   # NOTE anti-symmetrized
+#   t2[0] = t2[0] - np.transpose(t2[0], [0, 1, 3, 2])
+#   t2[2] = t2[2] - np.transpose(t2[2], [0, 1, 3, 2])
     myll.t2 = mymp.t2
 
     mf = scf.UHF(mol).density_fit().run()
     myccdf = cc.CCSD(mf)
-    myccdf.with_df = df.DF(mf.mol, auxbasis='ccpvdz-ri')
+    myccdf.with_df = df.DF(mf.mol, auxbasis='ccpvtz-ri')
     # myccdf.run()
 
     print(f"Computed MP2 initial guess")
@@ -155,9 +155,9 @@ def initialize_t1(myll):
     #print(
     #    f"Comparing with DFCCSD energy: {myccdf.e_tot} with {myccdf.e_corr} corr. energy"
     #)
-    Loo = myll.Loo
-    Lov = myll.Lov
-    Lvv = myll.mycc.t1
+#   Loo = myll.Loo
+#   Lov = myll.Lov
+#   Lvv = myll.mycc.t1
 
     '''
     Yvo = np.einsum("ijab,Ljb->Lai", t2, Lov)
@@ -203,11 +203,12 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
 
     # Step 2
     Joo = Xoo + Loo
-    Ωvo = -1 * np.einsum("Laj,Lji->ai", Xvo, Joo)
+    Ωvo = -1.0 * np.einsum("Laj,Lji->ai", Xvo, Joo)
     Jvo = Xvo + np.transpose(Lov, (0, 2, 1)) - np.einsum("Lij,ja->Lai", Joo, t1a)
 
     JOO = XOO + LOO
-    ΩVO = -1 * np.einsum("Laj,Lji->ai", XVO, JOO)
+
+    ΩVO = -1.0 * np.einsum("Laj,Lji->ai", XVO, JOO)
     JVO = XVO + np.transpose(LOV, (0, 2, 1)) - np.einsum("Lij,ja->Lai", JOO, t1b)
 
     # Step 3
@@ -232,18 +233,70 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
     ΩVO -= np.einsum('ka,ik -> ai',t1b,fOO)
 
     # Step 5
-    Fov = np.einsum("Lbj,L->jb", Jvo, X) - np.einsum("Lij,Lib->jb", Xoo, Lov)
-    FOV = np.einsum("Lbj,L->jb", JVO, X) - np.einsum("Lij,Lib->jb", XOO, LOV)
+#    Fov = np.einsum("Lbj,L->jb", Jvo, X) - np.einsum("Lij,Lib->jb", Xoo, Lov)
+#    FOV = np.einsum("Lbj,L->jb", JVO, X) - np.einsum("Lij,Lib->jb", XOO, LOV)
+
+    Fov = np.einsum("Ljb,L->jb", Lov, X) - np.einsum("Lij,Lib->jb", Xoo, Lov)
+    FOV = np.einsum("Ljb,L->jb", LOV, X) - np.einsum("Lij,Lib->jb", XOO, LOV)
 
     # Step 6
-    erisaa = np.einsum("Lai,Ljb->aijb", Jvo, Jvo)
-    erisab = np.einsum("Lai,Ljb->aijb", Jvo, JVO)
-    erisbb = np.einsum("Lai,Ljb->aijb", JVO, JVO)
+    erisaa = np.einsum("Lai,Lbj->aibj", Jvo, Jvo)
+    erisab = np.einsum("Lai,Lbj->aibj", Jvo, JVO)
+    erisbb = np.einsum("Lai,Lbj->aibj", JVO, JVO)
 
     # Step 7
     t2aa = (erisaa - np.transpose(erisaa, (0, 3, 2, 1))) / myll.D[0]
     t2bb = (erisbb - np.transpose(erisbb, (0, 3, 2, 1))) / myll.D[2]
     t2ab = erisab / myll.D[1]
+
+    # ------------
+    # Update : 05/09 
+     
+    Erisaa = np.einsum("Lia,Ljb->iajb", Lov, Lov)
+    Erisbb = np.einsum("Lia,Ljb->iajb", LOV, LOV)
+
+#   Erisaa = Erisaa - np.transpose(Erisaa, (0,3,2,1))
+#   Erisbb = Erisbb - np.transpose(Erisbb, (0,3,2,1))
+
+    Erisab = np.einsum("Lia,LJB->iaJB", Lov, LOV)
+
+    txaa = np.transpose(t2aa, (1,3,0,2))
+    txbb = np.transpose(t2bb, (1,3,0,2))
+    txab = np.transpose(t2ab, (1,3,0,2))
+
+#   tau1aa = np.einsum('ia,jb->ijab', t1a, t1a)
+#   tau1aa-= np.einsum('ia,jb->jiab', t1a, t1a)
+#   tau1aa = tau1aa - tau1aa.transpose(0,1,3,2)
+#   tau1aa *= .5
+#   tau1aa = np.transpose(tau1aa, (2,0,3,1))
+#   
+#   tau1bb = np.einsum('ia,jb->ijab', t1b, t1b)
+#   tau1bb-= np.einsum('ia,jb->jiab', t1b, t1b)
+#   tau1bb = tau1bb - tau1bb.transpose(0,1,3,2)
+#   tau1bb *= .5
+#   tau1bb = np.transpose(tau1bb, (2,0,3,1))
+#    
+#   tau1ab = np.einsum('ia,JB->iJaB', t1a, t1b)
+#   tau1ab += np.einsum('ia,JB->iJaB', t1a, t1b)
+#   tau1ab *= .5
+#   tau1ab = np.transpose(tau1ab, (2,0,3,1))
+
+#   E2 = 0.25 * np.einsum('aibj, aibj', Erisaa, t2aa + tau1aa)
+#   E2 += 0.25 * np.einsum('aibj, aibj', Erisbb, t2bb + tau1bb)
+#   E2 += np.einsum('aibj, aibj', Erisab, t2ab + tau1ab)
+
+    E2  = 0.25*np.einsum('ijab,iajb',txaa,Erisaa)
+    E2 -= 0.25*np.einsum('ijab,ibja',txaa,Erisaa)
+    E2 += 0.25*np.einsum('ijab,iajb',txbb,Erisbb)
+    E2 -= 0.25*np.einsum('ijab,ibja',txbb,Erisbb)
+    E2 +=      np.einsum('iJaB,iaJB',txab,Erisab)
+    E2 += 0.5*np.einsum('ia,jb,iajb',t1a,t1a,Erisaa)
+    E2 -= 0.5*np.einsum('ia,jb,ibja',t1a,t1a,Erisaa)
+    E2 += 0.5*np.einsum('ia,jb,iajb',t1b,t1b,Erisbb)
+    E2 -= 0.5*np.einsum('ia,jb,ibja',t1b,t1b,Erisbb)
+    E2 +=     np.einsum('ia,jb,iajb',t1a,t1b,Erisab)
+
+    # ------------
 
     Yvo = np.einsum("aibj,Ljb->Lai", t2aa, Lov)
     Yvo += np.einsum("aiBJ,LJB->Lai", t2ab, LOV)
@@ -258,44 +311,49 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
     ΩVO += np.einsum("aiBJ,ia->BJ", t2ab, Fov)
 
     # Step 8
-    Jvv = np.einsum("Ljb,ja->Lba", Lov, t1a) + Lvv
+    Jvv = -1.0*np.einsum("Ljb,ja->Lba", Lov, t1a) + Lvv
     Ωvo += np.einsum("Lba,Lbi->ai", Jvv, Yvo)
     Ωvo -= np.einsum("Lji,Laj->ai", Joo, Yvo)
 
-    JVV = np.einsum("Ljb,ja->Lba", LOV, t1b) + LVV
+    JVV = -1.0*np.einsum("Ljb,ja->Lba", LOV, t1b) + LVV
     ΩVO += np.einsum("Lba,Lbi->ai", JVV, YVO)
     ΩVO -= np.einsum("Lji,Laj->ai", JOO, YVO)
 
     # Step 9
     # NOTE check the sign here!
-    #e1a = -1* np.einsum("Lij,ja->Lai", Xoo, t1a) + np.einsum("L,ia->Lai", X, t1a) + Jvo
-    #e1b = -1* np.einsum("Lij,ja->Lai", XOO, t1b) + np.einsum("L,ia->Lai", X, t1b) + JVO
+    e1a = 1* np.einsum("Lij,ja->Lai", Xoo, t1a) + np.einsum("L,ia->Lai", X, t1a) + Jvo
+    e1b = 1* np.einsum("Lij,ja->Lai", XOO, t1b) + np.einsum("L,ia->Lai", X, t1b) + JVO
  
-    #ΔEa = np.einsum("Lai,Lai", e1a, Yvo) 
-    #ΔEb = np.einsum("Lai,Lai", e1b, YVO)
+    ΔEa = np.einsum("Lai,Lai", e1a, Yvo) 
+    ΔEb = np.einsum("Lai,Lai", e1b, YVO)
     
     # -------------
     # NOTE update 05/02
-    e1a = np.einsum("L,ia->Lia", X, t1a) + Lov
-    e1b = np.einsum("L,ia->Lia", X, t1b) + LOV
+#   e1a = np.einsum("L,ia->Lia", X, t1a) + Lov
+#   e1b = np.einsum("L,ia->Lia", X, t1b) + LOV
 
-    ΔEa = np.einsum("Lia,Lai", e1a, Yvo) 
-    ΔEa -= np.einsum("Lai, Lia", np.einsum("Lij,ja->Lai", Xoo, t1a), Lov)
-    
-    ΔEb = np.einsum("Lia,Lai", e1b, YVO)
-    ΔEb -= np.einsum("Lai, Lia", np.einsum("Lij,ja->Lai", XOO, t1b), LOV)
+#   ΔEa = np.einsum("Lia,Lai", e1a, Yvo) 
+#   ΔEa -= np.einsum("Lai, Lia", np.einsum("Lij,ja->Lai", Xoo, t1a), Lov)
+#   
+#   ΔEb = np.einsum("Lia,Lai", e1b, YVO)
+#   ΔEb -= np.einsum("Lai, Lia", np.einsum("Lij,ja->Lai", XOO, t1b), LOV)
     # -------------
 
     ΔE = (ΔEa + ΔEb)/2 
 
-    res = np.linalg.norm(myll.t1[0] + Ωvo.T / fock[0])
-    res += np.linalg.norm(myll.t1[1] + ΩVO.T / fock[1])
+    res = np.linalg.norm(myll.t1[0] + Ωvo.T / myll.fock[0])
+    res += np.linalg.norm(myll.t1[1] + ΩVO.T / myll.fock[1])
 
-    myll.t1[0] = -Ωvo.T / fock[0]
-    myll.t1[1] = -ΩVO.T / fock[1]
+    myll.t1[0] = -Ωvo.T / myll.fock[0]
+    myll.t1[1] = -ΩVO.T / myll.fock[1]
 
     t2 = [t2aa, t2ab, t2bb]
     # NOTE rename Ωvo to just Ω
+    
+    print(f'E2 :{E2} ')
+    print(f'ΔE :{ΔE} ')
+
+    breakpoint()
     return res, ΔE, myll.t1, t2
 
 
@@ -415,7 +473,8 @@ class mpccLL(mp2.MP2):
         D_ab = lib.direct_sum('ia+jb->aibj', eia_a, eia_b)
         D_bb = lib.direct_sum('ia+jb->aibj', eia_b, eia_b)
 
-        self.D = np.array([D_aa, D_ab, D_bb])
+#       self.D = np.array([D_aa, D_ab, D_bb])
+        self.D = [D_aa, D_ab, D_bb]
 
     def compute_three_center_ints(self):
 
@@ -585,6 +644,7 @@ if __name__ == "__main__":
     test_co = True
 
 
+
     # Testing CN
 
     mol = gto.Mole()
@@ -599,16 +659,24 @@ if __name__ == "__main__":
     mol.unit = 'Angstrom'
     mol.build()
 
-    mf = mol.UHF().newton()
+    #mf = mol.UHF().newton()
+
+    mf = df.density_fit(scf.UHF(mol), auxbasis='cc-pvtz-jkfit')
+
+#    mf = mol.UHF()
     mf = mf.run()
 
     mo1 = mf.stability()[0]
     dm1 = mf.make_rdm1(mo1, mf.mo_occ)
     mf = mf.run(dm1)
     mo1 = mf.stability()[0]
-    mf = mf.newton().run(mo1, mf.mo_occ)
+    dm1 = mf.make_rdm1(mo1, mf.mo_occ)
+    #mf = mf.newton().run(mo1, mf.mo_occ)
+#   mf = mf.run(mo1, mf.mo_occ)
+    mf = mf.run(dm1)
     mf.stability()
 
+    mf.with_df.auxbasis = "cc-pvtz-jkfit" 
     mymp = mp2.MP2(mf).run()
     mycc = cc.CCSD(mf).run()
 
@@ -627,6 +695,67 @@ if __name__ == "__main__":
     mpccll.kernel()
 
     breakpoint()
+
+    # Testing LiF
+    
+    mol = gto.Mole()
+    mol.verbose = 3
+#    mol.unit = 'bohr'
+    mol.atom = [
+        ["Li", [0.0, 0.0, 0.0]],
+        ["F", [0.0, 0.0, 1.564]]
+    ]
+
+    mol.basis = "cc-pvdz"
+    mol.build()
+    mf = df.density_fit(scf.UHF(mol), auxbasis='ccpvdzfit')
+    mf = mf.newton().run()
+    mo1 = mf.stability()[0]
+    dm1 = mf.make_rdm1(mo1, mf.mo_occ)
+    mf = mf.run(dm1)
+
+    mycc = cc.CCSD(mf).run()
+
+    mpccll = mpccLL(mf, mycc)
+    mpccll.diis = True
+    print(f'Reference Energy : -0.371111485169')
+    ecc2 = mpccll.kernel()
+
+    # Testing H2S
+    
+    mol = gto.Mole()
+    mol.verbose = 3
+    mol.atom = [
+        ["S", [0.000,  0.0000,  0.1030]],
+        ["H", [0.000,  0.9616, -0.8239]],
+        ["H", [0.000, -0.9616, -0.8239]],
+    ]
+
+    mol.basis = "cc-pvtz"
+    mol.build()
+    mf = df.density_fit(scf.UHF(mol), auxbasis='ccpvtz_ri')
+    mf = mf.run()
+    mycc = cc.CCSD(mf).run()
+
+    mpccll = mpccLL(mf, mycc)
+    mpccll.diis = True
+    print(f'Reference Energy, PVDZ: -0.204867860525')
+    print(f'Reference Energy, PVTZ: -0.228008960828')
+    ecc2 = mpccll.kernel()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     if test_co:
         # Testing CO
@@ -662,9 +791,10 @@ if __name__ == "__main__":
         print(f'Amplitude difference T1: {np.linalg.norm(mycc.t1[0] - mycc.t1[1])}')
         print(f'Amplitude difference T2: {np.linalg.norm(mycc.t2[0] - mycc.t2[2])}')
 
+
         mpccll = mpccLL(mf, mycc)
         mpccll.diis = True
-        print(f'Reference Energy : -0.360218968957')
+        print(f'Reference Energy : -0.25842706596457')
         mpccll.kernel()
 
     else:

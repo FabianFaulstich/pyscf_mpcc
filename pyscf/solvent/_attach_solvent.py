@@ -93,6 +93,8 @@ class SCFWithSolvent(_Solvation):
     def get_fock(self, h1e=None, s1e=None, vhf=None, dm=None, cycle=-1,
                  diis=None, diis_start_cycle=None,
                  level_shift_factor=None, damp_factor=None, fock_last=None):
+        if dm is None: dm = self.make_rdm1()
+
         # DIIS was called inside super().get_fock. v_solvent, as a function of
         # dm, should be extrapolated as well. To enable it, v_solvent has to be
         # added to the fock matrix before DIIS was called.
@@ -107,10 +109,26 @@ class SCFWithSolvent(_Solvation):
             dm = self.make_rdm1()
         if getattr(vhf, 'e_solvent', None) is None:
             vhf = self.get_veff(self.mol, dm)
+
         e_tot, e_coul = super().energy_elec(dm, h1e, vhf)
-        e_tot += vhf.e_solvent
+        e_solvent = vhf.e_solvent
+        e_tot += e_solvent
         self.scf_summary['e_solvent'] = vhf.e_solvent.real
-        logger.debug(self, 'Solvent Energy = %.15g', vhf.e_solvent)
+
+        if (hasattr(self.with_solvent, 'method') and
+            self.with_solvent.method.upper() == 'SMD'):
+            if self.with_solvent.e_cds is None:
+                e_cds = self.with_solvent.get_cds()
+                self.with_solvent.e_cds = e_cds
+            else:
+                e_cds = self.with_solvent.e_cds
+
+            if isinstance(e_cds, numpy.ndarray):
+                e_cds = e_cds[0]
+            e_tot += e_cds
+            self.scf_summary['e_cds'] = e_cds
+            logger.info(self, f'CDS correction = {e_cds:.15f}')
+        logger.info(self, 'Solvent Energy = %.15g', vhf.e_solvent)
         return e_tot, e_coul
 
     def nuc_grad_method(self):
@@ -119,10 +137,20 @@ class SCFWithSolvent(_Solvation):
 
     Gradients = nuc_grad_method
 
+    def Hessian(self):
+        hess_method = super().Hessian()
+        return self.with_solvent.Hessian(hess_method)
+
     def gen_response(self, *args, **kwargs):
         vind = super().gen_response(*args, **kwargs)
         is_uhf = isinstance(self, scf.uhf.UHF)
-        # singlet=None is orbital hessian or CPHF type response function
+        # * singlet=None is orbital hessian or CPHF type response function.
+        # Except TDDFT, this is the default case for all response calculations
+        # (such as stability analysis, SOSCF, polarizability and Hessian).
+        # * In TDDFT, this setting only affect RHF wfn. The UHF wfn does not
+        # depend on the setting of "singlet".
+        # * For RHF reference, the triplet excitation does not change the total
+        # electron density, thus does not lead to solvent response.
         singlet = kwargs.get('singlet', True)
         singlet = singlet or singlet is None
         def vind_with_solvent(dm1):
@@ -133,6 +161,10 @@ class SCFWithSolvent(_Solvation):
                     v += v_solvent[0] + v_solvent[1]
                 elif singlet:
                     v += self.with_solvent._B_dot_x(dm1)
+                else:
+                    # The response of electron density should be strictly zero
+                    # for TDDFT triplet
+                    pass
             return v
         return vind_with_solvent
 
@@ -146,6 +178,12 @@ class SCFWithSolvent(_Solvation):
         with lib.temporary_env(self.with_solvent,
                                equilibrium_solvation=not self.with_solvent.frozen):
             return super().stability(*args, **kwargs)
+
+    def to_gpu(self):
+        from gpu4pyscf.solvent import _attach_solvent # type: ignore
+        solvent_obj = self.with_solvent.to_gpu()
+        obj = _attach_solvent._for_scf(self.undo_solvent().to_gpu(), solvent_obj)
+        return obj
 
 def _for_casscf(mc, solvent_obj, dm=None):
     '''Add solvent model to CASSCF method.
@@ -284,6 +322,11 @@ MCSCF_DM * V_solvent[d/dX MCSCF_DM] + V_solvent[MCSCF_DM] * d/dX MCSCF_DM
 
     Gradients = nuc_grad_method
 
+    def to_gpu(self):
+        obj = self.undo_solvent().to_gpu()
+        obj = _for_casscf(obj, self.with_solvent)
+        return lib.to_gpu(self, obj)
+
 
 def _for_casci(mc, solvent_obj, dm=None):
     '''Add solvent model to CASCI method.
@@ -421,6 +464,11 @@ MCSCF_DM * V_solvent[d/dX MCSCF_DM] + V_solvent[MCSCF_DM] * d/dX MCSCF_DM
 
     Gradients = nuc_grad_method
 
+    def to_gpu(self):
+        obj = self.undo_solvent().to_gpu()
+        obj = _for_casci(obj, self.with_solvent)
+        return lib.to_gpu(self, obj)
+
 
 def _for_post_scf(method, solvent_obj, dm=None):
     '''A wrapper of solvent model for post-SCF methods (CC, CI, MP etc.)
@@ -552,6 +600,11 @@ DM * V_solvent[d/dX DM] + V_solvent[DM] * d/dX DM
 
     Gradients = nuc_grad_method
 
+    def to_gpu(self):
+        obj = self.undo_solvent().to_gpu()
+        obj = _for_post_scf(obj, self.with_solvent)
+        return lib.to_gpu(self, obj)
+
 
 def _for_tdscf(method, solvent_obj, dm=None):
     '''Add solvent model in TDDFT calculations.
@@ -583,7 +636,7 @@ def _for_tdscf(method, solvent_obj, dm=None):
 class TDSCFWithSolvent(_Solvation):
     _keys = {'with_solvent'}
 
-    def __init__(self, method, scf_with_solvent):
+    def __init__(self, method, scf_with_solvent=None):
         self.__dict__.update(method.__dict__)
         self._scf = scf_with_solvent
         self.with_solvent = self._scf.with_solvent
@@ -630,3 +683,8 @@ class TDSCFWithSolvent(_Solvation):
     def nuc_grad_method(self):
         grad_method = super().nuc_grad_method()
         return self.with_solvent.nuc_grad_method(grad_method)
+
+    def to_gpu(self):
+        obj = self.undo_solvent().to_gpu()
+        obj = _for_tdscf(obj, self.with_solvent)
+        return lib.to_gpu(self, obj)

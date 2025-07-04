@@ -416,7 +416,7 @@ class GradientsBase(lib.StreamObject):
         self.de = de + self.grad_nuc(atmlst=atmlst)
         if self.mol.symmetry:
             self.de = self.symmetrize(self.de, atmlst)
-        if self.base.disp is not None:
+        if self.base.do_disp():
             self.de += self.get_dispersion()
         logger.timer(self, 'SCF gradients', *cput0)
         self._finalize()
@@ -440,8 +440,14 @@ class GradientsBase(lib.StreamObject):
         to be split into alpha,beta in DF-ROHF subclass'''
         return lib.tag_array (dm, mo_coeff=mo_coeff, mo_occ=mo_occ)
 
+    # to_gpu can be reused only when __init__ still takes mf
     def to_gpu(self):
-        raise NotImplementedError
+        mf = self.base.to_gpu()
+        from importlib import import_module
+        mod = import_module(self.__module__.replace('pyscf', 'gpu4pyscf'))
+        cls = getattr(mod, self.__class__.__name__)
+        obj = cls(mf)
+        return obj
 
 # export the symbol GradientsMixin for backward compatibility.
 # GradientsMixin should be dropped in the future.
@@ -463,12 +469,9 @@ class Gradients(GradientsBase):
 
     grad_elec = grad_elec
 
-    def to_gpu(self):
-        from gpu4pyscf.grad.rhf import Gradients
-        return lib.to_gpu(self.view(Gradients))
-
 Grad = Gradients
 
 from pyscf import scf
 # Inject to RHF class
 scf.hf.RHF.Gradients = lib.class_as_method(Gradients)
+scf.rohf.ROHF.Gradients = lib.invalid_method('Gradients')

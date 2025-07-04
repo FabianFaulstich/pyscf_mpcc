@@ -38,8 +38,9 @@ from functools import reduce
 from itertools import product
 from pyscf.ao2mo import _ao2mo
 from pyscf.df import df_jk
+from pyscf.df.incore import LINEAR_DEP_THR
 
-LINEAR_DEP_THRESHOLD = 1e-9
+LINEAR_DEP_THRESHOLD = LINEAR_DEP_THR
 
 def get_jk(mf_grad, mol=None, dm=None, hermi=0, with_j=True, with_k=True,
            decompose_j2c='CD', lindep=LINEAR_DEP_THRESHOLD):
@@ -93,7 +94,10 @@ def get_jk(mf_grad, mol=None, dm=None, hermi=0, with_j=True, with_k=True,
     dm_tril[:,idx] *= .5
 
     # For k
-    orbol, orbor = _decompose_rdm1 (mf_grad, mol, dm)
+    if hermi == 1:
+        orbol, orbor = _decompose_rdm1 (mf_grad, mol, dm)
+    else:
+        orbol, orbor = _decompose_rdm1_svd (mf_grad, mol, dm)
     nocc = [o.shape[-1] for o in orbor]
 
     # Coulomb: (P|Q) D_Q = (P|uv) D_uv for D_Q ("rhoj")
@@ -319,6 +323,33 @@ def _int3c_wrapper(mol, auxmol, intor, aosym):
                        aosym=aosym, cintopt=opt)
     return get_int3c
 
+def _decompose_rdm1_svd (mf_grad, mol, dm):
+    '''Decompose dms as U.Vh using SVD
+
+    Args:
+        mf_grad : instance of :class:`Gradients`
+        mol : instance of :class:`gto.Mole`
+        dm : ndarray or sequence of ndarrays of shape (nao,nao)
+            Density matrices
+
+    Returns:
+        orbol : list of ndarrays of shape (nao,*)
+            Contains non-null eigenvectors of density matrix
+        orbor : list of ndarrays of shape (nao,*)
+            Contains orbol * eigenvalues (occupancies)
+    '''
+    nao = mol.nao
+    dms = numpy.asarray(dm).reshape (-1,nao,nao)
+    orbor = []
+    orbol = []
+    for dm in dms:
+        u, s, vh = numpy.linalg.svd (dm)
+        idx = numpy.abs (s)>1e-8
+        orbol.append (numpy.asfortranarray (u[:,idx]))
+        orbor.append (numpy.asfortranarray (lib.einsum('i,ip->pi', s[idx], vh[idx])))
+
+    return orbol, orbor
+
 def _decompose_rdm1 (mf_grad, mol, dm):
     '''Decompose dms as U.Vh, where
     U = orbol = eigenvectors
@@ -482,11 +513,14 @@ class Gradients(rhf_grad.Gradients):
     _keys = {'with_df', 'auxbasis_response'}
 
     def __init__(self, mf):
-        assert isinstance(mf, df.df_jk._DFHF)
-        # Whether to include the response of DF auxiliary basis when computing
-        # nuclear gradients of J/K matrices
-        self.auxbasis_response = True
         rhf_grad.Gradients.__init__(self, mf)
+
+    # Whether to include the response of DF auxiliary basis when computing
+    # nuclear gradients of J/K matrices
+    auxbasis_response = True
+
+    def check_sanity(self):
+        assert isinstance(self.base, df.df_jk._DFHF)
 
     def get_jk(self, mol=None, dm=None, hermi=0, with_j=True, with_k=True,
                omega=None):
@@ -520,9 +554,5 @@ class Gradients(rhf_grad.Gradients):
             return envs['vhf'].aux[atom_id]
         else:
             return 0
-
-    def to_gpu(self):
-        from gpu4pyscf.df.grad.rhf import Gradients
-        return lib.to_gpu(self.view(Gradients))
 
 Grad = Gradients
