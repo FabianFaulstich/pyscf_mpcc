@@ -782,6 +782,7 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     if (pert_triples):
 
        u3new, u2_active, u1_active = umpcc_t_slow.iterative_update_amps_t3(cc, t1, t2, t3old, eris, act_hole, act_particle)
+#      u3new, u2_active, u1_active = umpcc_t_slow.update_amps_t3(cc, t1, t2, t3old, eris, act_hole, act_particle)
 
        u2_active_aa, u2_active_ab, u2_active_bb = u2_active
        u1a_active, u1b_active = u1_active 
@@ -1179,11 +1180,34 @@ class UCCSD(ccsd.CCSD):
         from pyscf.cc import umpcc_t_slow
         if t1 is None: t1 = self.t1
         if t2 is None: t2 = self.t2
-        if l1 is None: t1 = self.l1
-        if l2 is None: t2 = self.l2
+        if l1 is None: l1 = self.l1
+        if l2 is None: l2 = self.l2
         if eris is None: eris = self.ao2mo(self.mo_coeff)
-        return umpcc_t_slow.lhs_umpcc_triples(self, t1, t2, l1, l2, t3, eris, act_hole, act_particle)
+        return umpcc_t_slow.lhs_umpcc_triples_inactive(self, t1, t2, l1, l2, t3, eris, act_hole, act_particle)
+#       return umpcc_t_slow._iterative_kernel(self, t1, t2, l1, l2, eris, act_hole, act_particle)
     uccsd_t = ccsd_t
+
+#here I will write a few functions that accounts for perturbative corrections..  
+
+    def ccsd_pert_t(self, act_hole, act_particle, t1=None, t2=None, l1=None, l2=None, eris=None):
+        from pyscf.cc import umpcc_t_slow
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if l1 is None: l1 = self.l1
+        if l2 is None: l2 = self.l2
+        if eris is None: eris = self.ao2mo(self.mo_coeff)
+        return umpcc_t_slow._iterative_kernel(self, t1, t2, l1, l2, eris, act_hole, act_particle)
+
+    def ccsd_inactive_t(self, act_hole, act_particle, t3, t1=None, t2=None, l1=None, l2=None, eris=None):
+        from pyscf.cc import umpcc_t_slow
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if l1 is None: l1 = self.l1
+        if l2 is None: l2 = self.l2
+        if eris is None: eris = self.ao2mo(self.mo_coeff)
+        return umpcc_t_slow.lhs_umpcc_triples_inactive(self, t1, t2, l1, l2, t3, eris, act_hole, act_particle)
+
+
 
     def make_rdm1(self, t1=None, t2=None, l1=None, l2=None, ao_repr=False,
                   with_frozen=True, with_mf=True):
