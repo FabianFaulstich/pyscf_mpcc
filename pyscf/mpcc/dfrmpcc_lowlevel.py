@@ -1,12 +1,10 @@
 from pyscf import lib, df
 from pyscf.lib import logger
-
-
 import numpy as np
 
 
 class MPCC_LL:
-    def __init__(self, mf, eris, **kwargs):
+    def __init__(self, mf, eris, frags, **kwargs):
         self.mf = mf
 
         if getattr(mf, "with_df", None):
@@ -25,6 +23,8 @@ class MPCC_LL:
         else:
             self.ll_con_tol = 1e-6
         
+        self.frags = frags
+
         # NOTE can be potentially initialized
         self.t1 = None
         self.t2 = None
@@ -51,11 +51,18 @@ class MPCC_LL:
     def nocc(self):
         return self.mf.mol.nelec[0]
 
-    def kernel(self):
+    def kernel(self, t1=None, t2=None):
 
         # NOTE Do we want to initialize t1 and t2?
-        self.t1 = np.zeros((self.nocc, self.nvir))
-        self.t2 = np.zeros((self.nocc, self.nocc, self.nvir, self.nvir))
+
+        if t1 is not None:
+            self.t1 = t1
+        else:    
+            self.t1 = np.zeros((self.nocc, self.nvir))
+        if t2 is not None:
+            self.t2 = t2
+        else:   
+            self.t2 = np.zeros((self.nocc, self.nocc, self.nvir, self.nvir))
 
         err = np.inf
         count = 0
@@ -110,6 +117,17 @@ class MPCC_LL:
         res = np.linalg.norm(self.t1 + Ω.T / self._eris.eia)
 
         t1 = -Ω.T / self._eris.eia
+
+        #make the active residue to go to zero
+
+        for frag in self.frags:
+            act_hole = frag[0]
+            act_particle = frag[1]
+            #make a slice based on active_hole and active_particle
+            res1[np.ix_(act_hole, act_particle)] = 0.0
+            res2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
+
+
         return res, ΔE, t1, t2
 
     def run_diis(self, t1, t2, adiis):
@@ -185,4 +203,7 @@ class MPCC_LL:
         Ω -= np.einsum("Lji,Laj->ai", Joo, Yvo)
 
         return Ω
+
+    #Note: For the time being, we will not use the most optmal way to update the amplitudes. It can be taken care later on..
+
 

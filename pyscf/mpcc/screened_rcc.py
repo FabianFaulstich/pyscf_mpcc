@@ -1,18 +1,101 @@
 from pyscf import df
 from pyscf import lib
 import numpy
+from dataclasses import dataclass
 
 class screened:
-    def __init__(self):
-        pass
-    def t1_transform(self, t1):
-        #fetch the 3-center integrals in MO basis
-        Loo, Lov, Lvv = get_df_ints()
+    def __init__(self, mf, eris, frags, **kwargs):
+        self.mf = mf
 
+        if getattr(mf, "with_df", None):
+            self.with_df = mf.with_df
+        else:
+            self.with_df = df.DF(mf.mol)
+            self.with_df.auxbasis = df.make_auxbasis(mf.mol, mp2fit=True)
+
+        self._eris = eris
+        self.frag = frags
+        self._set_integral_blocks()
+    @property
+    def nvir(self):
+        return self.mf.mol.nao - self.nocc
+        
+    @property
+    def nocc(self):
+        return self.mf.mol.nelec[0]
+
+    @property
+    def naux(self):
+        return self.with_df.get_naoaux()
+
+    @property
+    def act_hole(self):
+        return self.frag[0][0]
+            
+    @property
+    def act_particle(self):
+        return self.frag[0][1]
+        
+    @property
+    def inact_hole(self):
+        return numpy.setdiff1d(numpy.arange(self.nocc), self.act_hole)
+        
+    @property
+    def inact_particle(self):
+        return numpy.setdiff1d(numpy.arange(self.nvir), self.act_particle)
+
+        # at this point we will classify integralsi: 
+
+    def _set_integral_blocks(self):
+
+        inact_hole = self.inact_hole
+        act_hole = self.act_hole
+        inact_particle = self.inact_particle
+        act_particle = self.act_particle
+        naux_idx = numpy.arange(self.naux)
+        
+        self.Loo_ii = self._eris.Loo[numpy.ix_(naux_idx, inact_hole, inact_hole)]
+        self.Loo_ia = self._eris.Loo[numpy.ix_(naux_idx, inact_hole, act_hole)]
+        self.Loo_ai = self._eris.Loo[numpy.ix_(naux_idx, act_hole, inact_hole)]
+        self.Loo_aa = self._eris.Loo[numpy.ix_(naux_idx, act_hole, act_hole)]
+
+        self.Lvv_ii = self._eris.Lvv[numpy.ix_(naux_idx, inact_particle, inact_particle)]
+        self.Lvv_ia = self._eris.Lvv[numpy.ix_(naux_idx, inact_particle, act_particle)]
+        self.Lvv_ai = self._eris.Lvv[numpy.ix_(naux_idx, act_particle, inact_particle)]
+        self.Lvv_aa = self._eris.Lvv[numpy.ix_(naux_idx, act_particle, act_particle)]
+
+        self.Lov_ii = self._eris.Lov[numpy.ix_(naux_idx, inact_hole, inact_particle)]
+        self.Lov_ia = self._eris.Lov[numpy.ix_(naux_idx, inact_hole, act_particle)]
+        self.Lov_ai = self._eris.Lov[numpy.ix_(naux_idx, act_hole, inact_particle)]
+        self.Lov_aa = self._eris.Lov[numpy.ix_(naux_idx, act_hole, act_particle)]
+
+
+    def _set_t1_blocks(self, t1):
+        
+        t1_ii = t1[numpy.ix_(self.inact_hole, self.inact_particle)]
+        t1_ia = t1[numpy.ix_(self.inact_hole, self.act_particle)]
+        t1_ai = t1[numpy.ix_(self.act_hole, self.inact_particle)]
+        t1_aa = t1[numpy.ix_(self.act_hole, self.act_particle)]
+
+        return t1_ii, t1_ia, t1_ai, t1_aa
+
+    def t1_transform(self, t1, M, Moo, Mov, Mov_t2):
+        #fetch the 3-center integrals in MO basis
+
+        t1_ii, t1_ia, t1_ai, t1_aa = self._set_t1_blocks(t1)
+
+        Lov_ai = self.Lov_ai
+        Lov_aa = self.Lov_aa
+        Lov_ii = self.Lov_ii
+        Loo_aa = self.Loo_aa
+        Loo_ai = self.Loo_ai
+        Loo_ia = self.Loo_ia
+
+        Moo_ii, Moo_ia, Moo_ai, Moo_aa = Moo
+        Mov_ii, Mov_ia, Mov_ai, Mov_aa = Mov
 
 # first construct intermediates:
 #      
-
 
 #      JOO (active-active, active-inactive)
         Joo_aa = Loo_aa
@@ -27,10 +110,10 @@ class screened:
 
 
 #      JVV  (active-active, active-inactive)
-        Jvv_aa = Lvv_aa           
-        Jvv_aa -= lib.einsum("Lkb,ka->Lab", Lov_ia, t1_ia)
+        Jvv_aa = self.Lvv_aa           
+        Jvv_aa -= lib.einsum("Lkb,ka->Lab", self.Lov_ia, t1_ia)
 
-        Jvv_ai = Lvv_ai
+        Jvv_ai = self.Lvv_ai
         Jvv_ai -= lib.einsum("Lkb,ka->Lab", Lov_ii, t1_ia)
 
 
@@ -38,51 +121,38 @@ class screened:
         Jov_aa  = Lov_aa
         Jov_aa += lib.einsum("Lac,ic->Lia", Lov_ai, t1_ai)
         Jov_aa -= lib.einsum("Lki,ka->Lia", Joo_ia, t1_ia)  
-
-#       Intermediates
-
-#       M_0^L (active-active, active-inactive, inactive-active)
-        M = lib.einsum("Lkc,kc->L", Lov_ii, t1_ii)*2
-        M += lib.einsum("Lkc,kc->L", Lov_ia, t1_ia)*2
-        M += lib.einsum("Lkc,kc->L", Lov_ai, t1_ai)*2
-
-
-#       M_ij^L
-        Moo = lib.einsum("Lic,jc->Lij", Lov, t1)
-#       M_ia^L 
-        Mov = lib.einsum("Lac,ic->Lia", Lov, t1)
-
+    
 #Now construct Fock matrix: (active-active, active-inactive)
-        Foo_aa  = foo[]
+        Foo_aa  = self._eris.foo[numpy.ix_(self.act_hole, self.act_hole)]
         Foo_aa += lib.einsum("Lij,L->ij", Loo_aa, M)
         Foo_aa -= lib.einsum("Lmi,Lmj->ij",Loo_ia,Moo_ia)
         Foo_aa -= lib.einsum("Lmi,Lmj->ij",Loo_aa,Moo_aa)
 
-        Foo_ai  = foo[]
+        Foo_ai  = self._eris.foo[numpy.ix_(self.act_hole, self.inact_hole)]
         Foo_ai += lib.einsum("Lij,L->ij", Loo_ai, M)
         Foo_ai -= lib.einsum("Lmi,Lmj->ij",Loo_ia,Moo_ii)
         Foo_ai -= lib.einsum("Lmi,Lmj->ij",Loo_aa,Moo_ai)
         
        #are we missng any term here?
          
-        Fvv_aa = fvv[]
-        Fvv_aa += lib.einsum("Lab,L->ab",Lvv_aa,M) 
-        Fvv_aa += lib.einsum("Lma,Lmb->ab",Lov_ia,Mov_ia)
-        Fvv_aa += lib.einsum("Lma,Lmb->ab",Lov_aa,Mov_aa)
+        Fvv_aa = self._eris.fvv[numpy.ix_(self.act_particle, self.act_particle)]        
+        Fvv_aa += lib.einsum("Lab,L->ab",self.Lvv_aa,M) 
+        Fvv_aa += lib.einsum("Lma,Lmb->ab",self.Lov_ia,Mov_ia)
+        Fvv_aa += lib.einsum("Lma,Lmb->ab",self.Lov_aa,Mov_aa)
 
-        Fvv_ai = fvv[]
-        Fvv_ai += lib.einsum("Lab,L->ab",Lvv_ai,M)
-        Fvv_ai += lib.einsum("Lma,Lmb->ab",Lov_ia,Mov_ii)
-        Fvv_ai += lib.einsum("Lma,Lmb->ab",Lov_aa,Mov_ai)
+        Fvv_ai = self._eris.fvv[numpy.ix_(self.act_particle, self.inact_particle)]      
+        Fvv_ai += lib.einsum("Lab,L->ab",self.Lvv_ai,M)
+        Fvv_ai += lib.einsum("Lma,Lmb->ab",self.Lov_ia,Mov_ii)
+        Fvv_ai += lib.einsum("Lma,Lmb->ab",self.Lov_aa,Mov_ai)
        
         #Fov (active-active, inactive-inactive)
-        Fov_aa = fov[]
-        Fov_aa += lib.einsum("Lia,L->ia",Lov_aa,M)
-        Fov_aa -= lib.einsum("Lma,Lmi->ia",Lov_ia,Moo_ia)
-        Fov_aa -= lib.einsum("Lma,Lmi->ia",Lov_aa,Moo_aa)
+        Fov_aa = self._eris.fov[numpy.ix_(self.act_hole, self.act_particle)]
+        Fov_aa += lib.einsum("Lia,L->ia",self.Lov_aa,M)
+        Fov_aa -= lib.einsum("Lma,Lmi->ia",self.Lov_ia,Moo_ia)
+        Fov_aa -= lib.einsum("Lma,Lmi->ia",self.Lov_aa,Moo_aa)
 
 
-        Fov_ii = fov[]
+        Fov_ii = self._eris.fov[numpy.ix_(self.inact_hole, self.inact_particle)]
         Fov_ii += lib.einsum("Lia,L->ia",Lov_ii,M)
         Fov_ii -= lib.einsum("Lma,Lmi->ia",Lov_ii,Moo_ii)
         Fov_ii -= lib.einsum("Lma,Lmi->ia",Lov_ai,Moo_ai)
@@ -99,24 +169,50 @@ class screened:
 
     def create_M_intermediates(self, t1, t2):
         #construct the intermediates for the t2 update:
+
+        t1_ii, t1_ia, t1_ai, t1_aa = self._set_t1_blocks(t1)
+
         #M0
-        M0 = lib.einsum("Lkc,kc->L", Lov_ii, t1_ii)*2
-        M0 += lib.einsum("Lkc,kc->L", Lov_ia, t1_ia)*2
-        M0 += lib.einsum("Lkc,kc->L", Lov_ai, t1_ai)*2
+        M0 = lib.einsum("Lkc,kc->L", self.Lov_ii, t1_ii)*2
+        M0 += lib.einsum("Lkc,kc->L", self.Lov_ia, t1_ia)*2
+        M0 += lib.einsum("Lkc,kc->L", self.Lov_ai, t1_ai)*2
 
         #Moo
-        Moo = lib.einsum("Lic,jc->Lij", Lov, t1)
+        Moo_ii = lib.einsum("Lic,jc->Lij", self.Lov_ii, t1_ii) + lib.einsum("Lic,jc->Lij", self.Lov_ia, t1_ia)
+        Moo_ia = lib.einsum("Lic,jc->Lij", self.Lov_ia, t1_ai) #we can construct it from taa block as well 
+        Moo_ai = lib.einsum("Lic,jc->Lij", self.Lov_ai, t1_ii) + lib.einsum("Lic,jc->Lij", self.Lov_aa, t1_ia)
+        Moo_aa = lib.einsum("Lic,jc->Lij", self.Lov_ai, t1_ai)  
 
         #Mov
-        Mov = lib.einsum("Lac,ic->Lia", Lov, t1)
+        Mov_ii = lib.einsum("Lac,ic->Lia", self.Lov_ii, t1_ii) + lib.einsum("Lac,ic->Lia", self.Lov_ia, t1_ia)
+        Mov_ia = lib.einsum("Lac,ic->Lia", self.Lov_ii, t1_ai)
+        Mov_ai = lib.einsum("Lac,ic->Lia", self.Lov_ai, t1_ii)
+        Mov_ii = lib.einsum("Lac,ic->Lia", self.Lov_aa, t1_ia) + lib.einsum("Lac,ic->Lia", self.Lov_ai, t1_ai)
 
         #construct antisymmetrized t2:
         t2_antisym = 2.0*t2 - t2.transpose(0, 1, 3, 2)
 
-        Mov_t2  = lib.einsum("Lme, imae -> Lia", Lov_ii, t2_antisym[numpy.ix_(numpy.arange(nocc), inact_hole, numpy.arange(nvir), inact_particle)])
-        Mov_t2 += lib.einsum("Lme, imae -> Lia", Lov_ia, t2_antisym[numpy.ix_(numpy.arange(nocc), inact_hole, numpy.arange(nvir), act_particle)])
-        Mov_t2 += lib.einsum("Lme, imae -> Lia", Lov_ai, t2_antisym[numpy.ix_(numpy.arange(nocc), act_hole, numpy.arange(nvir), inact_particle)])
+        nocc = self.nocc
+        nvir = self.nvir
+        Mov_t2  = lib.einsum("Lme, imae -> Lia", self.Lov_ii, 
+                             t2_antisym[numpy.ix_(numpy.arange(nocc), self.inact_hole, numpy.arange(nvir), self.inact_particle)])
+        Mov_t2 += lib.einsum(
+            "Lme, imae -> Lia",
+            self.Lov_ia,
+            t2_antisym[
+            numpy.ix_(
+                numpy.arange(self.nocc),
+                self.inact_hole,
+                numpy.arange(self.nvir),
+                self.act_particle,
+            )
+            ]
+        )
+        Mov_t2 += lib.einsum("Lme, imae -> Lia", self.Lov_ai, 
+                             t2_antisym[numpy.ix_(numpy.arange(nocc), self.act_hole, numpy.arange(nvir), self.inact_particle)])
 
+        Moo = [Moo_ii, Moo_ia, Moo_ai, Moo_aa]
+        Mov = [Mov_ii, Mov_ia, Mov_ai]
 
         return M0, Moo, Mov, Mov_t2
 
@@ -129,19 +225,26 @@ class screened:
         Foo_ai, Foo_aa = Foo
         Fvv_ai, Fvv_aa = Fvv
 
+
+        inact_hole = self.inact_hole
+        act_hole = self.act_hole
+        inact_particle = self.inact_particle
+        act_particle = self.act_particle
+
+
         #generate the intermediate with full arrays 
-        Foo_aa += lib.einsum("Lie,Lje->ij", Lov_ai, Mov_t2[numpy.ix_(act_hole, inact_particle)])
-        Foo_aa += lib.einsum("Lie,Lje->ij", Lov_aa, Mov_t2[numpy.ix_(act_hole, act_particle)])
+        Foo_aa += lib.einsum("Lie,Lje->ij", self.Lov_ai, Mov_t2[numpy.ix_(act_hole, inact_particle)])
+        Foo_aa += lib.einsum("Lie,Lje->ij", self.Lov_aa, Mov_t2[numpy.ix_(act_hole, act_particle)])
 
-        Foo_ai += lib.einsum("Lie,Lje->ij", Lov_ai, Mov_t2[numpy.ix_(act_hole, inact_particle)])
-        Foo_ai += lib.einsum("Lie,Lje->ij", Lov_aa, Mov_t2[numpy.ix_(act_hole, act_particle)])
+        Foo_ai += lib.einsum("Lie,Lje->ij", self.Lov_ai, Mov_t2[numpy.ix_(act_hole, inact_particle)])
+        Foo_ai += lib.einsum("Lie,Lje->ij", self.Lov_aa, Mov_t2[numpy.ix_(act_hole, act_particle)])
 
 
-        Fvv_aa -= lib.einsum("Lma,Lmb->ab",Lov_ia,Mov_t2[numpy.ix_(inact_hole, act_particle)])
-        Fvv_aa -= lib.einsum("Lma,Lmb->ab",Lov_aa,Mov_t2[numpy.ix_(act_hole, act_particle)])
+        Fvv_aa -= lib.einsum("Lma,Lmb->ab",self.Lov_ia,Mov_t2[numpy.ix_(inact_hole, act_particle)])
+        Fvv_aa -= lib.einsum("Lma,Lmb->ab",self.Lov_aa,Mov_t2[numpy.ix_(act_hole, act_particle)])
 
-        Fvv_ai -= lib.einsum("Lma,Lmb->ab",Lov_ia,Mov_t2[numpy.ix_(inact_hole, inact_particle)])
-        Fvv_ai -= lib.einsum("Lma,Lmb->ab",Lov_aa,Mov_t2[numpy.ix_(act_hole, inact_particle)])
+        Fvv_ai -= lib.einsum("Lma,Lmb->ab",self.Lov_ia,Mov_t2[numpy.ix_(inact_hole, inact_particle)])
+        Fvv_ai -= lib.einsum("Lma,Lmb->ab",self.Lov_aa,Mov_t2[numpy.ix_(act_hole, inact_particle)])
 
         Foo = [Foo_ai, Foo_aa]
         Fvv = [Fvv_ai, Fvv_aa]
@@ -149,28 +252,62 @@ class screened:
         return Foo, Fvv
 
 
-    def R1_residue_active(self, t1, t2, Fov, Fvv, Foo):
-       
-       R1 = Fov_aa
+    def R1_residue_active(self, t1, t2, Fov, Fvv, Foo, M0=None, Mov_t1=None, Mov_t2=None):
+         # Get index arrays for inactive holes and active particles
+         inact_hole = self.inact_hole
+         act_hole = self.act_hole
+         inact_particle = self.inact_particle
+         act_particle = self.act_particle
+     
+         # You may need to define or pass Fov_aa, Fov_ii, Foo_ai, Fvv_ai, etc.
+         # For now, let's assume they are slices of Fov, Fvv, Foo as in your t1_transform
+         Fov_aa = Fov[1]
+         Fov_ii = Fov[0]
+         Foo_ai = Foo[0]
+         Fvv_ai = Fvv[0]
+     
+         R1 = Fov_ia
+     
+         Foo_ai += lib.einsum("me,ie->im", Fov_ii, t1_ai)
+     
+         R1 -= lib.einsum("im, ma -> ia", Foo_ai, t1_ia)  
+     
+         Fvv_ai -= lib.einsum("me, ma -> ae", Fov_ii, t1_ia)
+     
+         R1 += lib.einsum("ae, ie -> ia", Fvv_ai, t1_ai)
+         #R1 -= lib.einsum("me, imae -> ia", Fov_ii, t2_antisym) #many terms
+     
+         R1 -= lib.einsum("me, imae -> ijab", self.Fov_ii,
+                          t2[numpy.ix_(self.act_hole, self.inact_hole, self.act_particle, self.inact_particle)])
+     
+         R1 -= lib.einsum("me, imae -> ijab", self.Fov_ai, 
+                          t2[numpy.ix_(self.act_hole, self.act_hole, self.act_particle, self.inact_particle)])
+     
+         R1 -= lib.einsum("me, imae -> ijab", self.Fov_ia, 
+                          t2[numpy.ix_(self.act_hole, self.inact_hole, self.act_particle, self.act_particle)])
+     
+         if M0 is not None:
+             R1 += lib.einsum("Lia, L -> ia", self.Lov_aa, M0)
+         if Mov_t1 is not None:
+             R1 -= lib.einsum("Lim, Lma -> ia", self.Loo_ai, Mov_t1[numpy.ix_(numpy.arange(self.naux), inact_hole, act_particle)])
+             R1 -= lib.einsum("Lim, Lma -> ia", self.Loo_aa, Mov_t1[numpy.ix_(numpy.arange(self.naux), self.act_hole, self.act_particle)]) #probably not allowed
+         if Mov_t2 is not None:
+             R1 -= lib.einsum("Lim, Lma -> ia", self.Loo_ai, Mov_t2[numpy.ix_(numpy.arange(self.naux), inact_hole, act_particle)])
+             R1 -= lib.einsum("Lim, Lma -> ia", self.Loo_aa, Mov_t2[numpy.ix_(numpy.arange(self.naux), self.act_hole, self.act_particle)])
 
-       Foo += lib.einsum("me,ie->im", Fov_ii, t1)
+         R1 += lib.einsum("Lae, Lie -> ia", self.Lvv_ai, Mov_t2[numpy.ix_(numpy.arange(self.naux), self.act_hole, self.inact_particle)])
+         R1 += lib.einsum("Lae, Lie -> ia", self.Lvv_aa, Mov_t2[numpy.ix_(numpy.arange(self.naux), self.act_hole, self.act_particle)])
 
-       R1 -= lib.einsum("im, ma -> ia", Foo_ai, t1)       
-
-       Fvv_ai -= lib.einsum("me, ma -> ae", Fov_ii, t1)
- 
-       R1 += lib.einsum("ae, ie -> ia", Fvv_ai, t1)
-       R1 -= lib.einsum("me, imae -> ia", Fov_ii, t2_antisym) #many terms
-       R1 += lib.einsum("Lia, L -> ia", Lov_aa, M0)
-       R1 -= lib.einsum("Lim, Lma -> ia", Loo_ai, Mov_t1)
-       R1 -= lib.einsum("Lim, Lma -> ia", Loo_ai, Mov_t2)
-       R1 += lib.einsum("Lae, Lie -> ia", Lvv_ai, Mov_t2)
-
-
-       return R1
-
+         return R1
 
     def R2_residue_active(self, t1, t2, Joo, Jvv, Jov, Fov, Fvv, Foo):
+
+
+        inact_hole = self.inact_hole
+        act_hole = self.act_hole
+        inact_particle = self.inact_particle
+        act_particle = self.act_particle
+
 
         Joo_ai = Joo[0]
         Jvv_ai = Jvv[1]
@@ -194,14 +331,14 @@ class screened:
 
         #HHL
         Wijmn = lib.einsum("Lim, Ljn -> ijmn", Joo_ai, Joo_ai)
-        R2 += lib.einsum("ijmn, mnab -> ijab", Wijmn, t2) #three possibilities (aa, ai, ia)
+#       R2 += lib.einsum("ijmn, mnab -> ijab", Wijmn, t2) #three possibilities (aa, ai, ia)
 
 
         R2 += lib.einsum("ijmn, mnab -> ijab", Wijmn[numpy.ix_(act_hole, act_hole, inact_hole, inact_hole)], 
                         t2[numpy.ix_(inact_hole, inact_hole, act_particle, act_particle)])
 
         R2 += lib.einsum("ijmn, mnab -> ijab", Wijmn[numpy.ix_(act_hole, act_hole, act_hole, inact_hole)], 
-                        t2[numpy.ix_(act_hole, inact_hole, act_particle, act_particle)])
+                        t2[numpy.ix_(act_hole, self.inact_hole, act_particle, act_particle)])
 
         R2 += lib.einsum("ijmn, mnab -> ijab", Wijmn[numpy.ix_(act_hole, act_hole, inact_hole, act_hole)], 
                         t2[numpy.ix_(inact_hole, act_hole, act_particle, act_particle)])
@@ -219,27 +356,26 @@ class screened:
         W_jebm = lib.einsum("Ljm, Lbe -> jebm", Joo_ai, Jvv_ai)
 #        R2_tmp -= lib.einsum("jebm, imae -> ijab", W_jebm, t2) # em should be ii, ia, ai types
 
-
-        R2_tmp -= lib.einsum("jebm, imae -> ijab", Wjebm[numpy.ix_(act_hole, inact_particle, act_particle, inact_hole)], 
+        R2_tmp -= lib.einsum("jebm, imae -> ijab", W_jebm[numpy.ix_(act_hole, inact_particle, act_particle, inact_hole)], 
                         t2[numpy.ix_(act_hole, inact_hole, act_particle, inact_particle)])
 
-        R2_tmp -= lib.einsum("jebm, imae -> ijab", Wjebm[numpy.ix_(act_hole, inact_particle, act_particle, inact_hole)], 
+        R2_tmp -= lib.einsum("jebm, imae -> ijab", W_jebm[numpy.ix_(act_hole, inact_particle, act_particle, inact_hole)], 
                         t2[numpy.ix_(act_hole, act_hole, act_particle, inact_particle)])
 
-        R2_tmp -= lib.einsum("jebm, imae -> ijab", Wjebm[numpy.ix_(act_hole, act_particle, act_particle, inact_hole)], 
+        R2_tmp -= lib.einsum("jebm, imae -> ijab", W_jebm[numpy.ix_(act_hole, act_particle, act_particle, inact_hole)], 
                         t2[numpy.ix_(act_hole, inact_hole, act_particle, act_particle)])
 
 
         W_jema = lib.einsum("Ljm, Lae -> jema", Joo_ai, Jvv_ai)
 #       R2_tmp -= lib.einsum("jema, imeb -> ijab", W_jema, t2) # em should be ii, ia, ai types
 
-        R2_tmp -= lib.einsum("jema, imeb -> ijab", Wjema[numpy.ix_(act_hole, inact_particle, inact_hole, act_particle)], 
+        R2_tmp -= lib.einsum("jema, imeb -> ijab", W_jema[numpy.ix_(act_hole, inact_particle, inact_hole, act_particle)], 
                         t2[numpy.ix_(act_hole, inact_hole, inact_particle, act_particle)])
 
-        R2_tmp -= lib.einsum("jema, imeb -> ijab", Wjema[numpy.ix_(act_hole, inact_particle, act_hole, act_particle)], 
+        R2_tmp -= lib.einsum("jema, imeb -> ijab", W_jema[numpy.ix_(act_hole, inact_particle, act_hole, act_particle)], 
                         t2[numpy.ix_(act_hole, act_hole, inact_particle, act_particle)])
 
-        R2_tmp -= lib.einsum("jema, imeb -> ijab", Wjema[numpy.ix_(act_hole, act_particle, inact_hole, act_particle)], 
+        R2_tmp -= lib.einsum("jema, imeb -> ijab", W_jema[numpy.ix_(act_hole, act_particle, inact_hole, act_particle)], 
                         t2[numpy.ix_(act_hole, inact_hole, act_particle, act_particle)])
 
 
@@ -257,74 +393,44 @@ class screened:
         return R2
 
 
-
-
-  #  def t2_transform_linear():
-
-
-  #     # reconstruct antisymmetrized t2:
-
-  #     # Aia
-  #     M = lib.einsum("Lkc, kicd -> Lid",Jov,t2)  
-
-       # generate two types of M: inactive-active, active-inactive
-
-
-  #     A = lib.einsum("Lid, Lad -> ia",M,Jvv) #NauxNoNv^2
-
-       # Bia
-
-   #    B = lib.einsum("Lka,Lki -> ia", M, Joo)
-
-
-       # Cia
-
-    #   C = lib.einsum("kc, ikac -> ia", Fov, t2)
-
-    #   return
-
-
-    def t2_transform_quadratic():
-
+    def t2_transform_quadratic(self,t2):
 
         # We have already built the DCA terms by assembling the factorized terms.  
         # these terms shall be ignored with the DCA approximation.
 
         #I_mn^ij 
 
-        Vmenf = lib.einsum("Lme, Lnf -> menf", Lov, Lov)
+        Vmenf = lib.einsum("Lme, Lnf -> menf", self.Lov, self.Lov)
 
        # Imnij = lib.einsum("menf, ijef -> ijmn", Vmenf, t2) #ef should be ii, ia, ai types
         
         # Working here:
 
-        Imnij = lib.einsum("menf, ijef -> ijmn", Vmenf[numpy.ix_(numpy.arange(nocc), numpy.arange(nvir),act_hole,act_particle)],
-                            t2[numpy.ix_(act_hole, act_hole,inact_particle,act_particle)])
+        Imnij = lib.einsum("menf, ijef -> ijmn", Vmenf[numpy.ix_(numpy.arange(self.nocc), numpy.arange(self.nvir),self.act_hole,self.act_particle)],
+                            t2[numpy.ix_(self.act_hole, self.act_hole, self.inact_particle, self.act_particle)])
 
-        Imnij += lib.einsum("menf, ijef -> ijmn", Vmenf[numpy.ix_(numpy.arange(nocc), numpy.arange(nvir),act_particle,act_particle)],
-                            t2[numpy.ix_(act_hole, act_hole,act_particle,inact_particle)])
+        Imnij += lib.einsum("menf, ijef -> ijmn", Vmenf[numpy.ix_(numpy.arange(self.nocc), numpy.arange(self.nvir),self.act_particle,self.act_particle)],
+                            t2[numpy.ix_(self.act_hole, self.act_hole,self.act_particle,self.inact_particle)])
         
-        Imnij += lib.einsum("menf, ijef -> ijmn", Vmenf[numpy.ix_(numpy.arange(nocc), numpy.arange(nvir),act_hole,act_particle)],
-                            t2[numpy.ix_(act_hole, act_hole,inact_particle,inact_particle)])
-
-
+        Imnij += lib.einsum("menf, ijef -> ijmn", Vmenf[numpy.ix_(numpy.arange(self.nocc), numpy.arange(self.nvir),self.act_hole,self.act_particle)],
+                            t2[numpy.ix_(self.act_hole, self.act_hole, self.inact_particle, self.inact_particle)])
 
 
         #I^je_bm
-        Vnemf = lib.einsum("Lne, Lmf -> nemf", Lov, Lov)
+        Vnemf = lib.einsum("Lne, Lmf -> nemf", self.Lov, self.Lov)
         Ijebm = lib.einsum("nemf, jnbf -> jebm", Vnemf, t2) #nf should be ii, ia, ai types
 
 
-        Ijebm = lib.einsum("nemf, jnbf -> jebm", Vnemf[numpy.ix_(inact_hole, act_particle, act_hole, inact_particle)],
-                            t2[numpy.ix_(act_hole, inact_hole, act_particle, inact_particle)])
+        Ijebm = lib.einsum("nemf, jnbf -> jebm", Vnemf[numpy.ix_(self.inact_hole, self.act_particle, self.act_hole, self.inact_particle)],
+                            t2[numpy.ix_(self.act_hole, self.inact_hole, self.act_particle, self.inact_particle)])
 
 
-        Ijebm = lib.einsum("nemf, jnbf -> jebm", Vnemf[numpy.ix_(inact_hole, act_particle, act_hole, act_particle)],
-                            t2[numpy.ix_(act_hole, inact_hole, act_particle, act_particle)])
+        Ijebm = lib.einsum("nemf, jnbf -> jebm", Vnemf[numpy.ix_(self.inact_hole, self.act_particle, self.act_hole, self.act_particle)],
+                            t2[numpy.ix_(self.act_hole, self.inact_hole, self.act_particle, self.act_particle)])
 
 
-        Ijebm = lib.einsum("nemf, jnbf -> jebm", Vnemf[numpy.ix_(act_hole, act_particle, act_hole)],
-                            t2[numpy.ix_(act_hole, act_hole, act_particle, inact_particle)])
+        Ijebm = lib.einsum("nemf, jnbf -> jebm", Vnemf[numpy.ix_(self.act_hole, self.act_particle, self.act_hole, self.inact_particle)],
+                            t2[numpy.ix_(self.act_hole, self.act_hole, self.act_particle, self.inact_particle)])
 
 
         #I^je_mb
@@ -332,36 +438,39 @@ class screened:
         Ijemb = lib.einsum("nemf, jnfb -> jemb", Vnemf, t2) # #nf should be ii, ia, ai types
 
 
-        Ijemb = lib.einsum("nemf, jnfb -> jemb", Vnemf[numpy.ix_(inact_hole, act_particle, act_hole, inact_particle)],
-                            t2[numpy.ix_(act_hole, inact_hole, inact_particle, act_particle)])
+        Ijemb = lib.einsum("nemf, jnfb -> jemb", Vnemf[numpy.ix_(self.inact_hole, self.act_particle, self.act_hole, self.inact_particle)],
+                            t2[numpy.ix_(self.act_hole, self.inact_hole, self.inact_particle, self.act_particle)])
 
 
-        Ijemb = lib.einsum("nemf, jnfb -> jemb", Vnemf[numpy.ix_(inact_hole, act_particle, act_hole, act_particle)],
-                            t2[numpy.ix_(act_hole, inact_hole, act_particle, act_particle)])
+        Ijemb = lib.einsum("nemf, jnfb -> jemb", Vnemf[numpy.ix_(self.inact_hole, self.act_particle, self.act_hole, self.act_particle)],
+                            t2[numpy.ix_(self.act_hole, self.inact_hole, self.act_particle, self.act_particle)])
 
 
-        Ijemb = lib.einsum("nemf, jnfb -> jemb", Vnemf[numpy.ix_(act_hole, act_particle, act_hole, inact_particle)],
-                            t2[numpy.ix_(act_hole, act_hole, inact_particle, act_particle)])
-
-
-
-
-
-
-
+        Ijemb = lib.einsum("nemf, jnfb -> jemb", Vnemf[numpy.ix_(self.act_hole, self.act_particle, self.act_hole, self.inact_particle)],
+                            t2[numpy.ix_(self.act_hole, self.act_hole, self.inact_particle, self.act_particle)])
 
 
         return Ijemb, Ijebm, Imnij
     
 
+#@dataclass
+#class IMDS:
+#    R1: numpy.ndarray
+#    R2: numpy.ndarray
+#    Joo: numpy.ndarray
+#    Jvv: numpy.ndarray
+#    Jov: numpy.ndarray
+#    Foo: numpy.ndarray
+#    Fvv: numpy.ndarray
+#    Fov: numpy.ndarray
 
     def kernel(self, t1, t2):
       class _IMDS: pass
       imds = _IMDS()
 
       M0, Moo, Mov, Mov_t2 = self.create_M_intermediates(t1, t2)
-      Joo, Jvv, Jov, Foo, Fvv, Fov = self.t1_transform(t1)
-      Foo, Fvv = self.add_t2_to_fock(t2, M0, Fvv, Foo)
+      Joo, Jvv, Jov, Foo, Fvv, Fov = self.t1_transform(t1, M0, Moo, Mov, Mov_t2)
+      Foo, Fvv = self.add_t2_to_fock(Fvv, Foo, Mov_t2)
       R1 = self.R1_residue_active(t1, t2, Fov, Fvv, Foo)
       R2 = self.R2_residue_active(t1, t2, Joo, Jvv, Jov, Fov, Fvv, Foo)
 
@@ -373,10 +482,6 @@ class screened:
       imds.Foo = Foo[1]
       imds.Fvv = Fvv[1]
       imds.Fov = Fov[1]
-      imds.Moo = Moo
-      imds.Mov = Mov
-      imds.Mov_t2 = Mov_t2  
-
       return imds
 
 

@@ -4,7 +4,7 @@ from pyscf import lib, df
 
 class ERIs:
 
-    def __init__(self, mf):
+    def __init__(self, mf, mo_coeff=None):
 
         if getattr(mf, "with_df", None):
             self.with_df = mf.with_df
@@ -16,8 +16,10 @@ class ERIs:
         self.nocc = mf.mol.nelec[0]
         self.nvir = mf.mol.nao - self.nocc
         self.naux = self.with_df.get_naoaux()
-
-        self.mo_coeff = mf.mo_coeff
+        if mo_coeff is None:
+           self.mo_coeff = mf.mo_coeff
+        else:
+           self.mo_coeff = mo_coeff       
         self.mo_energy = mf.mo_energy
 
         fock_mo = self.mo_coeff.T @ mf.get_fock() @ self.mo_coeff
