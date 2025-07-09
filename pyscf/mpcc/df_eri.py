@@ -25,12 +25,13 @@ class ERIs:
         fock_mo = self.mo_coeff.T @ mf.get_fock() @ self.mo_coeff
         self.foo = fock_mo[: self.nocc, : self.nocc]
         self.fvv = fock_mo[self.nocc : self.nao, self.nocc : self.nao]
-        self.fov = fock_mo[: self.nao, self.nocc : self.nao]
+        self.fov = fock_mo[: self.nocc, self.nocc : self.nao]
 
         self.eia = lib.direct_sum(
             "a-i->ia", self.mo_energy[self.nocc :], self.mo_energy[: self.nocc]
         )
-        self.D = lib.direct_sum("-ia-jb->aibj", self.eia, self.eia)
+        self.D = lib.direct_sum("-ia-jb->ijab", self.eia, self.eia)
+        self.make_eri()
 
     def make_eri(self):
 
