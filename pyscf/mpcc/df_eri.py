@@ -1,5 +1,6 @@
 import numpy as np
 from pyscf import lib, df
+from pyscf.ao2mo import _ao2mo
 
 
 class ERIs:
@@ -28,10 +29,11 @@ class ERIs:
         self.fov = fock_mo[: self.nocc, self.nocc : self.nao]
 
         self.eia = lib.direct_sum(
-            "a-i->ia", self.mo_energy[self.nocc :], self.mo_energy[: self.nocc]
+            "i-a->ia", self.mo_energy[: self.nocc], self.mo_energy[self.nocc :]
         )
-        self.D = lib.direct_sum("-ia-jb->ijab", self.eia, self.eia)
-        self.make_eri()
+        self.D = lib.direct_sum("ia+jb->ijab", self.eia, self.eia)
+        #self.make_eri()
+        self._make_df_eris()
 
     def make_eri(self):
 
@@ -57,6 +59,32 @@ class ERIs:
         self.Lov = Lov
         self.Lvo = Lvo
         self.Lvv = Lvv
+
+    
+    def _make_df_eris(self):
+        
+        Loo = np.empty((self.naux, self.nocc, self.nocc))
+        Lov = np.empty((self.naux, self.nocc, self.nvir))
+        Lvv = np.empty((self.naux, self.nvir, self.nvir))
+        mo = np.asarray(self.mo_coeff, order='F')
+        ijslice = (0, self.nao, 0, self.nao)
+        p1 = 0
+        Lpq = None
+        for k, eri1 in enumerate(self.with_df.loop()):
+            Lpq = _ao2mo.nr_e2(eri1, mo, ijslice, aosym='s2', mosym='s1', out=Lpq)
+            p0, p1 = p1, p1 + Lpq.shape[0]
+            Lpq = Lpq.reshape(p1 - p0, self.nao, self.nao)
+            Loo[p0:p1] = Lpq[:, :self.nocc, :self.nocc]
+            Lov[p0:p1] = Lpq[:, :self.nocc, self.nocc:]
+            Lvv[p0:p1] = Lpq[:, self.nocc:, self.nocc:]
+        Lpq = None
+        Lvo = Lov.transpose(0,2,1).reshape(self.naux,self.nvir,self.nocc)
+        self.Loo = Loo
+        self.Lov = Lov
+        self.Lvo = Lvo
+        self.Lvv = Lvv       
+
+     
 
         # NOTE 06/04 debate about cache 
 

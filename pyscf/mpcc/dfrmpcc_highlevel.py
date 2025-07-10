@@ -15,6 +15,8 @@ class MPCC_HL:
         self._eris = eris
         self.frag = frags
     
+        self.diis = True
+
         self.ll_con_tol = kwargs.get("ll_con_tol")
         self.ll_max_its = kwargs.get("ll_max_its")
 
@@ -34,7 +36,15 @@ class MPCC_HL:
     @property
     def act_hole(self):
         return self.frag[0]
-            
+
+    @property
+    def nact_particle(self):
+        return len(self.act_particle)
+    
+    @property
+    def nact_hole(self):
+        return len(self.act_hole)
+
     @property
     def act_particle(self):
         return self.frag[1]
@@ -61,6 +71,7 @@ class MPCC_HL:
         self.Loo_aa = self._eris.Loo[numpy.ix_(naux_idx, act_hole, act_hole)]
 
         self.Lvv_aa = self._eris.Lvv[numpy.ix_(naux_idx, act_particle, act_particle)]
+        self.Lvv_ia = self._eris.Lvv[numpy.ix_(naux_idx, inact_particle, act_particle)]
 
         self.Lov_ia = self._eris.Lov[numpy.ix_(naux_idx, inact_hole, act_particle)]
         self.Lov_aa = self._eris.Lov[numpy.ix_(naux_idx, act_hole, act_particle)]
@@ -80,32 +91,32 @@ class MPCC_HL:
         Mov_aa = Mov[0]
 #       Mov_ai = Mov[1]
 #      JOO (active-active)
-        Joo_aa = imds.Joo_aa
+        Joo_aa = numpy.array(imds.Joo).copy()
         Joo_aa += lib.einsum("Lic,jc->Lij", self.Lov_aa, t1)
 
 #      JVV  (active-active, active-inactive)
-        Jvv_aa = imds.Jvv_aa           
+        Jvv_aa = numpy.array(imds.Jvv).copy()          
         Jvv_aa -= lib.einsum("Lkb,ka->Lab", self.Lov_aa, t1)
 
 #      JOV (active-active)
-        Jov_aa  = imds.Jov_aa
-        Jov_aa += lib.einsum("Lac,ic->Lia", self.Lov_aa, t1)
+        Jov_aa  = numpy.array(imds.Jov).copy()
+        Jov_aa += lib.einsum("Lac,ic->Lia", self.Lvv_aa, t1)
         Jov_aa -= lib.einsum("Lki,ka->Lia", Joo_aa, t1)  
 
 #Now construct Fock matrix: (active-active, active-inactive)
-        Foo_aa  = imds.Foo_aa
+        Foo_aa  = numpy.array(imds.Foo).copy()
         Foo_aa += lib.einsum("Lij,L->ij", self.Loo_aa, M)
         Foo_aa -= lib.einsum("Lmi,Lmj->ij",self.Loo_aa,Moo_aa)
         Foo_aa -= lib.einsum("Lmi,Lmj->ij",self.Loo_ia,Moo_ia)
         
        #are we missng any term here?
          
-        Fvv_aa  = imds.Fvv_aa
+        Fvv_aa  = numpy.array(imds.Fvv).copy()
         Fvv_aa += lib.einsum("Lab,L->ab",self.Lvv_aa,M) 
         Fvv_aa += lib.einsum("Lma,Lmb->ab",self.Lov_aa,Mov_aa)
 
         #Fov (active-active)
-        Fov_aa  = imds.Fov_aa 
+        Fov_aa  = numpy.array(imds.Fov).copy()
         Fov_aa += lib.einsum("Lia,L->ia",self.Lov_aa,M)
         Fov_aa -= lib.einsum("Lma,Lmi->ia",self.Lov_aa,Moo_aa)
         Fov_aa -= lib.einsum("Lma,Lmi->ia",self.Lov_ia,Moo_ia)
@@ -135,7 +146,7 @@ class MPCC_HL:
 
         #construct antisymmetrized t2:
         t2_antisym = 2.0*t2 - t2.transpose(0, 1, 3, 2)
-        Mov_t2 += lib.einsum("Lme, imae -> Lia", self.Lov_aa, t2_antisym)
+        Mov_t2 = lib.einsum("Lme, imae -> Lia", self.Lov_aa, t2_antisym)
 
         Moo = [Moo_aa, Moo_ia]
         Mov = [Mov_aa, Mov_ai]
@@ -160,20 +171,27 @@ class MPCC_HL:
         #construct antisymmetrized t2:
         t2_antisym = 2.0*t2 - t2.transpose(0, 1, 3, 2)
        
-        R1 = imds.R1_aa.copy()
+        R1 = imds.R1.copy()
 
-        Foo += lib.einsum("me,ie->im", Fov, t1)
+        
+
+        Foo += lib.einsum("me,ie->im", Fov, t1)*0.5
 
         R1 -= lib.einsum("im, ma -> ia", Foo, t1)       
 
-        Fvv_aa -= lib.einsum("me, ma -> ae", Fov, t1)
+        Fvv -= lib.einsum("me, ma -> ae", Fov, t1)*0.5
  
         R1 += lib.einsum("ae, ie -> ia", Fvv, t1)
         R1 -= lib.einsum("me, imae -> ia", Fov, t2_antisym) #many terms
         R1 += lib.einsum("Lia, L -> ia", self.Lov_aa, M0)
-        R1 -= lib.einsum("Lim, Lma -> ia", self.Loo_aa, Mov)
+        R1 -= lib.einsum("Lim, Lma -> ia", self.Loo_aa, Mov[0])
         R1 -= lib.einsum("Lim, Lma -> ia", self.Loo_aa, Mov_t2)
         R1 += lib.einsum("Lae, Lie -> ia", self.Lvv_aa, Mov_t2)
+
+        #discard the updated Foo, Fvv contribution:
+        Foo -= lib.einsum("me,ie->im", Fov, t1)*0.5
+        Fvv += lib.einsum("me, ma -> ae", Fov, t1)*0.5
+ 
 
         return R1
 
@@ -199,7 +217,7 @@ class MPCC_HL:
         #Fock matrix contribution:
 
         Foo += lib.einsum("me,ie->im", Fov, t1)
-        R2_tmp -= lib.einsum("im, mjab -> ijab", Foo, t2) #only one possibility m has to be inactive.
+        R2_tmp = -lib.einsum("im, mjab -> ijab", Foo, t2) #only one possibility m has to be inactive.
 
         Fvv -= lib.einsum("me, ma -> ae", Fov, t1)
 
@@ -257,45 +275,44 @@ class MPCC_HL:
         return t1, t2
 
     def amplitudes_to_vector(self, t1, t2, out=None):
-        nov = self.nocc * self.nvir
+        nov = self.nact_hole * self.nact_particle
         size = nov + nov * (nov + 1) // 2
-        vector = np.ndarray(size, t1.dtype, buffer=out)
+        vector = numpy.ndarray(size, t1.dtype, buffer=out)
         vector[:nov] = t1.ravel()
         lib.pack_tril(t2.transpose(0, 2, 1, 3).reshape(nov, nov), out=vector[nov:])
         return vector
 
     def vector_to_amplitudes(self, vector):
-        nov = self.nocc * self.nvir
-        t1 = vector[:nov].copy().reshape((self.nocc, self.nvir))
+        nov = self.nact_hole * self.nact_particle
+        t1 = vector[:nov].copy().reshape((self.nact_hole, self.nact_particle))
         # filltriu=lib.SYMMETRIC because t2[iajb] == t2[jbia]
         t2 = lib.unpack_tril(vector[nov:], filltriu=lib.SYMMETRIC)
-        t2 = t2.reshape(self.nocc, self.nvir, self.nocc, self.nvir).transpose(
+        t2 = t2.reshape(self.nact_hole, self.nact_particle, self.nact_hole, self.nact_particle).transpose(
             0, 2, 1, 3
         )
         return t1, numpy.asarray(t2, order="C")
 
 
-    def updated_amps(imds, self):
+    def updated_amps(self, imds, t1, t2):
         """
         Following Table XXX in Future Paper
         """
 
-        # NOTE do we want the local copy?
-        t1 = self.t1
-        t2 = self.t2
 
         M0, Moo, Mov, Mov_t2 = self.create_M_intermediates(t1, t2)
-        Joo, Jvv, Jov, Foo, Fvv, Fov = self.t1_transform(t1, imds, M0, Moo, Mov, Mov_t2)
-        Foo, Fvv = self.add_t2_to_fock(t2, M0, Fvv, Foo)
+        Joo, Jvv, Jov, Foo, Fvv, Fov = self.t1_transform(imds, t1, M0, Moo, Mov, Mov_t2)
+        Foo, Fvv = self.add_t2_to_fock(Fvv, Foo, Mov_t2)
 
         R1 = self.R1_residue_active(imds, t1, t2, Fov, Fvv, Foo, M0, Mov, Mov_t2 )
         R2 = self.R2_residue_active(t1, t2, Joo, Jvv, Jov, Fov, Fvv, Foo)
 
-        res  = numpy.linalg.norm(self.t1 + R1 / self._eris.eia)
-        res += numpy.linalg.norm(self.t2 + R2 / self._eris.D)
+        res1 = R1/ self._eris.eia[numpy.ix_(self.act_hole, self.act_particle)]
+        res2 = R2/ self._eris.D[numpy.ix_(self.act_hole, self.act_hole, self.act_particle, self.act_particle)]
+ 
+        t1 += res1
+        t2 += res2
+        res = numpy.linalg.norm(res1) + numpy.linalg.norm(res2)
 
-        t1 = -R1/ self._eris.eia
-        t2 = -R2/ self._eris.D
         return res, t1, t2
 
 
@@ -304,23 +321,27 @@ class MPCC_HL:
       #we have to extract the active only amplitudes from the full amplitudes:
 
 
-      t1 = t1full[numpy.ix_(self.act_hole, self.act_particle)]
+      t1 = t1full[numpy.ix_(self.act_hole, self.act_particle)].copy()
 
-      t2 = t2full[numpy.ix_(self.act_hole,self.act_hole, self.act_particle,self.act_particle)]
+      t2 = t2full[numpy.ix_(self.act_hole,self.act_hole, self.act_particle,self.act_particle)].copy()
 
       e_corr = None
       adiis = lib.diis.DIIS()
-      err = 0.0
+      err = numpy.inf
+      print("Starting High-level MPCC iteration...")
+      count = 0
       while err > self.ll_con_tol and count < self.ll_max_its:
 
           res, t1_new, t2_new = self.updated_amps(imds, t1, t2)
           if self.diis:
-              t1, t2 = self.run_diis(t1_new, t2_new, adiis)
+              t1_new, t2_new = self.run_diis(t1_new, t2_new, adiis)
           else:
-              t1, t2 = t1_new, t2_new
+              t1_new, t2_new = t1_new, t2_new
 
-          self.t1 = t1
-          self.t2 = t2
+          t1 = t1_new
+          t2 = t2_new       
+          t1_new = None
+          t2_new = None
 
           count += 1
           err = res
