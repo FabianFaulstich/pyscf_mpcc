@@ -12,8 +12,8 @@ class MPCC(lib.StreamObject):
 
         self.eris = eri.ERIs(mf, self.mo_coeff)
         self.frags = kwargs.get('frag')
-        #if self.frags is None:
-        #    raise ValueError("Missing required keyword argument 'frag' in kwargs.")
+        if self.frags is None:
+            raise ValueError("Missing required keyword argument 'frag' in kwargs.")
 
         print('MPCC fragments:', self.frags)
 
@@ -63,15 +63,12 @@ class MPCC(lib.StreamObject):
                self.screened.frag = frag
                self.highlevel.frag = frag
 
-
-
                imds = self.screened.kernel(t1, t2)
                #print the attributes of the imds object
                print('MPCC: Screened kernel calculated for fragment:', frag)
                
                print("JOO:", imds.Joo.shape)
 
-               print('MPCC: Screened kernel calculated for fragment:')
                t1_act, t2_act = self.highlevel.kernel(imds, t1, t2)
                print('MPCC: High-level kernel calculated for fragment:')
         #NOTE: when we will use T3 amplitudes, we can directly return it here. we don't need to reuse them for any other purposes. Therefore
@@ -85,10 +82,10 @@ class MPCC(lib.StreamObject):
                t1[numpy.ix_(act_hole, act_particle)] = t1_act[:,:]
                t2[numpy.ix_(act_hole, act_hole, act_particle, act_particle)] = t2_act
             #calculate the energy:
-               e_mpcc = self.lowlevel.get_energy(t1, t2)
+               e_mpcc = self.lowlevel.energy(t1, t2)
                e_diff = abs(e_mpcc - e_mpcc_prev)
                e_mpcc_prev = e_mpcc
-               print(f"It {count}; Energy {e_mpcc:.6e}")
+               print(f"It {count}; Energy {e_mpcc:.6e}; Energy difference {e_diff:.6e}")
         #Now use DIIS extrapolation to update t1 and t2 amplitudes all together. But I believe this step may be skipped.
         #also at this step we can evaluate total energy to test the convergence of the whole procedure..  
          

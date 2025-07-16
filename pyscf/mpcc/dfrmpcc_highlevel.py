@@ -92,7 +92,8 @@ class MPCC_HL:
 #       Mov_ai = Mov[1]
 #      JOO (active-active)
         Joo_aa = numpy.array(imds.Joo).copy()
-        Joo_aa += lib.einsum("Lic,jc->Lij", self.Lov_aa, t1)
+#        Joo_aa += lib.einsum("Lic,jc->Lij", self.Lov_aa, t1)
+        Joo_aa += Moo_aa
 
 #      JVV  (active-active, active-inactive)
         Jvv_aa = numpy.array(imds.Jvv).copy()          
@@ -100,7 +101,9 @@ class MPCC_HL:
 
 #      JOV (active-active)
         Jov_aa  = numpy.array(imds.Jov).copy()
-        Jov_aa += lib.einsum("Lac,ic->Lia", self.Lvv_aa, t1)
+#        Jov_aa += lib.einsum("Lac,ic->Lia", self.Lvv_aa, t1)
+        Jov_aa += Mov_aa
+        Jov_aa += Mov_t2
         Jov_aa -= lib.einsum("Lki,ka->Lia", Joo_aa, t1)  
 
 #Now construct Fock matrix: (active-active, active-inactive)
@@ -134,7 +137,7 @@ class MPCC_HL:
     def create_M_intermediates(self, t1, t2):
         #construct the intermediates for the t2 update:
         #M0
-        M0 = lib.einsum("Lkc,kc->L", self.Lov_aa, t1)*2
+        M0 = lib.einsum("Lkc,kc->L", self.Lov_aa, t1)*2.0
 
         #Moo
         Moo_aa = lib.einsum("Lic,jc->Lij", self.Lov_aa, t1)
@@ -155,7 +158,6 @@ class MPCC_HL:
 
     def add_t2_to_fock(self, Fvv, Foo, Mov_t2):    
 
-
         #construct antisymmetrized t2:
 
         #generate the intermediate with full arrays 
@@ -172,7 +174,6 @@ class MPCC_HL:
         t2_antisym = 2.0*t2 - t2.transpose(0, 1, 3, 2)
        
         R1 = imds.R1.copy()
-
         
 
         Foo += lib.einsum("me,ie->im", Fov, t1)*0.5
@@ -196,22 +197,31 @@ class MPCC_HL:
         return R1
 
 
-    def R2_residue_active(self, t1, t2, Joo, Jvv, Jov, Fov, Fvv, Foo):
+    def R2_residue_active(self, imds, t1, t2, Joo, Jvv, Jov, Fov, Fvv, Foo):
 
         
         Jov = Jov[0]
         Joo = Joo[0]
         Jvv = Jvv[0]
 
+        #Non DCA terms:
+        Ijemb, Ijebm, Imnij = self.t2_transform_quadratic(t2)  
+
+        #Ijebm += imds.Ijebm_active
+        #Ijemb += imds.Ijemb_active
+        #Imnij += imds.Imnij_active
+
+        R2 = imds.R2.copy()
+
         #factorized part of the residue:
-        R2 = lib.einsum("Lia, Ljb -> ijab", Jov, Jov)
+        R2 += lib.einsum("Lia, Ljb -> ijab", Jov, Jov)
         #PPL 
         Waebf = lib.einsum("Lae, Lbf -> abef", Jvv, Jvv)
 #       R2 += lib.einsum("abef, ijef -> ijab", Waebf, t2)#three possibilities (ii, ia, ai)
         R2 += lib.einsum("abef, ijef -> ijab", Waebf, t2)
 
         #HHL
-        Wijmn = lib.einsum("Lim, Ljn -> ijmn", Joo, Joo)
+        Wijmn = lib.einsum("Lim, Ljn -> ijmn", Joo, Joo) + Imnij
         R2 += lib.einsum("ijmn, mnab -> ijab", Wijmn, t2) #three possibilities (aa, ai, ia)
 
         #Fock matrix contribution:
@@ -226,23 +236,16 @@ class MPCC_HL:
 
         #N3V3 terms:
 
-        W_jebm = lib.einsum("Ljm, Lbe -> jebm", Joo, Jvv)
+        W_jebm = lib.einsum("Ljm, Lbe -> jebm", Joo, Jvv) 
 #       R2_tmp -= lib.einsum("jebm, imae -> ijab", W_jebm, t2) # em should be ii, ia, ai types
 
         R2_tmp -= lib.einsum("jebm, imae -> ijab", W_jebm, t2)
 
-
-        W_jema = lib.einsum("Ljm, Lae -> jema", Joo, Jvv)
+        W_jema = lib.einsum("Ljm, Lae -> jema", Joo, Jvv) - Ijemb*0.5
         R2_tmp -= lib.einsum("jema, imeb -> ijab", W_jema, t2) # em should be ii, ia, ai types
 
-
-        #Non DCA terms:
-        Ijemb, Ijebm, Imnij = self.t2_transform_quadratic(t2)        
-
         R2_tmp -= lib.einsum("jebm, imae -> ijab", Ijebm, t2)
-        R2_tmp += lib.einsum("jebm, imae -> ijab", Ijebm, t2)
-
-        R2_tmp -= lib.einsum("jema, imeb -> ijab", Ijemb, t2)
+        R2_tmp += lib.einsum("jemb, imae -> ijab", Ijemb, t2)
 
         #symmetrize R2_tmp:
         R2 += (R2_tmp + R2_tmp.transpose(1, 0, 3, 2))
@@ -304,7 +307,7 @@ class MPCC_HL:
         Foo, Fvv = self.add_t2_to_fock(Fvv, Foo, Mov_t2)
 
         R1 = self.R1_residue_active(imds, t1, t2, Fov, Fvv, Foo, M0, Mov, Mov_t2 )
-        R2 = self.R2_residue_active(t1, t2, Joo, Jvv, Jov, Fov, Fvv, Foo)
+        R2 = self.R2_residue_active(imds, t1, t2, Joo, Jvv, Jov, Fov, Fvv, Foo)
 
         res1 = R1/ self._eris.eia[numpy.ix_(self.act_hole, self.act_particle)]
         res2 = R2/ self._eris.D[numpy.ix_(self.act_hole, self.act_hole, self.act_particle, self.act_particle)]
