@@ -107,16 +107,27 @@ class MPCC_HL:
         Jov_aa -= lib.einsum("Lki,ka->Lia", Joo_aa, t1)  
 
 #Now construct Fock matrix: (active-active, active-inactive)
-        Foo_aa  = numpy.array(imds.Foo).copy()
-        Foo_aa += lib.einsum("Lij,L->ij", self.Loo_aa, M)
+        Foo_aa  = lib.einsum("Lij,L->ij", self.Loo_aa, M)
         Foo_aa -= lib.einsum("Lmi,Lmj->ij",self.Loo_aa,Moo_aa)
         Foo_aa -= lib.einsum("Lmi,Lmj->ij",self.Loo_ia,Moo_ia)
-        
+        Foo_aa_t1  = numpy.array(imds.Foo_t1).copy()
+        Foo_aa_t1 += Foo_aa
+
+        Foo_aa_t2  = numpy.array(imds.Foo_t2).copy()
+        Foo_aa_t2 += Foo_aa
        #are we missng any term here?
          
-        Fvv_aa  = numpy.array(imds.Fvv).copy()
-        Fvv_aa += lib.einsum("Lab,L->ab",self.Lvv_aa,M) 
+#        Fvv_aa  = numpy.array(imds.Fvv).copy()
+        Fvv_aa = lib.einsum("Lab,L->ab",self.Lvv_aa,M) 
         Fvv_aa += lib.einsum("Lma,Lmb->ab",self.Lov_aa,Mov_aa)
+
+
+        Fvv_aa_t1  = numpy.array(imds.Fvv_t1).copy()
+        Fvv_aa_t1 += Fvv_aa
+
+        Fvv_aa_t2  = numpy.array(imds.Fvv_t2).copy()
+        Fvv_aa_t2 += Fvv_aa
+
 
         #Fov (active-active)
         Fov_aa  = numpy.array(imds.Fov).copy()
@@ -128,8 +139,8 @@ class MPCC_HL:
         Jvv = [Jvv_aa]
         Jov = [Jov_aa]
 
-        Foo = Foo_aa
-        Fvv = Fvv_aa
+        Foo = [Foo_aa_t1, Foo_aa_t2]
+        Fvv = [Fvv_aa_t1, Fvv_aa_t2]
         Fov = Fov_aa
 
         return Joo, Jvv, Jov, Foo, Fvv, Fov
@@ -161,8 +172,14 @@ class MPCC_HL:
         #construct antisymmetrized t2:
 
         #generate the intermediate with full arrays 
-        Foo += lib.einsum("Lie,Lje->ij", self.Lov_aa, Mov_t2)
-        Fvv -= lib.einsum("Lma,Lmb->ab",self.Lov_aa,Mov_t2)
+        Foo_tmp = lib.einsum("Lie,Lje->ij", self.Lov_aa, Mov_t2)
+        Fvv_tmp = -lib.einsum("Lma,Lmb->ab",self.Lov_aa,Mov_t2)
+
+        Foo_aa_t1, Foo_aa_t2 = Foo
+        Fvv_aa_t1, Fvv_aa_t2 = Fvv
+
+        Foo = [Foo_aa_t1+Foo_tmp, Foo_aa_t2+Foo_tmp]
+        Fvv = [Fvv_aa_t1+Fvv_tmp, Fvv_aa_t2+Fvv_tmp]
 
         return Foo, Fvv
 
@@ -174,25 +191,22 @@ class MPCC_HL:
         t2_antisym = 2.0*t2 - t2.transpose(0, 1, 3, 2)
        
         R1 = imds.R1.copy()
-        
+       
+        Foo_t1, _ = Foo 
+        Fvv_t1, _ = Fvv
 
-        Foo += lib.einsum("me,ie->im", Fov, t1)*0.5
+        Foo_t1 += lib.einsum("me,ie->im", Fov, t1)*0.5
 
-        R1 -= lib.einsum("im, ma -> ia", Foo, t1)       
+        R1 -= lib.einsum("im, ma -> ia", Foo_t1, t1)       
 
-        Fvv -= lib.einsum("me, ma -> ae", Fov, t1)*0.5
+        Fvv_t1 -= lib.einsum("me, ma -> ae", Fov, t1)*0.5
  
-        R1 += lib.einsum("ae, ie -> ia", Fvv, t1)
+        R1 += lib.einsum("ae, ie -> ia", Fvv_t1, t1)
         R1 -= lib.einsum("me, imae -> ia", Fov, t2_antisym) #many terms
         R1 += lib.einsum("Lia, L -> ia", self.Lov_aa, M0)
         R1 -= lib.einsum("Lim, Lma -> ia", self.Loo_aa, Mov[0])
         R1 -= lib.einsum("Lim, Lma -> ia", self.Loo_aa, Mov_t2)
         R1 += lib.einsum("Lae, Lie -> ia", self.Lvv_aa, Mov_t2)
-
-        #discard the updated Foo, Fvv contribution:
-        Foo -= lib.einsum("me,ie->im", Fov, t1)*0.5
-        Fvv += lib.einsum("me, ma -> ae", Fov, t1)*0.5
- 
 
         return R1
 
@@ -204,12 +218,11 @@ class MPCC_HL:
         Joo = Joo[0]
         Jvv = Jvv[0]
 
-        #Non DCA terms:
         Ijemb, Ijebm, Imnij = self.t2_transform_quadratic(t2)  
 
-        #Ijebm += imds.Ijebm_active
-        #Ijemb += imds.Ijemb_active
-        #Imnij += imds.Imnij_active
+        Ijebm += imds.Ijebm_active
+        Ijemb += imds.Ijemb_active
+        Imnij += imds.Imnij_active
 
         R2 = imds.R2.copy()
 
@@ -226,13 +239,18 @@ class MPCC_HL:
 
         #Fock matrix contribution:
 
-        Foo += lib.einsum("me,ie->im", Fov, t1)
-        R2_tmp = -lib.einsum("im, mjab -> ijab", Foo, t2) #only one possibility m has to be inactive.
 
-        Fvv -= lib.einsum("me, ma -> ae", Fov, t1)
+        _, Foo_t2 = Foo 
+        _, Fvv_t2 = Fvv
+
+
+        Foo_t2 += lib.einsum("me,ie->im", Fov, t1)
+        R2_tmp = -lib.einsum("im, mjab -> ijab", Foo_t2, t2) #only one possibility m has to be inactive.
+
+        Fvv_t2 -= lib.einsum("me, ma -> ae", Fov, t1)
 
       #it is better to have a 
-        R2_tmp += lib.einsum("ae, ijeb -> ijab", Fvv, t2) # only one possibility e has to be inactive.
+        R2_tmp += lib.einsum("ae, ijeb -> ijab", Fvv_t2, t2) # only one possibility e has to be inactive.
 
         #N3V3 terms:
 
