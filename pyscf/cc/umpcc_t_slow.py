@@ -824,15 +824,13 @@ def get_t3_to_imds(mcc, t3, t1, eris, act_hole, act_particle):
     woovo += lib.einsum('NjiFea,meNF->mjai', t3baa, eris_ovOV[numpy.ix_(numpy.arange(nocca), act_particle[0],  act_hole[1], act_particle[1])])
 
     wOOVO = lib.einsum('ijnaef,menf->mjai', t3bbb, OVOV[numpy.ix_(numpy.arange(noccb), act_particle[1],  act_hole[1], act_particle[1])])*0.5
-    wOOVO += lib.einsum('IJnAEf,nfME->MJAI', t3bba, eris_ovOV[numpy.ix_(numpy.arange(nocca), act_particle[0], act_hole[1], act_particle[1])])
+    wOOVO += lib.einsum('IJnAEf,nfME->MJAI', t3bba, eris_ovOV[numpy.ix_(act_hole[0], act_particle[0], numpy.arange(noccb), act_particle[1])])
 
     wooVO = lib.einsum('IjnAef,menf->mjAI', t3baa, ovov[numpy.ix_(numpy.arange(nocca), act_particle[0],  act_hole[0], act_particle[0])])*0.5
     wooVO += lib.einsum('INjAFe,meNF->mjAI', t3bba, eris_ovOV[numpy.ix_(numpy.arange(nocca), act_particle[0],  act_hole[1], act_particle[1])])
 
-
     wOOvo = lib.einsum('NJiFEa,MENF->MJai', t3bba, OVOV[numpy.ix_(numpy.arange(noccb), act_particle[1],  act_hole[1], act_particle[1])])*0.5
-    wOOvo += lib.einsum('JniEfa,nfME->MJai', t3baa, eris_ovOV[numpy.ix_(numpy.arange(nocca), act_particle[0],  act_hole[1], act_particle[1])])
-
+    wOOvo += lib.einsum('JniEfa,nfME->MJai', t3baa, eris_ovOV[numpy.ix_(act_hole[0], act_particle[0],  numpy.arange(noccb), act_particle[1])])
 
     return wvvvo, wvvVO, wVVvo, wVVVO, woovo, wOOVO, wooVO, wOOvo
 
