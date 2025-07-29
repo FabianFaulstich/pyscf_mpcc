@@ -94,10 +94,28 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     Foob =  .5 * lib.einsum('me,ie->mi', fovb, t1b)
     Fvva = -.5 * lib.einsum('me,ma->ae', fova, t1a)
     Fvvb = -.5 * lib.einsum('me,ma->ae', fovb, t1b)
-    Fooa += eris.focka[:nocca,:nocca] - np.diag(mo_ea_o)
-    Foob += eris.fockb[:noccb,:noccb] - np.diag(mo_eb_o)
-    Fvva += eris.focka[nocca:,nocca:] - np.diag(mo_ea_v)
-    Fvvb += eris.fockb[noccb:,noccb:] - np.diag(mo_eb_v)
+#   Fooa += eris.focka[:nocca,:nocca] - np.diag(mo_ea_o)
+#   Foob += eris.fockb[:noccb,:noccb] - np.diag(mo_eb_o)
+#   Fvva += eris.focka[nocca:,nocca:] - np.diag(mo_ea_v)
+#   Fvvb += eris.fockb[noccb:,noccb:] - np.diag(mo_eb_v)
+
+    tmp = eris.focka[:nocca, :nocca].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fooa += tmp
+
+    tmp = eris.fockb[:noccb, :noccb].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Foob += tmp
+
+    tmp = eris.focka[nocca:, nocca:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvva += tmp
+
+    tmp = eris.fockb[noccb:, noccb:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvvb += tmp
+
+    tmp = None
 
     dtype = t1[0].dtype
     wovvo = np.zeros((nocca,nvira,nvira,nocca), dtype=dtype)
@@ -379,8 +397,12 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     u2bb = u2bb - u2bb.transpose(0,1,3,2)
     u2bb = u2bb - u2bb.transpose(1,0,2,3)
 
-    eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
-    eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+#   eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
+#   eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+
+    eia_a = lib.direct_sum('i-a->ia', np.diag(eris.focka[:nocca,:nocca]), np.diag(eris.focka[nocca:,nocca:]))
+    eia_b = lib.direct_sum('i-a->ia', np.diag(eris.fockb[:noccb,:noccb]), np.diag(eris.fockb[noccb:,noccb:]))
+
     u1a /= eia_a
     u1b /= eia_b
 
@@ -472,10 +494,30 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     Foob =  .5 * lib.einsum('me,ie->mi', fovb, t1b)
     Fvva = -.5 * lib.einsum('me,ma->ae', fova, t1a)
     Fvvb = -.5 * lib.einsum('me,ma->ae', fovb, t1b)
-    Fooa += eris.focka[:nocca,:nocca] - np.diag(mo_ea_o)
-    Foob += eris.fockb[:noccb,:noccb] - np.diag(mo_eb_o)
-    Fvva += eris.focka[nocca:,nocca:] - np.diag(mo_ea_v)
-    Fvvb += eris.fockb[noccb:,noccb:] - np.diag(mo_eb_v)
+#    Fooa += eris.focka[:nocca,:nocca] - np.diag(mo_ea_o)
+#    Foob += eris.fockb[:noccb,:noccb] - np.diag(mo_eb_o)
+#    Fvva += eris.focka[nocca:,nocca:] - np.diag(mo_ea_v)
+#    Fvvb += eris.fockb[noccb:,noccb:] - np.diag(mo_eb_v)
+
+
+    tmp = eris.focka[:nocca, :nocca].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fooa += tmp
+
+    tmp = eris.fockb[:noccb, :noccb].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Foob += tmp
+
+    tmp = eris.focka[nocca:, nocca:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvva += tmp
+
+    tmp = eris.fockb[noccb:, noccb:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvvb += tmp
+
+    tmp = None
+
     dtype = u2aa.dtype
     wovvo = np.zeros((nocca,nvira,nvira,nocca), dtype=dtype)
     wOVVO = np.zeros((noccb,nvirb,nvirb,noccb), dtype=dtype)
@@ -782,6 +824,7 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     if (pert_triples):
 
        u3new, u2_active, u1_active = umpcc_t_slow.iterative_update_amps_t3(cc, t1, t2, t3old, eris, act_hole, act_particle)
+#      u3new, u2_active, u1_active = umpcc_t_slow.iterative_update_amps_ccsdt3(cc, t1, t2, t3old, eris, act_hole, act_particle)
 #      u3new, u2_active, u1_active = umpcc_t_slow.update_amps_t3(cc, t1, t2, t3old, eris, act_hole, act_particle)
 
        u2_active_aa, u2_active_ab, u2_active_bb = u2_active
@@ -794,8 +837,13 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
        u1a[np.ix_(act_hole[0], act_particle[0])] +=u1a_active
        u1b[np.ix_(act_hole[1], act_particle[1])] +=u1b_active 
 
-    eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
-    eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+#    eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
+#    eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+
+
+    eia_a = lib.direct_sum('i-a->ia', np.diag(eris.focka[:nocca,:nocca]), np.diag(eris.focka[nocca:,nocca:]))
+    eia_b = lib.direct_sum('i-a->ia', np.diag(eris.fockb[:noccb,:noccb]), np.diag(eris.fockb[noccb:,noccb:]))
+
     u1a /= eia_a
     u1b /= eia_b
 
@@ -1187,7 +1235,7 @@ class UCCSD(ccsd.CCSD):
 #       return umpcc_t_slow._iterative_kernel(self, t1, t2, l1, l2, eris, act_hole, act_particle)
     uccsd_t = ccsd_t
 
-#here I will write a few functions that accounts for perturbative corrections..  
+#here I will write a few functions that account for perturbative corrections..  
 
     def ccsd_pert_t(self, act_hole, act_particle, t1=None, t2=None, l1=None, l2=None, eris=None):
         from pyscf.cc import umpcc_t_slow

@@ -41,8 +41,8 @@ MEMORYMIN = getattr(__config__, 'cc_ccsd_memorymin', 2000)
 
 # t1: ia
 # t2: ijab
-def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
-           tolnormt=1e-6, verbose=None, callback=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None):
+def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-7,
+           tolnormt=1e-5, verbose=None, callback=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None):
     log = logger.new_logger(mycc, verbose)
     if eris is None:
         eris = mycc.ao2mo(mycc.mo_coeff)

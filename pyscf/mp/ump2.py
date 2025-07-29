@@ -267,8 +267,13 @@ def update_amps(mp, t2, eris):
     u2aa = u2aa + u2aa.transpose(1,0,3,2)
     u2bb = u2bb + u2bb.transpose(1,0,3,2)
 
-    eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
-    eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+#    eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
+#    eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+
+    eia_a = lib.direct_sum('i-a->ia', numpy.diag(focka[:nocca,:nocca]), numpy.diag(focka[nocca:,nocca:]))
+    eia_b = lib.direct_sum('i-a->ia', numpy.diag(fockb[:noccb,:noccb]), numpy.diag(fockb[noccb:,noccb:]))
+
+
     u2aa /= lib.direct_sum('ia+jb->ijab', eia_a, eia_a)
     u2ab /= lib.direct_sum('ia+jb->ijab', eia_a, eia_b)
     u2bb /= lib.direct_sum('ia+jb->ijab', eia_b, eia_b)
