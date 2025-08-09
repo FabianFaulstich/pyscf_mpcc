@@ -57,6 +57,10 @@ class MPCC(lib.StreamObject):
 
 
             t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
+
+            t1_act = []
+            t2_act = []
+
             #the following loop is parallelizable over fragments
             for frag in self.frags: 
                #modified the self.screened object
@@ -69,25 +73,33 @@ class MPCC(lib.StreamObject):
                
                print("JOO:", imds.Joo.shape)
 
-               t1_act, t2_act = self.highlevel.kernel(imds, t1, t2)
+               t1_act_tmp, t2_act_tmp = self.highlevel.kernel(imds, t1, t2)
+
+               t1_act.append(t1_act_tmp)    
+               t2_act.append(t2_act_tmp)    
+
                print('MPCC: High-level kernel calculated for fragment:')
         #NOTE: when we will use T3 amplitudes, we can directly return it here. we don't need to reuse them for any other purposes. Therefore
         #we can update them using diis only in the high level solver
         #store active amplitudes in a container or may be in a hdf5 file for later use:
-
-        #modify a section of the array with new elements:
+            frag_i = 0 
+            for frag in self.frags: 
+               #modify a section of the array with new elements:
                act_hole = frag[0]
                act_particle = frag[1]
+                
+               t1[numpy.ix_(act_hole, act_particle)] = t1_act[frag_i]
+               t2[numpy.ix_(act_hole, act_hole, act_particle, act_particle)] = t2_act[frag_i]
 
-               t1[numpy.ix_(act_hole, act_particle)] = t1_act[:,:]
-               t2[numpy.ix_(act_hole, act_hole, act_particle, act_particle)] = t2_act
+               frag_i += 1
+
             #calculate the energy:
-               e_mpcc = self.lowlevel.energy(t1, t2)
-               e_diff = abs(e_mpcc - e_mpcc_prev)
-               e_mpcc_prev = e_mpcc
-               print(f"It {count}; Energy {e_mpcc:.6e}; Energy difference {e_diff:.6e}")
-        #Now use DIIS extrapolation to update t1 and t2 amplitudes all together. But I believe this step may be skipped.
-        #also at this step we can evaluate total energy to test the convergence of the whole procedure..  
+            e_mpcc = self.lowlevel.energy(t1, t2)
+            e_diff = abs(e_mpcc - e_mpcc_prev)
+            e_mpcc_prev = e_mpcc
+            print(f"It {count}; Energy {e_mpcc:.6e}; Energy difference {e_diff:.6e}")
+            #Now use DIIS extrapolation to update t1 and t2 amplitudes all together. But I believe this step may be skipped.
+            #also at this step we can evaluate total energy to test the convergence of the whole procedure..  
          
 
 
