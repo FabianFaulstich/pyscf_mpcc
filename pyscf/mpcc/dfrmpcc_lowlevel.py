@@ -44,6 +44,10 @@ class MPCC_LL:
             return float(self.mf.e_tot + self._e_corr)
 
     @property
+    def e_corr(self):
+        return float(self._e_corr)
+
+    @property
     def nvir(self):
         return self.mf.mol.nao - self.nocc
     

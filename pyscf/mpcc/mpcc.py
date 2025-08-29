@@ -24,7 +24,7 @@ class MPCC(lib.StreamObject):
         # Setting MPCC attributes 
         # use "_" for variable protection 
 
-    def kernel(self, **kwargs):
+    def kernel(self, verbose = None, **kwargs):
 
         #if localization:
         #    try:
@@ -34,6 +34,8 @@ class MPCC(lib.StreamObject):
         #        breakpoint() 
 
 #       self.eris.make_eri()
+
+        log = lib.logger.new_logger(self, verbose)
 
         count = 0
         e_mpcc_prev = -numpy.inf
@@ -55,7 +57,8 @@ class MPCC(lib.StreamObject):
             #    print('No active fragments found. Exiting loop.')
             #    break
 
-
+            
+            print('Starting low-level MPCC iteration...')
             t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
             #the following loop is parallelizable over fragments
             for frag in self.frags: 

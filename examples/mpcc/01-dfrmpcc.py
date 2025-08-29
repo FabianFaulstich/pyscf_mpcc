@@ -22,6 +22,9 @@ if __name__ == "__main__":
     mf = scf.RHF(mol).density_fit().run()
     mf.threshold = 1e-6
 
+    mycc = cc.CCSD(mf)
+    mycc.kernel()
+
     # Orbital localization    
     
 #    ncore = chemcore(mol)
@@ -93,7 +96,11 @@ if __name__ == "__main__":
     mympcc.kernel()
 
     print("Quit MPCC")
-    print(mympcc.lowlevel.e_tot)
+
+
+    print(f'CCSD:\n Total energy: {mycc.e_tot} Correlation energ: {mycc.e_corr}')
+    print(f'DF-MPCCSD:\n Total energy: {mympcc.lowlevel.e_tot} Correlation energ: {mympcc.lowlevel.e_corr}')
+    print(f'Difference:\n Total energy: {float(mympcc.lowlevel.e_tot - mycc.e_tot)} Correlation energ: {mympcc.lowlevel.e_corr - mycc.e_corr}')
     breakpoint()
     # localization, where?
     # a-a, i-a do this in ERIs

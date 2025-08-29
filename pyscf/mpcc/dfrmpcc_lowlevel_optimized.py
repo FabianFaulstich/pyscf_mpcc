@@ -44,6 +44,10 @@ class MPCC_LL:
             return float(self.mf.e_tot + self._e_corr)
 
     @property
+    def e_corr(self):
+        return float(self._e_corr)
+
+    @property
     def nvir(self):
         return self.mf.mol.nao - self.nocc
     
@@ -83,7 +87,6 @@ class MPCC_LL:
         self._e_tot = self.mf.e_tot + self._e_corr
         #Run update amplitudes to get the intermediate quantities
 
-
         return t1, t2
 
     def updated_amps(self, t1, t2):
@@ -91,23 +94,25 @@ class MPCC_LL:
         Following Table XXX in Future Paper
         """
 
-        # Contractions
-        X, Xoo, Xvo = self.get_X(t1)
+        # Setp 1 
+        Xoo, Xvo, X = self.get_X(t1)
 
+        # Step 2
         Joo, Jvo = self.get_J(Xoo, Xvo, t1)
         
+        # Step 3
         Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo, Jvo)
 
+        # Step 4
         Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1)
 
+        # Step 5
         Ω = self.update_Ω(Ω, Fov, t2)
+
+        # Step 6
         res2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
-      
 
-        # NOTE check the sign on the first term
-        #e1 = lib.einsum("Lij,ja->Lai", Xoo, t1) + lib.einsum("L,ia->Lai", X, t1) + Jvo
-        #ΔE = lib.einsum("Lai,Lai", e1, Yvo)
-
+        # Step 7 
         ΔE = self.energy(t1, t2)  # use the low-level energy calculation
 
         #make the active residue to go to zero
@@ -186,7 +191,7 @@ class MPCC_LL:
         Xoo = lib.einsum("Lia,ja->Lij", self._eris.Lov, t1)
         X = lib.einsum("Lia,ia->L", self._eris.Lov, t1)*2.0
 
-        return X, Xoo, Xvo
+        return Xoo, Xvo, X
 
     def get_J(self, Xoo, Xvo, t1):
 
@@ -195,61 +200,53 @@ class MPCC_LL:
             Xvo + self._eris.Lvo - lib.einsum("Lij,ja->Lai", Joo, t1)
         )
 
-        #Jvv = self._eris.Lvv - lib.einsum("Lkb,ka->Lab", self._eris.Lov, t1) #we don't need this here  
-
         return Joo, Jvo
 
+    def get_F(self, t1, X, Xoo, Xvo, Jvo):
+
+        Foo = self._eris.foo.copy()
+        Foo += lib.einsum("Lij,L->ij", self._eris.Loo, X)
+        Foo -= lib.einsum("Lki,Lkj->ij", self._eris.Loo,Xoo)
+
+        Fvv = self._eris.fvv.copy()
+        Fvv += lib.einsum("Lab,L->ab",self._eris.Lvv,X) 
+        Fvv -= lib.einsum("Lka,Lbk->ab",self._eris.Lov,Xvo)
+              
+        Fov  = self._eris.fov.copy()
+        Fov += lib.einsum("Lbj,L->jb", self._eris.Lvo, X)
+        Fov -= lib.einsum("Lij,Lib->jb", Xoo, self._eris.Lov)
+
+        return Foo, Fvv, Fov
+
     def get_Ω(self, X, Xvo, Foo, Fvv, Fov, t1):
+
+        Ω = -1 * lib.einsum("Laj,Lji->ai", Xvo, self._eris.Loo)
+        Ω += lib.einsum("Lia,L->ai", self._eris.Lov, X)
 
         Foo_tmp = Foo.copy()
         Fvv_tmp = Fvv.copy() 
 
         Foo_tmp += lib.einsum("ic,jc->ij",Fov,t1)*0.5
-        Fvv_tmp -= lib.einsum("lb,la->ab",Fov,t1)*0.5 
-
-        Ω = -1 * lib.einsum("Laj,Lji->ai", Xvo, self._eris.Loo)
-        Ω += lib.einsum("Lia,L->ai", self._eris.Lov, X)
+        Fvv_tmp -= lib.einsum("kb,ka->ab",Fov,t1)*0.5 
 
         Ω += lib.einsum("ib,ab -> ai", t1, Fvv_tmp)
         Ω -= lib.einsum("ka,ki -> ai", t1, Foo_tmp)
 
         return Ω
 
-    def get_F(self, t1, X, Xoo, Xvo, Jvo):
-
-        Foo = self._eris.foo.copy()
-        Foo += lib.einsum("Lij,L->ij", self._eris.Loo, X)
-        Foo -= lib.einsum("Lmi,Lmj->ij", self._eris.Loo,Xoo)
-
-        Fvv = self._eris.fvv.copy()
-        Fvv += lib.einsum("Lab,L->ab",self._eris.Lvv,X) 
-        Fvv -= lib.einsum("Lma,Lbm->ab",self._eris.Lov,Xvo)
-              
-        Fov  = self._eris.fov.copy()
-        Fov += lib.einsum("Lbj,L->jb", self._eris.Lvo, X)
-        #Fov += lib.einsum("Lbj,L->jb", Jvo, X)
-        Fov -= lib.einsum("Lij,Lib->jb", Xoo, self._eris.Lov)
-
-        return Foo, Fvv, Fov
-
-
     def update_t2(self, t2, Jvo, Foo, Fvv, Fov, t1):
 
-        Foo_tmp = Foo.copy()
         Fvv_tmp = Fvv.copy() 
+        Foo_tmp = Foo.copy()
 
-        Foo_tmp += lib.einsum("ic,jc->ij",Fov,t1)
         Fvv_tmp -= lib.einsum("lb,la->ab",Fov,t1)
+        Foo_tmp += lib.einsum("ic,jc->ij",Fov,t1)
 
-        #Foo += lib.einsum("ic,jc->ij",Fov,t1)*0.5
-        #Fvv -= lib.einsum("lb,la->ab",Fov,t1)*0.5 
-        
         tmp  = lib.einsum("bc,ijac->ijab", Fvv_tmp, t2)
-        tmp -= lib.einsum("mi,mjab->ijab", Foo_tmp, t2)
+        tmp -= lib.einsum("ki,kjab->ijab", Foo_tmp, t2)
+
         res2 = tmp + tmp.transpose(1,0,3,2)
         res2 += lib.einsum("Lai,Lbj->ijab", Jvo, Jvo)
-
-#       Yvo = lib.einsum("ijab,Ljb->Lai", t2, self._eris.Lov)
 
         return res2
 
@@ -258,9 +255,6 @@ class MPCC_LL:
 
         t2_antisym = 2*t2 - np.transpose(t2, (0, 1, 3, 2))
         Ω += lib.einsum("ijab,jb->ai", t2_antisym, Fov)
-#       Jvv = lib.einsum("Ljb,ja->Lba", self._eris.Lov, t1) + self._eris.Lvv
-#       Ω += lib.einsum("Lba,Lbi->ai", Jvv, Yvo)
-#       Ω -= lib.einsum("Lji,Laj->ai", Joo, Yvo)
         return Ω
 
     def init_amps(self):
