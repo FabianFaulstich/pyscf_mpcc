@@ -1,6 +1,7 @@
 from pyscf import lib, df
 from pyscf.lib import logger
 import numpy as np
+from dataclasses import dataclass
 
 
 class MPCC_LL:
@@ -56,7 +57,7 @@ class MPCC_LL:
         # NOTE Do we want to initialize t1 and t2?
 
         if t1 is None and t2 is None:
-            t1, t2 = self.init_amps()
+            t1, t2 = self.init_amps() # so far this is an N^5 step. So potentially initilaization should also be done in the factorized manner.
            
         err = np.inf
         count = 0
@@ -82,7 +83,7 @@ class MPCC_LL:
         self._e_corr = e_corr
         self._e_tot = self.mf.e_tot + self._e_corr
         #Run update amplitudes to get the intermediate quantities
-
+#       imds_t1 = self.get_t1_imds(t1)
 
         return t1, t2
 
@@ -96,17 +97,11 @@ class MPCC_LL:
 
         Joo, Jvo = self.get_J(Xoo, Xvo, t1)
         
-        Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo, Jvo)
+        Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
 
-        Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1)
+        Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1, t2)
 
-        Ω = self.update_Ω(Ω, Fov, t2)
         res2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
-      
-
-        # NOTE check the sign on the first term
-        #e1 = lib.einsum("Lij,ja->Lai", Xoo, t1) + lib.einsum("L,ia->Lai", X, t1) + Jvo
-        #ΔE = lib.einsum("Lai,Lai", e1, Yvo)
 
         ΔE = self.energy(t1, t2)  # use the low-level energy calculation
 
@@ -115,13 +110,8 @@ class MPCC_LL:
         for frag in self.frags:
             act_hole = frag[0]
             act_particle = frag[1]
-            #print("active hole array", act_hole)
-            #make a slice based on active_hole and active_particle
             Ω[np.ix_(act_particle, act_hole)] = 0.0
             res2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
-
-
-#       res = np.linalg.norm(Ω.T / self._eris.eia) + np.linalg.norm(res2/self._eris.D)
 
         res1 = Ω.T / self._eris.eia
         res2 = res2 / self._eris.D
@@ -131,30 +121,29 @@ class MPCC_LL:
         t2 += res2
 
         return res, ΔE, t1, t2
-
-    def get_t1_imds(self, t1, t2):
+    
+    @dataclass
+    class _IMDS_T1:
+       Joo: np.ndarray
+       Jvv: np.ndarray
+       Jov: np.ndarray
+       Foo: np.ndarray
+       Fvv: np.ndarray
+       Fov: np.ndarray
+       Xoo: np.ndarray
+       Xvo: np.ndarray
+    
+    def get_t1_imds(self, t1):
 
         X, Xoo, Xvo = self.get_X(t1)
 
-        Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+        Joo, Jvo, Jvv = self.get_J_all(Xoo, Xvo, t1)
         
         Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo, Jvo)
 
-        Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1)
-
-        Ω = self.update_Ω(Ω, Fov, t2)
-        res2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
-        #store Joo, Jvo, Foo, Fvv, Fov, Ω, res2 in a container
-        imds = {
-            'Joo': Joo,
-            'Jvo': Jvo,
-            'Foo': Foo,
-            'Fvv': Fvv,
-            'Fov': Fov,
-            'Ω': Ω,
-            'res2': res2
-        }
-        return imds
+        #store Joo, Jvo, Foo etc..
+        imds_t1 = self._IMDS_T1(Joo=Joo, Jvv=Jvv, Jov=Jvo, Foo=Foo, Fvv=Fvv, Fov=Fov, Xoo=Xoo, Xvo=Xvo)
+        return imds_t1
     def run_diis(self, t1, t2, adiis):
 
         vec = self.amplitudes_to_vector(t1, t2)
@@ -192,14 +181,25 @@ class MPCC_LL:
 
         Joo = Xoo + self._eris.Loo
         Jvo = (
-            Xvo + self._eris.Lvo - lib.einsum("Lij,ja->Lai", Joo, t1)
+            Xvo + self._eris.Lvo - lib.einsum("Lji,ja->Lai", Joo, t1)
         )
 
         #Jvv = self._eris.Lvv - lib.einsum("Lkb,ka->Lab", self._eris.Lov, t1) #we don't need this here  
 
         return Joo, Jvo
+    
+    def get_J_all(self, Xoo, Xvo, t1):
 
-    def get_Ω(self, X, Xvo, Foo, Fvv, Fov, t1):
+        Joo = Xoo + self._eris.Loo
+        Jvo = (
+            Xvo + self._eris.Lvo - lib.einsum("Lji,ja->Lai", Joo, t1)
+        )
+
+        Jvv = self._eris.Lvv - lib.einsum("Lkb,ka->Lab", self._eris.Lov, t1) 
+
+        return Joo, Jvo, Jvv
+
+    def get_Ω(self, X, Xvo, Foo, Fvv, Fov, t1, t2):
 
         Foo_tmp = Foo.copy()
         Fvv_tmp = Fvv.copy() 
@@ -207,31 +207,37 @@ class MPCC_LL:
         Foo_tmp += lib.einsum("ic,jc->ij",Fov,t1)*0.5
         Fvv_tmp -= lib.einsum("lb,la->ab",Fov,t1)*0.5 
 
-        Ω = -1 * lib.einsum("Laj,Lji->ai", Xvo, self._eris.Loo)
-        Ω += lib.einsum("Lia,L->ai", self._eris.Lov, X)
+        Ω = self._eris.fov.T.copy()
+
+        Ω -= lib.einsum("Laj,Lji->ai", Xvo, self._eris.Loo)
+        Ω += lib.einsum("Lai,L->ai", self._eris.Lvo, X)
 
         Ω += lib.einsum("ib,ab -> ai", t1, Fvv_tmp)
         Ω -= lib.einsum("ka,ki -> ai", t1, Foo_tmp)
 
+        t2_antisym = 2.0*t2 - np.transpose(t2, (0, 1, 3, 2))
+        Ω += lib.einsum("ijab,jb->ai", t2_antisym, Fov)
+
+        del Foo_tmp, Fvv_tmp
+
         return Ω
 
-    def get_F(self, t1, X, Xoo, Xvo, Jvo):
+    def get_F(self, t1, X, Xoo, Xvo):
 
         Foo = self._eris.foo.copy()
         Foo += lib.einsum("Lij,L->ij", self._eris.Loo, X)
-        Foo -= lib.einsum("Lmi,Lmj->ij", self._eris.Loo,Xoo)
+        Foo -= lib.einsum("Lmj,Lim->ij", self._eris.Loo,Xoo)
 
         Fvv = self._eris.fvv.copy()
         Fvv += lib.einsum("Lab,L->ab",self._eris.Lvv,X) 
-        Fvv -= lib.einsum("Lma,Lbm->ab",self._eris.Lov,Xvo)
-              
+        Fvv -= lib.einsum("Lmb,Lam->ab",self._eris.Lov,Xvo)
+
+
         Fov  = self._eris.fov.copy()
-        Fov += lib.einsum("Lbj,L->jb", self._eris.Lvo, X)
-        #Fov += lib.einsum("Lbj,L->jb", Jvo, X)
-        Fov -= lib.einsum("Lij,Lib->jb", Xoo, self._eris.Lov)
+        Fov += lib.einsum("Ljb,L->jb", self._eris.Lov, X)
+        Fov -= lib.einsum("Lji,Lib->jb", Xoo, self._eris.Lov)
 
         return Foo, Fvv, Fov
-
 
     def update_t2(self, t2, Jvo, Foo, Fvv, Fov, t1):
 
@@ -240,28 +246,13 @@ class MPCC_LL:
 
         Foo_tmp += lib.einsum("ic,jc->ij",Fov,t1)
         Fvv_tmp -= lib.einsum("lb,la->ab",Fov,t1)
-
-        #Foo += lib.einsum("ic,jc->ij",Fov,t1)*0.5
-        #Fvv -= lib.einsum("lb,la->ab",Fov,t1)*0.5 
         
         tmp  = lib.einsum("bc,ijac->ijab", Fvv_tmp, t2)
         tmp -= lib.einsum("mi,mjab->ijab", Foo_tmp, t2)
         res2 = tmp + tmp.transpose(1,0,3,2)
         res2 += lib.einsum("Lai,Lbj->ijab", Jvo, Jvo)
 
-#       Yvo = lib.einsum("ijab,Ljb->Lai", t2, self._eris.Lov)
-
         return res2
-
-
-    def update_Ω(self, Ω, Fov, t2):
-
-        t2_antisym = 2*t2 - np.transpose(t2, (0, 1, 3, 2))
-        Ω += lib.einsum("ijab,jb->ai", t2_antisym, Fov)
-#       Jvv = lib.einsum("Ljb,ja->Lba", self._eris.Lov, t1) + self._eris.Lvv
-#       Ω += lib.einsum("Lba,Lbi->ai", Jvv, Yvo)
-#       Ω -= lib.einsum("Lji,Laj->ai", Joo, Yvo)
-        return Ω
 
     def init_amps(self):
 
@@ -284,19 +275,15 @@ class MPCC_LL:
     def energy(self, t1, t2):                                                     
        '''RCCSD correlation energy'''                                                               
        
-       #nocc, nvir = t1.shape                                                                        
-       #fock = eris.fock
-       #e = 2*np.einsum('ia,ia', fock[:nocc,nocc:], t1)    
-       e = 0.0                                          
-       tau = np.einsum('ia,jb->ijab',t1,t1)                                                         
+       fock = self._eris.fov.copy()
+       e = 2*lib.einsum('ia,ia', fock, t1)    
+       tau = lib.einsum('ia,jb->ijab',t1,t1)                                                         
        tau += t2 
        eris_ovov = lib.einsum("Lia,Ljb->iajb", self._eris.Lov, self._eris.Lov)
-       e += 2*np.einsum('ijab,iajb', tau, eris_ovov)                                                
-       e +=  -np.einsum('ijab,ibja', tau, eris_ovov)                                                
+       e += 2*lib.einsum('ijab,iajb', tau, eris_ovov)                                                
+       e -=  lib.einsum('ijab,ibja', tau, eris_ovov)                                                
        #if abs(e.imag) > 1e-4:
        #    logger.warn(cc, 'Non-zero imaginary part found in RCCSD energy %s', e)                   
        return e.real                       
 
     #Note: For the time being, we will not use the most optmal way to update the amplitudes. It can be taken care later on..
-
-

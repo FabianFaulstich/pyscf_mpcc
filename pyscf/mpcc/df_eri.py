@@ -28,10 +28,9 @@ class ERIs:
         self.fvv = fock_mo[self.nocc : self.nao, self.nocc : self.nao]
         self.fov = fock_mo[: self.nocc, self.nocc : self.nao]
 
-       # self.eia = lib.direct_sum(
-       #     "i-a->ia", self.mo_energy[: self.nocc], self.mo_energy[self.nocc :]
-       # )
-
+#       self.eia = lib.direct_sum(
+#           "i-a->ia", self.mo_energy[: self.nocc], self.mo_energy[self.nocc :]
+#       )
 
         self.eia = lib.direct_sum(
             "i-a->ia", np.diag(self.foo), np.diag(self.fvv)
@@ -90,8 +89,6 @@ class ERIs:
         self.Lov = Lov
         self.Lvo = Lvo
         self.Lvv = Lvv       
-
-     
 
         # NOTE 06/04 debate about cache 
 

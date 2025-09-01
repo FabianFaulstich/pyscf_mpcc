@@ -55,8 +55,10 @@ class MPCC(lib.StreamObject):
             #    print('No active fragments found. Exiting loop.')
             #    break
 
+            if (count > 1):
+               t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
 
-            t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
+#           t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
 
             t1_act = []
             t2_act = []
@@ -70,8 +72,6 @@ class MPCC(lib.StreamObject):
                imds = self.screened.kernel(t1, t2)
                #print the attributes of the imds object
                print('MPCC: Screened kernel calculated for fragment:', frag)
-               
-               print("JOO:", imds.Joo.shape)
 
                t1_act_tmp, t2_act_tmp = self.highlevel.kernel(imds, t1, t2)
 
@@ -98,11 +98,5 @@ class MPCC(lib.StreamObject):
             e_diff = abs(e_mpcc - e_mpcc_prev)
             e_mpcc_prev = e_mpcc
             print(f"It {count}; Energy {e_mpcc:.6e}; Energy difference {e_diff:.6e}")
-            #Now use DIIS extrapolation to update t1 and t2 amplitudes all together. But I believe this step may be skipped.
-            #also at this step we can evaluate total energy to test the convergence of the whole procedure..  
-         
 
-
-        
-
-
+        return e_mpcc+self._scf.e_tot

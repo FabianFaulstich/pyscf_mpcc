@@ -77,73 +77,79 @@ class MPCC_HL:
         self.Lov_aa = self._eris.Lov[numpy.ix_(naux_idx, act_hole, act_particle)]
 
 
-    def t1_transform(self, imds, t1, M, Moo, Mov, Mov_t2):
+    def t1_transform(self, imds, t1, M, Moo, Mvo, Mvo_t2):
         #fetch the 3-center integrals in MO basis
 
 
-        #in this function we will build only those terms where t1_aa contributes. also these terms will be iteratively updated. initialization could be done outside the iterative loop as well. 
-
+        #in this function we will build only those terms where t1_aa contributes. also these terms will be iteratively updated.
+        #initialization could be done outside the iterative loop as well. 
 
 # first construct intermediates:
 #      
         Moo_aa = Moo[0]
         Moo_ia = Moo[1]
-        Mov_aa = Mov[0]
-#       Mov_ai = Mov[1]
+        Mvo_aa = Mvo[0]
+#       Mvo_ai = Mvo[1]
 #      JOO (active-active)
         Joo_aa = numpy.array(imds.Joo).copy()
-#        Joo_aa += lib.einsum("Lic,jc->Lij", self.Lov_aa, t1)
         Joo_aa += Moo_aa
 
 #      JVV  (active-active, active-inactive)
-        Jvv_aa = numpy.array(imds.Jvv).copy()          
+        Jvv_aa = numpy.array(imds.Jvv).copy()      
         Jvv_aa -= lib.einsum("Lkb,ka->Lab", self.Lov_aa, t1)
 
 #      JOV (active-active)
-        Jov_aa  = numpy.array(imds.Jov).copy()
-#        Jov_aa += lib.einsum("Lac,ic->Lia", self.Lvv_aa, t1)
-        Jov_aa += Mov_aa
-        Jov_aa += Mov_t2
-        Jov_aa -= lib.einsum("Lki,ka->Lia", Joo_aa, t1)  
+        Jvo_aa  = numpy.array(imds.Jvo).copy()
+
+#       Jvo_aa += lib.einsum("Lac,ic->Lia", self.Lvv_aa, t1)
+        Jvo_aa += Mvo_aa
+        Jvo_aa += Mvo_t2
+        Jvo_aa -= lib.einsum("Lji,ja->Lai", Joo_aa, t1)  
 
 #Now construct Fock matrix: (active-active, active-inactive)
         Foo_aa  = lib.einsum("Lij,L->ij", self.Loo_aa, M)
-        Foo_aa -= lib.einsum("Lmi,Lmj->ij",self.Loo_aa,Moo_aa)
-        Foo_aa -= lib.einsum("Lmi,Lmj->ij",self.Loo_ia,Moo_ia)
+        Foo_aa -= lib.einsum("Lmj,Lim->ij",self.Loo_aa,Moo_aa)
+#       Foo_aa -= lib.einsum("Lmj,Lim->ij",self.Loo_ia,Moo_ia)###perhaps not required?
         Foo_aa_t1  = numpy.array(imds.Foo_t1).copy()
+       
         Foo_aa_t1 += Foo_aa
 
         Foo_aa_t2  = numpy.array(imds.Foo_t2).copy()
+        
         Foo_aa_t2 += Foo_aa
        #are we missng any term here?
          
-#        Fvv_aa  = numpy.array(imds.Fvv).copy()
+#       Fvv_aa  = numpy.array(imds.Fvv).copy()
         Fvv_aa = lib.einsum("Lab,L->ab",self.Lvv_aa,M) 
-        Fvv_aa += lib.einsum("Lma,Lmb->ab",self.Lov_aa,Mov_aa)
+        
+#       Fvv_aa -= lib.einsum("Lma,Lmb->ab",self.Lov_aa,Mvo_aa)
+        Fvv_aa -= lib.einsum("Lmb,Lam->ab",self.Lov_aa,Mvo_aa)
 
 
         Fvv_aa_t1  = numpy.array(imds.Fvv_t1).copy()
+        
         Fvv_aa_t1 += Fvv_aa
 
         Fvv_aa_t2  = numpy.array(imds.Fvv_t2).copy()
+        
         Fvv_aa_t2 += Fvv_aa
-
 
         #Fov (active-active)
         Fov_aa  = numpy.array(imds.Fov).copy()
+        
         Fov_aa += lib.einsum("Lia,L->ia",self.Lov_aa,M)
-        Fov_aa -= lib.einsum("Lma,Lmi->ia",self.Lov_aa,Moo_aa)
-        Fov_aa -= lib.einsum("Lma,Lmi->ia",self.Lov_ia,Moo_ia)
+        Fov_aa -= lib.einsum("Lib,Lji->jb",self.Lov_aa,Moo_aa)
+#       Fov_aa -= lib.einsum("Lib,Lji->jb",self.Lov_ia,Moo_ia)
 
         Joo = [Joo_aa]
         Jvv = [Jvv_aa]
-        Jov = [Jov_aa]
+        Jvo = [Jvo_aa]
 
         Foo = [Foo_aa_t1, Foo_aa_t2]
         Fvv = [Fvv_aa_t1, Fvv_aa_t2]
         Fov = Fov_aa
 
-        return Joo, Jvv, Jov, Foo, Fvv, Fov
+        return Joo, Jvv, Jvo, Foo, Fvv, Fov
 
     def create_M_intermediates(self, t1, t2):
         #construct the intermediates for the t2 update:
@@ -154,26 +160,26 @@ class MPCC_HL:
         Moo_aa = lib.einsum("Lic,jc->Lij", self.Lov_aa, t1)
         Moo_ia = lib.einsum("Lic,jc->Lij", self.Lov_ia, t1)
 
-        #Mov
-        Mov_aa = lib.einsum("Lac,ic->Lia", self.Lvv_aa, t1)
-        Mov_ai = lib.einsum("Lac,ic->Lia", self.Lvv_ia, t1)
+        #Mvo
+        Mvo_aa = lib.einsum("Lac,ic->Lai", self.Lvv_aa, t1)
+        Mvo_ia = lib.einsum("Lac,ic->Lai", self.Lvv_ia, t1)
 
         #construct antisymmetrized t2:
         t2_antisym = 2.0*t2 - t2.transpose(0, 1, 3, 2)
-        Mov_t2 = lib.einsum("Lme, imae -> Lia", self.Lov_aa, t2_antisym)
+        Mvo_t2 = lib.einsum("Lme, imae -> Lai", self.Lov_aa, t2_antisym)
 
         Moo = [Moo_aa, Moo_ia]
-        Mov = [Mov_aa, Mov_ai]
-        return M0, Moo, Mov, Mov_t2
+        Mvo = [Mvo_aa, Mvo_ia]
+        return M0, Moo, Mvo, Mvo_t2
 
 
-    def add_t2_to_fock(self, Fvv, Foo, Mov_t2):    
+    def add_t2_to_fock(self, Fvv, Foo, Mvo_t2):    
 
         #construct antisymmetrized t2:
 
         #generate the intermediate with full arrays 
-        Foo_tmp = lib.einsum("Lie,Lje->ij", self.Lov_aa, Mov_t2)
-        Fvv_tmp = -lib.einsum("Lma,Lmb->ab",self.Lov_aa,Mov_t2)
+        Foo_tmp = lib.einsum("Lie,Lej->ij", self.Lov_aa, Mvo_t2)
+        Fvv_tmp = -lib.einsum("Lmb,Lam->ab",self.Lov_aa,Mvo_t2)
 
         Foo_aa_t1, Foo_aa_t2 = Foo
         Fvv_aa_t1, Fvv_aa_t2 = Fvv
@@ -184,7 +190,7 @@ class MPCC_HL:
         return Foo, Fvv
 
 
-    def R1_residue_active(self, imds, t1, t2, Fov, Fvv, Foo, M0, Mov, Mov_t2 ):
+    def R1_residue_active(self, imds, t1, t2, Fov, Fvv, Foo, M0, Mvo, Mvo_t2 ):
 
 
         #construct antisymmetrized t2:
@@ -195,97 +201,85 @@ class MPCC_HL:
         Foo_t1, _ = Foo 
         Fvv_t1, _ = Fvv
 
-        Foo_t1 += lib.einsum("me,ie->im", Fov, t1)*0.5
+        Foo_t1 += lib.einsum("ic,jc->ij", Fov, t1)*0.5
 
-        R1 -= lib.einsum("im, ma -> ia", Foo_t1, t1)       
+        R1 -= lib.einsum("ki,ka->ia", Foo_t1, t1)       
 
-        Fvv_t1 -= lib.einsum("me, ma -> ae", Fov, t1)*0.5
+        Fvv_t1 -= lib.einsum("lb,la->ab", Fov, t1)*0.5
  
-        R1 += lib.einsum("ae, ie -> ia", Fvv_t1, t1)
-        R1 -= lib.einsum("me, imae -> ia", Fov, t2_antisym) #many terms
+        R1 += lib.einsum("ab,ib->ia", Fvv_t1, t1)
+        R1 += lib.einsum("me, imae -> ia", Fov, t2_antisym) #many terms
         R1 += lib.einsum("Lia, L -> ia", self.Lov_aa, M0)
-        R1 -= lib.einsum("Lim, Lma -> ia", self.Loo_aa, Mov[0])
-        R1 -= lib.einsum("Lim, Lma -> ia", self.Loo_aa, Mov_t2)
-        R1 += lib.einsum("Lae, Lie -> ia", self.Lvv_aa, Mov_t2)
+        R1 -= lib.einsum("Lji,Laj -> ia", self.Loo_aa, Mvo[0])
+        R1 -= lib.einsum("Lji,Laj -> ia", self.Loo_aa, Mvo_t2)
+        R1 += lib.einsum("Lae, Lei -> ia", self.Lvv_aa, Mvo_t2)
 
         return R1
 
-
-    def R2_residue_active(self, imds, t1, t2, Joo, Jvv, Jov, Fov, Fvv, Foo):
+    def R2_residue_active(self, imds, t1, t2, Joo, Jvv, Jvo, Fov, Fvv, Foo):
 
         
-        Jov = Jov[0]
+        Jvo = Jvo[0]
         Joo = Joo[0]
         Jvv = Jvv[0]
 
-        Ijemb, Ijebm, Imnij = self.t2_transform_quadratic(t2)  
+        Imbje, Imbej, Imnij = self.t2_transform_quadratic(t2)  
 
-        Ijebm += imds.Ijebm_active
-        Ijemb += imds.Ijemb_active
+        Imbje += imds.Imbje_active
+        Imbej += imds.Imbej_active
         Imnij += imds.Imnij_active
 
         R2 = imds.R2.copy()
 
         #factorized part of the residue:
-        R2 += lib.einsum("Lia, Ljb -> ijab", Jov, Jov)
+        R2 += lib.einsum("Lai, Lbj -> ijab", Jvo, Jvo)
         #PPL 
         Waebf = lib.einsum("Lae, Lbf -> abef", Jvv, Jvv)
-#       R2 += lib.einsum("abef, ijef -> ijab", Waebf, t2)#three possibilities (ii, ia, ai)
         R2 += lib.einsum("abef, ijef -> ijab", Waebf, t2)
-
+        
         #HHL
-        Wijmn = lib.einsum("Lim, Ljn -> ijmn", Joo, Joo) + Imnij
-        R2 += lib.einsum("ijmn, mnab -> ijab", Wijmn, t2) #three possibilities (aa, ai, ia)
+        Wijmn = lib.einsum("Lmi, Lnj -> mnij", Joo, Joo) + Imnij
+        R2 += lib.einsum("mnij, mnab -> ijab", Wijmn, t2) #three possibilities (aa, ai, ia)
 
         #Fock matrix contribution:
-
 
         _, Foo_t2 = Foo 
         _, Fvv_t2 = Fvv
 
+        Foo_t2 += lib.einsum("ic,jc->ij", Fov, t1)
+        R2_tmp = -lib.einsum("mi, mjab -> ijab", Foo_t2, t2) #only one possibility m has to be inactive.
 
-        Foo_t2 += lib.einsum("me,ie->im", Fov, t1)
-        R2_tmp = -lib.einsum("im, mjab -> ijab", Foo_t2, t2) #only one possibility m has to be inactive.
-
-        Fvv_t2 -= lib.einsum("me, ma -> ae", Fov, t1)
-
-      #it is better to have a 
-        R2_tmp += lib.einsum("ae, ijeb -> ijab", Fvv_t2, t2) # only one possibility e has to be inactive.
+        Fvv_t2 -= lib.einsum("lb,la->ab", Fov, t1)
+        R2_tmp += lib.einsum("bc, ijac -> ijab", Fvv_t2, t2) # only one possibility e has to be inactive.
 
         #N3V3 terms:
 
-        W_jebm = lib.einsum("Ljm, Lbe -> jebm", Joo, Jvv) 
-#       R2_tmp -= lib.einsum("jebm, imae -> ijab", W_jebm, t2) # em should be ii, ia, ai types
+        W_jebm = lib.einsum("Lmj, Lbe -> mbje", Joo, Jvv) - Imbje 
+        R2_tmp -= lib.einsum("mbje, imae -> ijab", W_jebm, t2) # em should be ii, ia, ai types
 
-        R2_tmp -= lib.einsum("jebm, imae -> ijab", W_jebm, t2)
+        W_jema = lib.einsum("Lmj, Lae -> maje", Joo, Jvv) - Imbje*0.5
+        R2_tmp -= lib.einsum("maje, imeb -> ijab", W_jema, t2) # em should be ii, ia, ai types
 
-        W_jema = lib.einsum("Ljm, Lae -> jema", Joo, Jvv) - Ijemb*0.5
-        R2_tmp -= lib.einsum("jema, imeb -> ijab", W_jema, t2) # em should be ii, ia, ai types
-
-        R2_tmp -= lib.einsum("jebm, imae -> ijab", Ijebm, t2)
-        R2_tmp += lib.einsum("jemb, imae -> ijab", Ijemb, t2)
+        R2_tmp -= lib.einsum("mbej, imae -> ijab", Imbej, t2) #should it not be antisym?
 
         #symmetrize R2_tmp:
         R2 += (R2_tmp + R2_tmp.transpose(1, 0, 3, 2))
 
-        return R2
+        Foo_t2 = Fvv_t2 = None
 
+        return R2
 
     def t2_transform_quadratic(self,t2):
 
         #I_mn^ij 
-
-        Vmenf = lib.einsum("Lme, Lnf -> menf", self.Lov_aa, self.Lov_aa)
-        Imnij = lib.einsum("menf, ijef -> ijmn", Vmenf, t2) #ef should be ii, ia, ai types
-
+        Vnemf = lib.einsum("Lne, Lmf -> nmef", self.Lov_aa, self.Lov_aa)
+        Imnij = lib.einsum("mnef, ijef -> mnij", Vnemf, t2) #ef should be ii, ia, ai types
         #I^je_bm
-        Vnemf = lib.einsum("Lne, Lmf -> nemf", self.Lov_aa, self.Lov_aa)
-        Ijebm = lib.einsum("nemf, jnbf -> jebm", Vnemf, t2) #nf should be ii, ia, ai types
-
+        Imbej = lib.einsum("nmef, jnbf -> mbej", Vnemf, t2)
         #I^je_mb
-        Ijemb = lib.einsum("nemf, jnfb -> jemb", Vnemf, t2) # #nf should be ii, ia, ai types
+        Imbje = lib.einsum("nmef, jnfb -> mbje", Vnemf, t2) # #nf should be ii, ia, ai types
 
-        return Ijemb, Ijebm, Imnij
+        return Imbje, Imbej, Imnij
     
 
     def run_diis(self, t1, t2, adiis):
@@ -320,19 +314,20 @@ class MPCC_HL:
         """
 
 
-        M0, Moo, Mov, Mov_t2 = self.create_M_intermediates(t1, t2)
-        Joo, Jvv, Jov, Foo, Fvv, Fov = self.t1_transform(imds, t1, M0, Moo, Mov, Mov_t2)
-        Foo, Fvv = self.add_t2_to_fock(Fvv, Foo, Mov_t2)
+        M0, Moo, Mvo, Mvo_t2 = self.create_M_intermediates(t1, t2)
+        Joo, Jvv, Jvo, Foo, Fvv, Fov = self.t1_transform(imds, t1, M0, Moo, Mvo, Mvo_t2)
+        Foo, Fvv = self.add_t2_to_fock(Fvv, Foo, Mvo_t2)
 
-        R1 = self.R1_residue_active(imds, t1, t2, Fov, Fvv, Foo, M0, Mov, Mov_t2 )
-        R2 = self.R2_residue_active(imds, t1, t2, Joo, Jvv, Jov, Fov, Fvv, Foo)
+        R1 = self.R1_residue_active(imds, t1, t2, Fov, Fvv, Foo, M0, Mvo, Mvo_t2 )
+        R2 = self.R2_residue_active(imds, t1, t2, Joo, Jvv, Jvo, Fov, Fvv, Foo)
 
         res1 = R1/ self._eris.eia[numpy.ix_(self.act_hole, self.act_particle)]
         res2 = R2/ self._eris.D[numpy.ix_(self.act_hole, self.act_hole, self.act_particle, self.act_particle)]
  
         t1 += res1
         t2 += res2
-        res = numpy.linalg.norm(res1) + numpy.linalg.norm(res2)
+#        res = numpy.linalg.norm(res1) + numpy.linalg.norm(res2)
+        res = numpy.linalg.norm(res2)
 
         return res, t1, t2
 
@@ -340,7 +335,6 @@ class MPCC_HL:
     def kernel(self, imds, t1full, t2full):
 
       #we have to extract the active only amplitudes from the full amplitudes:
-
 
       t1 = t1full[numpy.ix_(self.act_hole, self.act_particle)].copy()
 
@@ -363,7 +357,6 @@ class MPCC_HL:
           t2 = t2_new       
           t1_new = None
           t2_new = None
-
           count += 1
           err = res
           # NOTE change this to logger!
