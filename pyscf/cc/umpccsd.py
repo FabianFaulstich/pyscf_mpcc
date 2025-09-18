@@ -1237,10 +1237,7 @@ class UCCSD(ccsd.CCSD):
         if l2 is None: l2 = self.l2
         if eris is None: eris = self.ao2mo(self.mo_coeff)
         return uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
-#       return uccsd_t_inactive.kernel_bareV(self, eris, act_hole, act_particle, t1, t2)
-#       return uccsd_t_inactive.kernel(self, eris, t1, t2, t3, t1, t2, act_hole, act_particle)
-#       return umpcc_t_slow.lhs_umpcc_triples_inactive(self, t1, t2, l1, l2, t3, eris, act_hole, act_particle)
-#       return umpcc_t_slow._iterative_kernel(self, t1, t2, l1, l2, eris, act_hole, act_particle)
+#       return uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
     uccsd_t = ccsd_t
 
 #here I will write a few functions that account for perturbative corrections..  

@@ -418,6 +418,8 @@ def update_amps_small(ints, w3, t3, act_hole, act_particle):
     v += u3bba - u3bba.transpose(1,0,2,3,4,5)
     v -= lib.einsum('IJmABc,mk->IJkABc',t3bba, ints.Foo)  
 
+    R3 = u3aaa.copy(), u3bbb.copy(), r.copy(), v.copy()
+
 # divide by denominator..
     u3aaa /=d3aaa 
     u3bbb /=d3bbb 
@@ -436,7 +438,7 @@ def update_amps_small(ints, w3, t3, act_hole, act_particle):
 
     t3new = u3aaa, u3bbb, u3baa, u3bba
 
-    return t3new 
+    return t3new, R3 
 
 
 def lhs_env_triples(ints, l1, l2, t3): 
@@ -569,7 +571,97 @@ def lhs_env_triples(ints, l1, l2, t3):
 
 
 def iterative_kernel(mcc, eris, t1, t2, t3, act_hole, act_particle): 
-    import uccsd_t_inactive_init
+    from pyscf.cc import uccsd_t_inactive_init
+
+    t1a,t1b = t1
+    t2aa,t2ab,t2bb = t2
+    t3aaa,t3bbb,t3baa,t3bba = t3
+
+#    cput1 = cput0 = (logger.process_clock(), logger.perf_counter())
+#    log = logger.new_logger(mcc, verbose)
+
+    nocca, noccb, nvira, nvirb = t2ab.shape
+    dtype = numpy.result_type(t1a, t1b, t2aa, t2ab, t2bb)
+
+    inact_particle_a = numpy.delete(numpy.arange(nvira), act_particle[0])
+    inact_particle_b = numpy.delete(numpy.arange(nvirb), act_particle[1])
+
+    inact_hole_a = numpy.delete(numpy.arange(nocca), act_hole[0])
+    inact_hole_b = numpy.delete(numpy.arange(noccb), act_hole[1])
+
+    inact_particle = (inact_particle_a, inact_particle_b)
+    inact_hole = (inact_hole_a, inact_hole_b)
+
+#   t2aa_tmp = numpy.zeros((nocca,nocca,nvira,nvira), dtype=dtype)  
+#   t2bb_tmp = numpy.zeros((noccb,noccb,nvirb,nvirb), dtype=dtype)  
+#   t2ab_tmp = numpy.zeros((nocca,noccb,nvira,nvirb), dtype=dtype)  
+
+#   t2aa_tmp[numpy.ix_(act_hole[0], act_hole[0], act_particle[0], act_particle[0])] +=  t2aa[numpy.ix_(act_hole[0], act_hole[0], act_particle[0], act_particle[0])] 
+#   t2bb_tmp[numpy.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])] +=  t2bb[numpy.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])] 
+#   t2ab_tmp[numpy.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])] +=  t2ab[numpy.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])] 
+
+    u3aaa = numpy.zeros((nocca,nocca,nocca,nvira,nvira,nvira), dtype=dtype)  
+    u3bbb = numpy.zeros((noccb,noccb,noccb,nvirb,nvirb,nvirb), dtype=dtype)  
+    u3bba = numpy.zeros((noccb,noccb,nocca,nvirb,nvirb,nvira), dtype=dtype)  
+    u3baa = numpy.zeros((noccb,nocca,nocca,nvirb,nvira,nvira), dtype=dtype)  
+
+    u3aaa[numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])] += t3aaa 
+    u3bbb[numpy.ix_(act_hole[1], act_hole[1], act_hole[1], act_particle[1], act_particle[1], act_particle[1])] += t3bbb 
+    u3bba[numpy.ix_(act_hole[1], act_hole[1], act_hole[0], act_particle[1], act_particle[1], act_particle[0])] += t3bba 
+    u3baa[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])] += t3baa 
+
+    t3 = u3aaa, u3bbb, u3baa, u3bba
+#   t2_tmp = t2aa_tmp, t2ab_tmp, t2bb_tmp
+
+    start = time.time()
+#   ints = _make_4c_integrals(mcc, eris, t1, t2_tmp)
+    ints = _make_4c_integrals(mcc, eris, t1, t2)
+
+    w3 = build_w(ints)
+    end = time.time()
+
+    print("time to make intermediates", end-start)
+
+    adiis = lib.diis.DIIS(mcc)
+
+    conv = False
+    for istep in range(mcc.max_cycle):
+       
+#       t3new = update_amps(ints, t3, act_hole, act_particle)
+        t3new, _ = update_amps_small(ints, w3, t3, act_hole, act_particle)
+        normt = numpy.linalg.norm([numpy.linalg.norm(t3new[i] - t3[i])
+                                   for i in range(4)])
+
+        t3shape = [x.shape for x in t3new]
+        t3new = numpy.hstack([x.ravel() for x in t3new])
+        t3new = adiis.update(t3new)
+        t3new = lib.split_reshape(t3new, t3shape)
+
+        t3, t3new = t3new, None
+
+        print("cycle = ", istep+1, "norm(t3) = ", normt) 
+
+        if normt < mcc.conv_tol_normt:
+            conv = True
+            break
+
+    t3aaa, t3bbb, t3baa, t3bba = t3 
+
+    t3aaa[numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])] = 0.0 
+    t3bbb[numpy.ix_(act_hole[1], act_hole[1], act_hole[1], act_particle[1], act_particle[1], act_particle[1])] = 0.0 
+    t3baa[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])] = 0.0 
+    t3bba[numpy.ix_(act_hole[1], act_hole[1], act_hole[0], act_particle[1], act_particle[1], act_particle[0])] = 0.0 
+
+    t3 = t3aaa, t3bbb, t3baa, t3bba
+
+    e_triples = lhs_env_triples(ints, t1, t2, t3) 
+    print("Inactive contribution", e_triples)
+    return e_triples
+
+
+
+def noniterative_kernel(mcc, eris, t1, t2, t3, act_hole, act_particle): 
+    from pyscf.cc import uccsd_t_inactive_init
 
     t1a,t1b = t1
     t2aa,t2ab,t2bb = t2
@@ -607,10 +699,22 @@ def iterative_kernel(mcc, eris, t1, t2, t3, act_hole, act_particle):
 
     u3aaa, u3bbb, u3baa, u3bba = u3
 
-    u3aaa[numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])] = t3aaa 
-    u3bbb[numpy.ix_(act_hole[1], act_hole[1], act_hole[1], act_particle[1], act_particle[1], act_particle[1])] = t3bbb 
-    u3bba[numpy.ix_(act_hole[1], act_hole[1], act_hole[0], act_particle[1], act_particle[1], act_particle[0])] = t3bba 
-    u3baa[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])] = t3baa 
+    t3aaa -= u3aaa[numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])]  
+    t3bbb -= u3bbb[numpy.ix_(act_hole[1], act_hole[1], act_hole[1], act_particle[1], act_particle[1], act_particle[1])] 
+    t3bba -= u3bba[numpy.ix_(act_hole[1], act_hole[1], act_hole[0], act_particle[1], act_particle[1], act_particle[0])] 
+    t3baa -= u3baa[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])] 
+
+    u3aaa = numpy.zeros((nocca,nocca,nocca,nvira,nvira,nvira), dtype=dtype)  
+    u3bbb = numpy.zeros((noccb,noccb,noccb,nvirb,nvirb,nvirb), dtype=dtype)  
+    u3bba = numpy.zeros((noccb,noccb,nocca,nvirb,nvirb,nvira), dtype=dtype)  
+    u3baa = numpy.zeros((noccb,nocca,nocca,nvirb,nvira,nvira), dtype=dtype)  
+
+
+    u3aaa[numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])] += t3aaa 
+    u3bbb[numpy.ix_(act_hole[1], act_hole[1], act_hole[1], act_particle[1], act_particle[1], act_particle[1])] += t3bbb 
+    u3bba[numpy.ix_(act_hole[1], act_hole[1], act_hole[0], act_particle[1], act_particle[1], act_particle[0])] += t3bba 
+    u3baa[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])] += t3baa 
+
 
     t3 = u3aaa, u3bbb, u3baa, u3bba
 #   t2_tmp = t2aa_tmp, t2ab_tmp, t2bb_tmp
@@ -619,46 +723,72 @@ def iterative_kernel(mcc, eris, t1, t2, t3, act_hole, act_particle):
 #   ints = _make_4c_integrals(mcc, eris, t1, t2_tmp)
     ints = _make_4c_integrals(mcc, eris, t1, t2)
 
+    mo_ea_o = ints.ea_occ 
+    mo_ea_v = ints.ea_vir
+    mo_eb_o = ints.eb_occ
+    mo_eb_v = ints.eb_vir
+
+    eia = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
+    eIA = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+
+    d3aaa  = lib.direct_sum('ia+jb+kc->ijkabc', eia, eia, eia)
+    d3bbb = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eIA)
+    d3baa = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eia, eia)
+    d3bba = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eia)
+
+
     w3 = build_w(ints)
     end = time.time()
 
-    print("time to make intermediates", end-start)
+    _, R3 = update_amps_small(ints, w3, t3, act_hole, act_particle)
 
-    adiis = lib.diis.DIIS(mcc)
+    r3aaa, r3bbb, r3baa, r3bba = R3
 
-    conv = False
-    for istep in range(mcc.max_cycle):
-       
-#       t3new = update_amps(ints, t3, act_hole, act_particle)
-        t3new = update_amps_small(ints, w3, t3, act_hole, act_particle)
-        normt = numpy.linalg.norm([numpy.linalg.norm(t3new[i] - t3[i])
-                                   for i in range(4)])
+    u3aaa_tr = numpy.einsum("ijkabc, iI, jJ, kK, aA, bB, cC -> IJKABC", r3aaa, ints.umat_occ_a,
+                          ints.umat_occ_a, ints.umat_occ_a, ints.umat_vir_a, ints.umat_vir_a, ints.umat_vir_a,optimize=True)
 
-        t3shape = [x.shape for x in t3new]
-        t3new = numpy.hstack([x.ravel() for x in t3new])
-        t3new = adiis.update(t3new)
-        t3new = lib.split_reshape(t3new, t3shape)
 
-        t3, t3new = t3new, None
+    u3bbb_tr = numpy.einsum("ijkabc, iI, jJ, kK, aA, bB, cC -> IJKABC", r3bbb, ints.umat_occ_b,
+                          ints.umat_occ_b, ints.umat_occ_b, ints.umat_vir_b, ints.umat_vir_b, ints.umat_vir_b,optimize=True)
 
-        print("cycle = ", istep+1, "norm(t3) = ", normt) 
 
-        if normt < mcc.conv_tol_normt:
-            conv = True
-            break
+    u3baa_tr = numpy.einsum("ijkabc, iI, jJ, kK, aA, bB, cC -> IJKABC", r3baa, ints.umat_occ_b,
+                          ints.umat_occ_a, ints.umat_occ_a, ints.umat_vir_b, ints.umat_vir_a, ints.umat_vir_a,optimize=True)
 
-    t3aaa, t3bbb, t3baa, t3bba = t3 
 
-    t3aaa[numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])] = 0.0 
-    t3bbb[numpy.ix_(act_hole[1], act_hole[1], act_hole[1], act_particle[1], act_particle[1], act_particle[1])] = 0.0 
-    t3baa[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])] = 0.0 
-    t3bba[numpy.ix_(act_hole[1], act_hole[1], act_hole[0], act_particle[1], act_particle[1], act_particle[0])] = 0.0 
+    u3bba_tr = numpy.einsum("ijkabc, iI, jJ, kK, aA, bB, cC -> IJKABC", r3bba, ints.umat_occ_b,
+                          ints.umat_occ_b, ints.umat_occ_a, ints.umat_vir_b, ints.umat_vir_b, ints.umat_vir_a,optimize=True)
+
+    u3aaa_tr /=d3aaa 
+    u3bbb_tr /=d3bbb 
+    u3baa_tr /=d3baa 
+    u3bba_tr /=d3bba 
+
+    t3aaa = numpy.einsum("ijkabc, iI, jJ, kK, aA, bB, cC -> IJKABC", u3aaa_tr, ints.umat_occ_a.T,
+                          ints.umat_occ_a.T, ints.umat_occ_a.T, ints.umat_vir_a.T, ints.umat_vir_a.T, ints.umat_vir_a.T,optimize=True)
+
+    t3bbb = numpy.einsum("ijkabc, iI, jJ, kK, aA, bB, cC -> IJKABC", u3bbb_tr, ints.umat_occ_b.T,
+                          ints.umat_occ_b.T, ints.umat_occ_b.T, ints.umat_vir_b.T, ints.umat_vir_b.T, ints.umat_vir_b.T,optimize=True)
+
+    t3baa = numpy.einsum("ijkabc, iI, jJ, kK, aA, bB, cC -> IJKABC", u3baa_tr, ints.umat_occ_b.T,
+                          ints.umat_occ_a.T, ints.umat_occ_a.T, ints.umat_vir_b.T, ints.umat_vir_a.T, ints.umat_vir_a.T,optimize=True)
+
+
+    t3bba = numpy.einsum("ijkabc, iI, jJ, kK, aA, bB, cC -> IJKABC", u3bba_tr, ints.umat_occ_b.T,
+                          ints.umat_occ_b.T, ints.umat_occ_a.T, ints.umat_vir_b.T, ints.umat_vir_b.T, ints.umat_vir_a.T,optimize=True)
+
+
+    t3aaa[numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])] *= 0.0 
+    t3bbb[numpy.ix_(act_hole[1], act_hole[1], act_hole[1], act_particle[1], act_particle[1], act_particle[1])] *= 0.0 
+    t3baa[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])] *= 0.0 
+    t3bba[numpy.ix_(act_hole[1], act_hole[1], act_hole[0], act_particle[1], act_particle[1], act_particle[0])] *= 0.0 
 
     t3 = t3aaa, t3bbb, t3baa, t3bba
 
     e_triples = lhs_env_triples(ints, t1, t2, t3) 
     print("Inactive contribution", e_triples)
     return e_triples
+
 
 def _make_4c_integrals(mycc, eris, t1, t2):
     assert mycc._scf.istype('UHF')
@@ -746,6 +876,18 @@ def _make_4c_integrals(mycc, eris, t1, t2):
 
 # Now construct all different integral types.. 
 
+    e_occ_a, umat_occ_a = scipy.linalg.eig(Foo)     
+    e_occ_b, umat_occ_b = scipy.linalg.eig(FOO)     
+
+    e_vir_a, umat_vir_a = scipy.linalg.eig(Fvv)     
+    e_vir_b, umat_vir_b = scipy.linalg.eig(FVV)     
+
+    umat_occ_a = numpy.real(umat_occ_a)
+    umat_occ_b = numpy.real(umat_occ_b)
+                
+    umat_vir_a = numpy.real(umat_vir_a)
+    umat_vir_b = numpy.real(umat_vir_b)
+
 # Wvvvo, WVVVO, WVVvo, WvvVO: 
     wvvvo = lib.einsum("Lae, Lbi -> aebi", Jvv, Jvo) 
     wvvvo = wvvvo - wvvvo.transpose(2,1,0,3)
@@ -804,6 +946,17 @@ def _make_4c_integrals(mycc, eris, t1, t2):
     ints.Fov, ints.FOV = Fov, FOV 
     ints.Foo, ints.FOO = Foo, FOO
     ints.Fvv, ints.FVV = Fvv, FVV 
+
+    ints.ea_occ = numpy.real(e_occ_a) 
+    ints.eb_occ = numpy.real(e_occ_b)
+    ints.ea_vir = numpy.real(e_vir_a)
+    ints.eb_vir = numpy.real(e_vir_b)
+
+    ints.umat_occ_a = umat_occ_a
+    ints.umat_vir_a = umat_vir_a
+    ints.umat_occ_b = umat_occ_b
+    ints.umat_vir_b = umat_vir_b
+
 
     ints.t2aa, ints.t2ab, ints.t2bb = t2aa, t2ab, t2bb
     ints.t1a, ints.t1b  = t1a, t1b

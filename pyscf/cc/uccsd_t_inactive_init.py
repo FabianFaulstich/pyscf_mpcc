@@ -63,10 +63,10 @@ def update_amps(ints, t2):
 
     t2aa,t2ab,t2bb = t2
 
-    mo_ea_o = numpy.diag(ints.Foo)
-    mo_ea_v = numpy.diag(ints.Fvv)
-    mo_eb_o = numpy.diag(ints.FOO)
-    mo_eb_v = numpy.diag(ints.FVV)
+    mo_ea_o = ints.ea_occ 
+    mo_ea_v = ints.ea_vir
+    mo_eb_o = ints.eb_occ
+    mo_eb_v = ints.eb_vir
 
     eia = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
     eIA = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
