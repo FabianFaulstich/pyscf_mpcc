@@ -878,7 +878,6 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     t1new = u1a, u1b
     t2new = u2aa, u2ab, u2bb
 
-
     if (pert_triples):
        return t1new, t2new, u3new
     else:
@@ -1136,6 +1135,11 @@ class UCCSD(ccsd.CCSD):
     def __init__(self, mf, frozen=None, mo_coeff=None, mo_occ=None):
         assert isinstance(mf, scf.uhf.UHF)
         ccsd.CCSD.__init__(self, mf, frozen, mo_coeff, mo_occ)
+#       self.with_df = mf.with_df
+        self.with_df = False
+        if getattr(mf, 'with_df', None):
+            self.with_df = mf.with_df
+
 
     get_nocc = get_nocc
     get_nmo = get_nmo
@@ -1225,13 +1229,17 @@ class UCCSD(ccsd.CCSD):
         return self.l1, self.l2
 
     def ccsd_t(self, act_hole, act_particle, t3, t1=None, t2=None, l1=None, l2=None, eris=None):
-        from pyscf.cc import umpcc_t_slow
+#       from pyscf.cc import uccsd_t_inactive_iterative
+        from pyscf.cc import uccsd_t_inactive
         if t1 is None: t1 = self.t1
         if t2 is None: t2 = self.t2
         if l1 is None: l1 = self.l1
         if l2 is None: l2 = self.l2
         if eris is None: eris = self.ao2mo(self.mo_coeff)
-        return umpcc_t_slow.lhs_umpcc_triples_inactive(self, t1, t2, l1, l2, t3, eris, act_hole, act_particle)
+#       return uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+#       return uccsd_t_inactive.kernel_bareV(self, eris, act_hole, act_particle, t1, t2)
+        return uccsd_t_inactive.kernel(self, eris, t1, t2, t3, t1, t2, act_hole, act_particle)
+#       return umpcc_t_slow.lhs_umpcc_triples_inactive(self, t1, t2, l1, l2, t3, eris, act_hole, act_particle)
 #       return umpcc_t_slow._iterative_kernel(self, t1, t2, l1, l2, eris, act_hole, act_particle)
     uccsd_t = ccsd_t
 
@@ -1254,8 +1262,6 @@ class UCCSD(ccsd.CCSD):
         if l2 is None: l2 = self.l2
         if eris is None: eris = self.ao2mo(self.mo_coeff)
         return umpcc_t_slow.lhs_umpcc_triples_inactive(self, t1, t2, l1, l2, t3, eris, act_hole, act_particle)
-
-
 
     def make_rdm1(self, t1=None, t2=None, l1=None, l2=None, ao_repr=False,
                   with_frozen=True, with_mf=True):

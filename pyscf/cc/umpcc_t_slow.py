@@ -241,7 +241,6 @@ def pert_w3(mcc, t1, t2, imds, eris, act_hole, act_particle):
     y = u3bba - u3bba.transpose(1,0,2,3,4,5)
     v += y - y.transpose(0,1,2,4,3,5)
 
-
     print("norm of u3aaa", numpy.linalg.norm(u3aaa))
     print("norm of u3bbb", numpy.linalg.norm(u3bbb))
     print("norm of u3baa", numpy.linalg.norm(r))
@@ -301,7 +300,6 @@ def update_amps_t3(mcc, imds, wtriples, t3, eris, act_hole, act_particle):
     u3bbb += cyclic_particle(x)
     x = -lib.einsum('mjkabc,mi->ijkabc', t3bbb, imds.FOO_act)
     u3bbb += cyclic_hole(x)
-
 
     print("norm of u3aaa, fock", numpy.linalg.norm(u3aaa))
     print("norm of u3bbb, fock", numpy.linalg.norm(u3bbb))
@@ -632,6 +630,72 @@ def make_intermediates_energy(mcc, t1, t2, eris, act_hole, act_particle):
     return imds
 
 
+def _make_df_eris(mycc, eris):
+
+    assert mycc._scf.istype('UHF')
+
+    moa, mob = eris.mo_coeff
+    nocca, noccb = eris.nocc
+
+    nao = moa.shape[0]
+    nmoa = moa.shape[1]
+    nmob = mob.shape[1]
+    nvira = nmoa - nocca
+    nvirb = nmob - noccb
+    nvira_pair = nvira * (nvira + 1) // 2
+    nvirb_pair = nvirb * (nvirb + 1) // 2
+    with_df = mycc.with_df
+    naux = eris.naux = with_df.get_naoaux()
+
+    class _ints_3c: pass
+    ints_3c = _ints_3c()
+
+    # --- Three-center integrals
+    # (L|aa)
+    Loo = numpy.empty((naux, nocca, nocca))
+    Lov = numpy.empty((naux, nocca, nvira))
+    Lvo = numpy.empty((naux, nvira, nocca))
+    Lvv = numpy.empty((naux, nvira, nvira))
+    # (L|bb)
+    LOO = numpy.empty((naux, noccb, noccb))
+    LOV = numpy.empty((naux, noccb, nvirb))
+    LVO = numpy.empty((naux, nvirb, noccb))
+    LVV = numpy.empty((naux, nvirb, nvirb))
+
+    # Transform three-center integrals to MO basis
+    p1 = 0
+    for eri1 in with_df.loop():
+        eri1 = lib.unpack_tril(eri1).reshape(-1, nao, nao)
+        # (L|aa)
+        Lpq = lib.einsum('Lab,ap,bq->Lpq', eri1, moa, moa)
+        p0, p1 = p1, p1 + Lpq.shape[0]
+        blk = numpy.s_[p0:p1]
+        Loo[blk] = Lpq[:, :nocca, :nocca]
+        Lov[blk] = Lpq[:, :nocca, nocca:]
+        Lvo[blk] = Lpq[:, nocca:, :nocca]
+        Lvv[blk] = Lpq[:, nocca:, nocca:]
+        # (L|bb)
+        Lpq = None
+        Lpq = lib.einsum('Lab,ap,bq->Lpq', eri1, mob, mob)
+        LOO[blk] = Lpq[:, :noccb, :noccb]
+        LOV[blk] = Lpq[:, :noccb, noccb:]
+        LVO[blk] = Lpq[:, noccb:, :noccb]
+        LVV[blk] = Lpq[:, noccb:, noccb:]
+        Lpq = None
+
+    ints_3c.Loo = Loo
+    ints_3c.Lov = Lov
+    ints_3c.Lvo = Lvo
+    ints_3c.Lvv = Lvv
+
+    ints_3c.LOO = LOO
+    ints_3c.LOV = LOV
+    ints_3c.LVO = LVO
+    ints_3c.LVV = LVV
+
+    return ints_3c
+
+
 def get_vvvv_to_imds(mcc, t1, t2, eris, act_hole, act_particle):
     from pyscf import ao2mo
 
@@ -670,12 +734,24 @@ def get_vvvv_to_imds(mcc, t1, t2, eris, act_hole, act_particle):
     occ_b = eris.mo_coeff[1][:,:noccb]
 
 #aaaa
-    eris_vvov = ao2mo.general(mcc._scf._eri, (vir_act_a, vir_a, occ_a, vir_a),
+    with_df = mcc.with_df
+
+    if (with_df):
+       ints_3c = _make_df_eris(mcc, eris)
+
+    
+    if (not with_df):
+        eris_vvov = ao2mo.general(mcc._scf._eri, (vir_act_a, vir_a, occ_a, vir_a),
                                  compact=False).reshape(nact_vir_a,nvira,nocca,nvira)
 
-
-    eris_vvOV = ao2mo.general(mcc._scf._eri, (vir_act_a, vir_a, occ_b, vir_b),
+        eris_vvOV = ao2mo.general(mcc._scf._eri, (vir_act_a, vir_a, occ_b, vir_b),
                                  compact=False).reshape(nact_vir_a,nvira,noccb,nvirb)
+    else: 
+#        eris_vvov = lib.ddot(ints_3c.Lvv[:,:nact_vir_a,:].T, ints_3c.Lov).reshape(nact_vir_a,nvira,nocca,nvira)
+#        eris_vvOV = lib.ddot(ints_3c.Lvv[:,:nact_vir_a,:].T, ints_3c.LOV).reshape(nact_vir_a,nvira,noccb,nvirb)
+
+        eris_vvov = lib.einsum("Lae, Lmf -> aemf", ints_3c.Lvv[:,:nact_vir_a,:], ints_3c.Lov) 
+        eris_vvOV = lib.einsum("Lae, Lmf -> aemf", ints_3c.Lvv[:,:nact_vir_a,:], ints_3c.LOV) 
 
 
     wvvvo = eris_vvov[numpy.ix_(numpy.arange(nact_vir_a), numpy.arange(nvira), act_hole[0], act_particle[0])].transpose(0,1,3,2) 
@@ -693,16 +769,23 @@ def get_vvvv_to_imds(mcc, t1, t2, eris, act_hole, act_particle):
 
 #bbbb
 
-    eris_VVOV = ao2mo.general(mcc._scf._eri, (vir_act_b, vir_b, occ_b, vir_b),
+
+
+    if (not with_df):
+        eris_VVOV = ao2mo.general(mcc._scf._eri, (vir_act_b, vir_b, occ_b, vir_b),
                                  compact=False).reshape(nact_vir_b,nvirb,noccb,nvirb)
 
-    wVVVO = eris_VVOV[numpy.ix_(numpy.arange(nact_vir_b), numpy.arange(nvirb), act_hole[1], act_particle[1])].transpose(0,1,3,2) 
-
-    VVOV = eris_VVOV - eris_VVOV.transpose(0,3,2,1)
-
-
-    eris_VVov = ao2mo.general(mcc._scf._eri, (vir_act_b, vir_b, occ_a, vir_a),
+        eris_VVov = ao2mo.general(mcc._scf._eri, (vir_act_b, vir_b, occ_a, vir_a),
                                  compact=False).reshape(nact_vir_b,nvirb,nocca,nvira)
+    else:
+        eris_VVOV = lib.einsum("Lae,Lmf -> aemf", ints_3c.LVV[:,:nact_vir_b,:], ints_3c.LOV) 
+        eris_VVov = lib.einsum("Lae,Lmf -> aemf", ints_3c.LVV[:,:nact_vir_b,:], ints_3c.Lov) 
+
+#       eris_VVov = lib.ddot(ints_3c.LVV[:,:nact_vir_b,:].T, ints_3c.Lov).reshape(nact_vir_b,nvirb,nocca,nvira)
+
+
+    wVVVO = eris_VVOV[numpy.ix_(numpy.arange(nact_vir_b), numpy.arange(nvirb), act_hole[1], act_particle[1])].transpose(0,1,3,2) 
+    VVOV = eris_VVOV - eris_VVOV.transpose(0,3,2,1)
 
 
     wVVVO += lib.einsum('aemf,mifb->aebi', VVOV, t2bb[numpy.ix_(numpy.arange(noccb), act_hole[1], numpy.arange(nvirb), act_particle[1])])
@@ -735,14 +818,23 @@ def get_vvvv_to_imds(mcc, t1, t2, eris, act_hole, act_particle):
     vvov = VVOV = eris_VVov = eris_vvOV = eris_VVOV = eris_vvov = None
 
 
-    vvvv_act = ao2mo.general(mcc._scf._eri, (vir_act_a, vir_a, vir_act_a, vir_a),
+
+    if (not with_df):
+        vvvv_act = ao2mo.general(mcc._scf._eri, (vir_act_a, vir_a, vir_act_a, vir_a),
                                   compact=False).reshape(nact_vir_a, nvira, nact_vir_a, nvira)
 
-    VVVV_act = ao2mo.general(mcc._scf._eri, (vir_act_b, vir_b, vir_act_b, vir_b),
+        VVVV_act = ao2mo.general(mcc._scf._eri, (vir_act_b, vir_b, vir_act_b, vir_b),
                                  compact=False).reshape(nact_vir_b, nvirb, nact_vir_b, nvirb)
 
-    vvVV_act = ao2mo.general(mcc._scf._eri, (vir_act_a, vir_a, vir_act_b, vir_b),
+        vvVV_act = ao2mo.general(mcc._scf._eri, (vir_act_a, vir_a, vir_act_b, vir_b),
                                     compact=False).reshape(nact_vir_a, nvira, nact_vir_b, nvirb)
+    else:
+        vvvv_act = lib.einsum("Lae,Lbf -> aebf", ints_3c.Lvv[:,:nact_vir_a,:], ints_3c.Lvv[:,:nact_vir_a,:]) 
+        VVVV_act = lib.einsum("Lae,Lbf -> aebf", ints_3c.LVV[:,:nact_vir_b,:], ints_3c.LVV[:,:nact_vir_b,:]) 
+        vvVV_act = lib.einsum("Lae,Lbf -> aebf", ints_3c.Lvv[:,:nact_vir_a,:], ints_3c.LVV[:,:nact_vir_b,:]) 
+#       eris_vvvv = lib.ddot(ints_3c.Lvv[:,:nact_vir_a,:].T, ints_3c.Lvv[:,:nact_vir_a,:]).reshape(nact_vir_a,nvira,nact_vir_a,nvira)
+#       eris_VVVV = lib.ddot(ints_3c.LVV[:,:nact_vir_b,:].T, ints_3c.LVV[:,:nact_vir_b,:]).reshape(nact_vir_b,nvirb,nact_vir_b,nvirb)
+#       eris_vvVV = lib.ddot(ints_3c.Lvv[:,:nact_vir_a,:].T, ints_3c.LVV[:,:nact_vir_b,:]).reshape(nact_vir_a,nvira,nact_vir_b,nvirb)
 
     vvvv_act_new = vvvv_act - vvvv_act.transpose(2,1,0,3)
     VVVV_act_new = VVVV_act - VVVV_act.transpose(2,1,0,3)
@@ -766,8 +858,6 @@ def get_vvvv_to_imds(mcc, t1, t2, eris, act_hole, act_particle):
     wVVvo += lib.einsum('meni,nmba->aebi', OVoo[numpy.ix_(numpy.arange(noccb), numpy.arange(nvirb), numpy.arange(nocca), act_hole[0])], t2ab[numpy.ix_(numpy.arange(nocca), numpy.arange(noccb), act_particle[0], act_particle[1])])
 
     ovoo = OVoo = ovOO = OVOO = None
-
-
 
 
     return wvvvo, wvvVO, wVVvo, wVVVO
@@ -869,14 +959,27 @@ def get_vvvv_imds(mcc, t1, t2, eris, act_hole, act_particle):
     vir_act_a = vir_a[:,act_particle[0][0]:(act_particle[0][-1]+1)]
     vir_act_b = vir_b[:,act_particle[1][0]:(act_particle[1][-1]+1)]
 
-    vvvv = ao2mo.general(mcc._scf._eri, (vir_act_a, vir_act_a, vir_act_a, vir_act_a),
+    with_df = mcc.with_df
+
+
+    if (with_df):
+       ints_3c = _make_df_eris(mcc, eris)
+
+    if (not with_df):
+        vvvv = ao2mo.general(mcc._scf._eri, (vir_act_a, vir_act_a, vir_act_a, vir_act_a),
                                  compact=False).reshape(nact_vir_a, nact_vir_a, nact_vir_a, nact_vir_a)
-
-    VVVV = ao2mo.general(mcc._scf._eri, (vir_act_b, vir_act_b, vir_act_b, vir_act_b),
+        VVVV = ao2mo.general(mcc._scf._eri, (vir_act_b, vir_act_b, vir_act_b, vir_act_b),
                                  compact=False).reshape(nact_vir_b, nact_vir_b, nact_vir_b, nact_vir_b)
-
-    vvVV_act = ao2mo.general(mcc._scf._eri, (vir_act_a, vir_act_a, vir_act_b, vir_act_b),
+        vvVV_act = ao2mo.general(mcc._scf._eri, (vir_act_a, vir_act_a, vir_act_b, vir_act_b),
                                     compact=False).reshape(nact_vir_a, nact_vir_a, nact_vir_b, nact_vir_b)
+    else:
+#       vvvv = lib.ddot(ints_3c.Lvv[:,:nact_vir_a,:nact_vir_a].T, ints_3c.Lvv[:,:nact_vir_a,:nact_vir_a]).reshape(nact_vir_a,nact_vir_a,nact_vir_a,nact_vir_a)
+#       VVVV = lib.ddot(ints_3c.LVV[:,:nact_vir_b,:nact_vir_b].T, ints_3c.Lvv[:,:nact_vir_b,:nact_vir_b]).reshape(nact_vir_b,nact_vir_b,nact_vir_b,nact_vir_b)
+#       vvVV_act = lib.ddot(ints_3c.Lvv[:,:nact_vir_a,:nact_vir_a].T, ints_3c.Lvv[:,:nact_vir_b,:nact_vir_b]).reshape(nact_vir_a,nact_vir_a,nact_vir_b,nact_vir_b)
+
+        vvvv = lib.einsum("Lae,Lbf -> aebf", ints_3c.Lvv[:,:nact_vir_a,:nact_vir_a], ints_3c.Lvv[:,:nact_vir_a,:nact_vir_a]) 
+        VVVV = lib.einsum("Lae,Lbf -> aebf", ints_3c.LVV[:,:nact_vir_b,:nact_vir_b], ints_3c.LVV[:,:nact_vir_b,:nact_vir_b]) 
+        vvVV_act = lib.einsum("Lae,Lbf -> aebf", ints_3c.LVV[:,:nact_vir_a,:nact_vir_a], ints_3c.LVV[:,:nact_vir_b,:nact_vir_b]) 
 
 
     vvvv_act = vvvv - vvvv.transpose(0,3,2,1)
@@ -886,24 +989,32 @@ def get_vvvv_imds(mcc, t1, t2, eris, act_hole, act_particle):
 
     #(is it okay to do the transformation in this manner?)
 
-    
-    eris_ovvv = ao2mo.general(mcc._scf._eri, (occ_a, vir_act_a, vir_act_a, vir_act_a),
+    if (not with_df):
+        eris_ovvv = ao2mo.general(mcc._scf._eri, (occ_a, vir_act_a, vir_act_a, vir_act_a),
                                  compact=False).reshape(nocca, nact_vir_a, nact_vir_a, nact_vir_a)
 
-    eris_OVVV = ao2mo.general(mcc._scf._eri, (occ_b, vir_act_b, vir_act_b, vir_act_b),
+        eris_OVVV = ao2mo.general(mcc._scf._eri, (occ_b, vir_act_b, vir_act_b, vir_act_b),
                                  compact=False).reshape(noccb, nact_vir_b, nact_vir_b, nact_vir_b)
 
-    eris_ovVV = ao2mo.general(mcc._scf._eri, (occ_a, vir_act_a, vir_act_b, vir_act_b),
+        eris_ovVV = ao2mo.general(mcc._scf._eri, (occ_a, vir_act_a, vir_act_b, vir_act_b),
                                  compact=False).reshape(nocca, nact_vir_a, nact_vir_b, nact_vir_b)
 
-
-    eris_OVvv = ao2mo.general(mcc._scf._eri, (occ_b, vir_act_b, vir_act_a, vir_act_a),
+        eris_OVvv = ao2mo.general(mcc._scf._eri, (occ_b, vir_act_b, vir_act_a, vir_act_a),
                                  compact=False).reshape(noccb, nact_vir_b, nact_vir_a, nact_vir_a)
 
+    else:
+#       eris_ovvv = lib.ddot(ints_3c.Lov[:,:,:nact_vir_a].T, ints_3c.Lvv[:,:nact_vir_a,:nact_vir_a]).reshape(nocca,nact_vir_a,nact_vir_a,nact_vir_a)
+#       eris_OVVV = lib.ddot(ints_3c.LOV[:,:,:nact_vir_b].T, ints_3c.LVV[:,:nact_vir_b,:nact_vir_b]).reshape(noccb,nact_vir_b,nact_vir_b,nact_vir_b)
+#       eris_ovVV = lib.ddot(ints_3c.Lov[:,:,:nact_vir_a].T, ints_3c.LVV[:,:nact_vir_b,:nact_vir_b]).reshape(nocca,nact_vir_a,nact_vir_b,nact_vir_b)
+#       eris_OVvv = lib.ddot(ints_3c.LOV[:,:,:nact_vir_b].T, ints_3c.LVV[:,:nact_vir_a,:nact_vir_a]).reshape(noccb,nact_vir_b,nact_vir_a,nact_vir_a)
+
+        eris_ovvv = lib.einsum("Lmf,Lae -> mfae", ints_3c.Lov[:,:,:nact_vir_a], ints_3c.Lvv[:,:nact_vir_a,:nact_vir_a]) 
+        eris_OVVV = lib.einsum("Lmf,Lae -> mfae", ints_3c.LOV[:,:,:nact_vir_b], ints_3c.LVV[:,:nact_vir_b,:nact_vir_b]) 
+        eris_ovVV = lib.einsum("Lmf,Lae -> mfae", ints_3c.Lov[:,:,:nact_vir_a], ints_3c.LVV[:,:nact_vir_b,:nact_vir_b]) 
+        eris_OVvv = lib.einsum("Lmf,Lae -> mfae", ints_3c.LOV[:,:,:nact_vir_b], ints_3c.Lvv[:,:nact_vir_a,:nact_vir_a]) 
     
     ovvv = eris_ovvv - eris_ovvv.transpose(0,3,2,1)
     OVVV = eris_OVVV - eris_OVVV.transpose(0,3,2,1)
-
 
 #    tmp = lib.einsum('mb,mfae->fbea', t1a[numpy.ix_(numpy.arange(nocca), act_particle[0])], ovvv)*-1.0
 #    vvvv_act += tmp - tmp.transpose(0,3,2,1)  
@@ -1967,7 +2078,6 @@ def iterative_update_amps_t3(mcc, t1, t2, t3, eris, act_hole, act_particle):
     t3new = u3aaa, u3bbb, u3baa, u3bba
     
     return t3new, u2_active, u1_active 
-
 
 
 def iterative_update_amps_ccsdt3(mcc, t1, t2, t3, eris, act_hole, act_particle):
