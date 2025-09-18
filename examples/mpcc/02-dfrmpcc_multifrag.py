@@ -44,9 +44,13 @@ if __name__ == "__main__":
        from pyscf_ifo import run_calculations
 
        large_basis = 'aug-ccpvdz'
-       small_basis = 'ccpvdz'
-   
-       c_lo_energies, c_lo = run_calculations(xyz_frags, charge_frags, mult_frags, large_basis, small_basis)  
+       small_basis = {'F':"ccpvdz", 'H':"sto-3g"} 
+  
+
+       frag_core = [0,0] 
+       frag_valence = [6,6]  
+ 
+       c_lo_energies, c_lo = run_calculations(xyz_frags, charge_frags, mult_frags, large_basis, small_basis, frag_core, frag_valence)  
 
        act_hole_0 = (np.arange(5)) 
        act_part_0 = (np.arange(10,25))

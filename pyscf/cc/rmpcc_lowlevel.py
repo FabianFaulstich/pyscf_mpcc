@@ -182,11 +182,11 @@ def updated_amp(myll, mo_energy=None, mo_coeff=None, eris=None, with_t2=None):
     Fov = np.einsum("Lbj,L->jb", Jvo, X) - np.einsum("Lij,Lib->jb", Xoo, Lov)
 #    Fov = np.einsum("Ljb,L->jb", Lov, X) - np.einsum("Lij,Lib->jb", Xoo, Lov)
 
-    eris = np.einsum("Lai,Ljb->aijb", Jvo, Jvo)
+    eris = np.einsum("Lai,Lbj->aibj", Jvo, Jvo)
 
     t2 = (2 * eris - np.transpose(eris, (0, 3, 2, 1))) / myll.D
     Yvo = np.einsum("aibj,Ljb->Lai", t2, Lov)
-    Ωvo += np.einsum("aijb,bj->ai", t2, Fov)
+    Ωvo += np.einsum("aibj,jb->ai", t2, Fov)
 
     Jvv = np.einsum("Ljb,ja->Lba", Lov, t1) + Lvv
     Ωvo += np.einsum("Lba,Lbi->ai", Jvv, Yvo)
@@ -462,7 +462,7 @@ if __name__ == "__main__":
 
     mol.basis = "cc-pvtz"
     mol.build()
-    mf = df.density_fit(scf.RHF(mol), auxbasis='ccpvtzfit')
+    mf = df.density_fit(scf.RHF(mol), auxbasis='ccpvtz_ri')
     mf = mf.newton().run()
     mo1 = mf.stability()[0]
     dm1 = mf.make_rdm1(mo1, mf.mo_occ)
@@ -474,19 +474,6 @@ if __name__ == "__main__":
     mpccll.diis = True
     print(f'Reference Energy : -0.371111485169')
     ecc2 = mpccll.kernel()
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -513,14 +500,6 @@ if __name__ == "__main__":
     print(f'Reference Energy, PVDZ: -0.204867860525')
     print(f'Reference Energy, PVTZ: -0.228008960828')
     ecc2 = mpccll.kernel()
-
-
-
-
-
-
-
-
 
 
 

@@ -55,10 +55,10 @@ class MPCC(lib.StreamObject):
             #    print('No active fragments found. Exiting loop.')
             #    break
 
-            if (count > 1):
-               t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
+#           if (count > 1):
+#              t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
 
-#           t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
+            t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
 
             t1_act = []
             t2_act = []
