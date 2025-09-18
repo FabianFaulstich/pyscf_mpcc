@@ -569,6 +569,7 @@ def lhs_env_triples(ints, l1, l2, t3):
 
 
 def iterative_kernel(mcc, eris, t1, t2, t3, act_hole, act_particle): 
+    import uccsd_t_inactive_init
 
     t1a,t1b = t1
     t2aa,t2ab,t2bb = t2
@@ -597,15 +598,19 @@ def iterative_kernel(mcc, eris, t1, t2, t3, act_hole, act_particle):
 #   t2bb_tmp[numpy.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])] +=  t2bb[numpy.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])] 
 #   t2ab_tmp[numpy.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])] +=  t2ab[numpy.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])] 
 
-    u3aaa = numpy.zeros((nocca,nocca,nocca,nvira,nvira,nvira), dtype=dtype)  
-    u3bbb = numpy.zeros((noccb,noccb,noccb,nvirb,nvirb,nvirb), dtype=dtype)  
-    u3bba = numpy.zeros((noccb,noccb,nocca,nvirb,nvirb,nvira), dtype=dtype)  
-    u3baa = numpy.zeros((noccb,nocca,nocca,nvirb,nvira,nvira), dtype=dtype)  
+#   u3aaa = numpy.zeros((nocca,nocca,nocca,nvira,nvira,nvira), dtype=dtype)  
+#   u3bbb = numpy.zeros((noccb,noccb,noccb,nvirb,nvirb,nvirb), dtype=dtype)  
+#   u3bba = numpy.zeros((noccb,noccb,nocca,nvirb,nvirb,nvira), dtype=dtype)  
+#   u3baa = numpy.zeros((noccb,nocca,nocca,nvirb,nvira,nvira), dtype=dtype)  
 
-    u3aaa[numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])] += t3aaa 
-    u3bbb[numpy.ix_(act_hole[1], act_hole[1], act_hole[1], act_particle[1], act_particle[1], act_particle[1])] += t3bbb 
-    u3bba[numpy.ix_(act_hole[1], act_hole[1], act_hole[0], act_particle[1], act_particle[1], act_particle[0])] += t3bba 
-    u3baa[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])] += t3baa 
+    u3 = uccsd_t_inactive_init.kernel(mcc, eris, t1, t2, act_hole, act_particle) 
+
+    u3aaa, u3bbb, u3baa, u3bba = u3
+
+    u3aaa[numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])] = t3aaa 
+    u3bbb[numpy.ix_(act_hole[1], act_hole[1], act_hole[1], act_particle[1], act_particle[1], act_particle[1])] = t3bbb 
+    u3bba[numpy.ix_(act_hole[1], act_hole[1], act_hole[0], act_particle[1], act_particle[1], act_particle[0])] = t3bba 
+    u3baa[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])] = t3baa 
 
     t3 = u3aaa, u3bbb, u3baa, u3bba
 #   t2_tmp = t2aa_tmp, t2ab_tmp, t2bb_tmp

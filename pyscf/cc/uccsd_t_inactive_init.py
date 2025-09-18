@@ -27,7 +27,7 @@ import time
 UCCSD(T)
 '''
 
-def kernel(mycc, eris, t1, t2, t3, l1, l2, act_hole, act_particle): 
+def kernel(mycc, eris, t1, t2, act_hole, act_particle): 
 
     t1a,t1b = t1
     t2aa,t2ab,t2bb = t2
@@ -37,17 +37,9 @@ def kernel(mycc, eris, t1, t2, t3, l1, l2, act_hole, act_particle):
 
     ints = _make_4c_integrals(mycc, eris, t1, t2, mo_coeff)
 
-    u3,R3 = update_amps(ints, t2)
+    u3 = update_amps(ints, t2)
 
-    t3 = update_amps_small_full(ints, u3, t3, R3, act_hole, act_particle)
-
-    t1 = (ints.t1a, ints.t1b) 
-
-    t2 = (ints.t2aa, ints.t2ab, ints.t2bb) 
-
-    et = lhs_env_triples(ints, t1, t2, t3) 
-
-    return et
+    return u3
 
 def update_amps(ints, t2):
     '''Update non-canonical MP2 amplitudes'''
@@ -172,122 +164,31 @@ def update_amps(ints, t2):
     v += y - y.transpose(0,1,2,4,3,5)
 
 
-    u3aaa_tr /=d3aaa 
-    u3bbb_tr /=d3bbb 
-    u3bba_tr = v/d3bba 
-    u3baa_tr = r/d3baa 
-
-    w3 = u3aaa, u3bbb, r, v
-
-    return w3, R3 
+    u3aaa /=d3aaa 
+    u3bbb /=d3bbb 
+    u3bba = v/d3bba 
+    u3baa = r/d3baa 
 
 
-def update_amps_small(ints, w3, R3, t3, act_hole, act_particle):
-    '''Update non-canonical MP2 amplitudes'''
-
-    def p6(t):
-        return (t + t.transpose(1,2,0,4,5,3) +
-                t.transpose(2,0,1,5,3,4) + t.transpose(0,2,1,3,5,4) +
-                t.transpose(2,1,0,5,4,3) + t.transpose(1,0,2,4,3,5))
-    def r6(w):
-        return (w + w.transpose(2,0,1,3,4,5) + w.transpose(1,2,0,3,4,5)
-                - w.transpose(2,1,0,3,4,5) - w.transpose(0,2,1,3,4,5)
-                - w.transpose(1,0,2,3,4,5))
-
-    def cyclic_hole(u):
-        return (u + u.transpose(1,2,0,3,4,5)+u.transpose(2,0,1,3,4,5))     
-
-    def cyclic_particle(u):
-        return (u + u.transpose(0,1,2,4,5,3)+u.transpose(0,1,2,5,3,4))     
-
-    mo_ea_o = ints.ea_occ
-    mo_ea_v = ints.ea_vir
-    mo_eb_o = ints.eb_occ
-    mo_eb_v = ints.eb_vir
-
-    u3aaa, u3bbb, u3baa, u3bba = w3
-    r3aaa, r3bbb, r3baa, r3bba = R3
-    t3aaa, t3bbb, t3baa, t3bba = t3
-
-    t3aaa -= r3aaa [numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])]
-    et += lib.einsum('ijkabc,ijkabc', wd.conj(), t3bbb)*(1.0/36)
-
-    print("value of et, step 2:", et)
-#baa
-    w  = lib.einsum('ebkc,jIeA->IjkAbc', ints.Wvvov , l2ab) #done 
-    w -= lib.einsum('mkbc,IAjm->IjkAbc', l2aa, ints.WOVoo ) #done #check if the defn of W can be changed
+    u3aaa_tr = numpy.einsum("ijkabc, iI, jJ, kK, aA, bB, cC -> IJKABC", u3aaa, ints.umat_occ_a.T,
+                          ints.umat_occ_a.T, ints.umat_occ_a.T, ints.umat_vir_a.T, ints.umat_vir_a.T, ints.umat_vir_a.T,optimize=True)
 
 
-    #P(jk)
-    r = w - w.transpose(0,2,1,3,4,5)
+    u3bbb_tr = numpy.einsum("ijkabc, iI, jJ, kK, aA, bB, cC -> IJKABC", u3bbb, ints.umat_occ_b.T,
+                          ints.umat_occ_b.T, ints.umat_occ_b.T, ints.umat_vir_b.T, ints.umat_vir_b.T, ints.umat_vir_b.T,optimize=True)
 
-    w  = lib.einsum('ebIA,jkec->IjkAbc', ints.WvvOV , l2aa) #Done 
-    w -= lib.einsum('mIbA,kcjm->IjkAbc', l2ab, ints.Wovoo ) 
-    #P(bc)
-    r += w - w.transpose(0,1,2,3,5,4)
 
-    w  = lib.einsum('EAkc,jIbE->IjkAbc', ints.WVVov , l2ab) #done
-    w -= lib.einsum('jMbA,kcIM->IjkAbc', l2ab, ints.WovOO ) 
-    w += lib.einsum('kcIA,jb->IjkAbc', ints.WovOV, l1a)
-    #P(jk)P(bc)
+    u3baa_tr = numpy.einsum("ijkabc, iI, jJ, kK, aA, bB, cC -> IJKABC", u3baa, ints.umat_occ_b.T,
+                          ints.umat_occ_a.T, ints.umat_occ_a.T, ints.umat_vir_b.T, ints.umat_vir_a.T, ints.umat_vir_a.T,optimize=True)
 
-    y = w - w.transpose(0,2,1,3,4,5)
-    r += y - y.transpose(0,1,2,3,5,4)
 
-    #P(None)
+    u3bba_tr = numpy.einsum("ijkabc, iI, jJ, kK, aA, bB, cC -> IJKABC", u3bba, ints.umat_occ_b.T,
+                          ints.umat_occ_b.T, ints.umat_occ_a.T, ints.umat_vir_b.T, ints.umat_vir_b.T, ints.umat_vir_a.T,optimize=True)
 
-    r  += lib.einsum('jbkc,IA->IjkAbc', ints.Wovov, l1b)
-    et += lib.einsum('ijkabc,ijkabc', r.conj(), t3baa)*(1.0/4)
-    print("value of et, step 3:", et)
- 
-#bba
-    w  = lib.einsum('kJcE,EBIA->IJkABc', l2ab, ints.WVVOV ) #done 
-    w -= lib.einsum('IMAB,kcJM->IJkABc', l2bb, ints.WovOO ) #done
 
-# P(IJ)
+    w3 = u3aaa_tr, u3bbb_tr, u3baa_tr, u3bba_tr
 
-    r = w - w.transpose(1,0,2,3,4,5)
-
-    w  = lib.einsum('kJeB,ecIA->IJkABc', l2ab, ints.WvvOV ) #done
-    w -= lib.einsum('mIcA,JBkm->IJkABc', l2ab, ints.WOVoo )  #done
-    w += lib.einsum('kcIA,JB->IJkABc', ints.WovOV, l1b)
-
-# P(IJ)P(AB)
-    y = w - w.transpose(1,0,2,3,4,5)
-    r += y - y.transpose(0,1,2,4,3,5)
-
-    w = lib.einsum('IJAE,EBkc->IJkABc', l2bb, ints.WVVov ) 
-    w -= lib.einsum('kMcB,IAJM->IJkABc',l2ab, ints.WOVOO ) 
-
-# P(AB) 
-    r += w - w.transpose(0,1,2,4,3,5)
-    r  += lib.einsum('IAJB,kc->IJkABc', ints.WOVOV, l1a)
-
-    et += lib.einsum('ijkabc,ijkabc', r.conj(), t3bba)*(1.0/4)
-
-    print("value of et, step 4:", et)
-
-#                    (1)                        ~        (1)
-# contribution of T_3   to the residue of T_2: [F_ov, T_3   ]
-     
-    u2aa  = lib.einsum('ijmabe,me->ijab', t3aaa, ints.Fov)
-    u2aa += lib.einsum('MijEab,ME->ijab', t3baa, ints.FOV)
-
-    et += lib.einsum('ijab,ijab', u2aa.conj(), l2aa)*(1.0/4)
-
-    u2bb = lib.einsum('ijmabe,me->ijab', t3bbb, ints.FOV)
-    u2bb += lib.einsum('IJmABe,me->IJAB', t3bba, ints.Fov)
-
-    et += lib.einsum('ijab,ijab', u2bb.conj(), l2bb)*(1.0/4)
-
-    u2ab = lib.einsum('MIjEAb,ME->jIbA', t3bba, ints.FOV)
-    u2ab += lib.einsum('IjmAbe,me->jIbA', t3baa, ints.Fov)
-
-    et += lib.einsum('ijab,ijab', u2ab.conj(), l2ab)
-
-    print("value of et, step 5:", et)
-
-    return et
+    return w3 
 
 
 def _make_4c_integrals(mycc, eris, t1, t2, mo_coeff):
@@ -457,7 +358,6 @@ def _make_4c_integrals(mycc, eris, t1, t2, mo_coeff):
    
     woovo = lib.einsum("Lmj, Lck -> mjck",Joo_tr, Jvo_tr) 
     woovo = woovo - woovo.transpose(0,3,2,1)
-
    
     wOOVO = lib.einsum("Lmj, Lck -> mjck",JOO_tr, JVO_tr) 
     wOOVO = wOOVO - wOOVO.transpose(0,3,2,1)
@@ -472,11 +372,6 @@ def _make_4c_integrals(mycc, eris, t1, t2, mo_coeff):
     wOVOV = lib.einsum("Lia, Ljb -> iajb",JOV_tr, JOV_tr) 
     wovOV = lib.einsum("Lia, Ljb -> iajb",Jov_tr, JOV_tr) 
 
- #  wovov = lib.einsum("Lia, Ljb -> iajb",Jov, Jov) 
- #  wOVOV = lib.einsum("Lia, Ljb -> iajb",JOV, JOV) 
- #  wovOV = lib.einsum("Lia, Ljb -> iajb",Jov, JOV) 
-
-
     wovov = wovov - wovov.transpose(0,3,2,1)
     wOVOV = wOVOV - wOVOV.transpose(0,3,2,1)
 
@@ -486,7 +381,9 @@ def _make_4c_integrals(mycc, eris, t1, t2, mo_coeff):
     ints.ea_vir = numpy.real(e_vir_a)
     ints.eb_vir = numpy.real(e_vir_b)
 
-    ints.Wvvvo, ints.WVVVO, ints.WVVvo, ints.WvvVO = wvvvo, wVVVO, wVVvo, wvvVO
+
+    t2_tr_aa = numpy.einsum("ijab, iI, jJ, aA, bB -> IJAB", t2[0], umat_occ_a,
+                          umat_occ_a, umat_vir_a, umat_vir_a, optimize=True)
 
     t2_tr_ab = numpy.einsum("ijab, iI, jJ, aA, bB -> IJAB", t2[1], umat_occ_a,
                           umat_occ_b, umat_vir_a, umat_vir_b, optimize=True)
@@ -500,60 +397,6 @@ def _make_4c_integrals(mycc, eris, t1, t2, mo_coeff):
     Fov_tr = lib.einsum("ia, iI, aA -> IA", Fov, umat_occ_a, umat_vir_a)
     FOV_tr = lib.einsum("ia, iI, aA -> IA", FOV, umat_occ_b, umat_vir_b)
 
-# Now construct all different integral types.. 
-
-# Wvvvo, WVVVO, WVVvo, WvvVO: untransformed.. 
-
-    wvvvo = lib.einsum("Lae, Lbi -> aebi", Jvv_tr, Jvo_tr) 
-    wvvvo = wvvvo - wvvvo.transpose(2,1,0,3)
-
-    wVVVO = lib.einsum("Lae, Lbi -> aebi", JVV_tr, JVO_tr) 
-    wVVVO = wVVVO - wVVVO.transpose(2,1,0,3)
-
-    wVVvo = lib.einsum("Lae, Lbi -> aebi", JVV_tr, Jvo_tr) 
-
-    wvvVO = lib.einsum("Lae, Lbi -> aebi", Jvv_tr, JVO_tr) 
-
-#   wvvov, wvvOV, wVVov, wVVOV
-
-    wvvov = lib.einsum("Lae, Lmf -> aemf",Jvv_tr, Jov_tr) 
-    wvvov = wvvov - wvvov.transpose(0,3,2,1)
-
-    wVVOV = lib.einsum("Lae, Lmf -> aemf",JVV_tr, JOV_tr) 
-    wVVOV = wVVOV - wVVOV.transpose(0,3,2,1)
-
-    wVVov = lib.einsum("Lae, Lmf -> aemf",JVV_tr, Jov_tr) 
-    wvvOV = lib.einsum("Lae, Lmf -> aemf",Jvv_tr, JOV_tr) 
-
-#   Wovoo, WOVoo, WovOO, WOVOO
-    wovoo = lib.einsum("Lkc, Ljm -> kcjm",Jov_tr, Joo_tr) 
-    wovoo = wovoo - wovoo.transpose(2,1,0,3)
-
-    wOVOO = lib.einsum("Lkc, Ljm -> kcjm",JOV_tr, JOO_tr) 
-    wOVOO = wOVOO - wOVOO.transpose(2,1,0,3)
-
-    wOVoo = lib.einsum("Lkc, Ljm -> kcjm",JOV_tr, Joo_tr) 
-    wovOO = lib.einsum("Lkc, Ljm -> kcjm",Jov_tr, JOO_tr) 
-
-#   Woovo, WooVO, WOOvo, WOOVO 
-    woovo = lib.einsum("Lmj, Lck -> mjck",Joo_tr, Jvo_tr) 
-    woovo = woovo - woovo.transpose(0,3,2,1)
-
-    wOOVO = lib.einsum("Lmj, Lck -> mjck",JOO_tr, JVO_tr) 
-    wOOVO = wOOVO - wOOVO.transpose(0,3,2,1)
-
-    wooVO = lib.einsum("Lmj, Lck -> mjck",Joo_tr, JVO_tr) 
-
-    wOOvo = lib.einsum("Lmj, Lck -> mjck",JOO_tr, Jvo_tr) 
-
-# wovov, wOVOV, wovOV
-
-    wovov = lib.einsum("Lia, Ljb -> iajb",Jov_tr, Jov_tr) 
-    wOVOV = lib.einsum("Lia, Ljb -> iajb",JOV_tr, JOV_tr) 
-    wovOV = lib.einsum("Lia, Ljb -> iajb",Jov_tr, JOV_tr) 
-
-    wovov = wovov - wovov.transpose(0,3,2,1)
-    wOVOV = wOVOV - wOVOV.transpose(0,3,2,1)
 
     ints.ea_occ = numpy.real(e_occ_a) 
     ints.eb_occ = numpy.real(e_occ_b)
