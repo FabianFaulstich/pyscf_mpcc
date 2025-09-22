@@ -790,6 +790,104 @@ def noniterative_kernel(mcc, eris, t1, t2, t3, act_hole, act_particle):
     return e_triples
 
 
+def kernel_bareV(mcc, eris, act_hole, act_particle, t1=None, t2=None):
+    if t1 is None or t2 is None:
+        t1, t2 = mcc.t1, mcc.t2
+
+    def p6(t):
+        return (t + t.transpose(1,2,0,4,5,3) +
+                t.transpose(2,0,1,5,3,4) + t.transpose(0,2,1,3,5,4) +
+                t.transpose(2,1,0,5,4,3) + t.transpose(1,0,2,4,3,5))
+    def r6(w):
+        return (w + w.transpose(2,0,1,3,4,5) + w.transpose(1,2,0,3,4,5)
+                - w.transpose(2,1,0,3,4,5) - w.transpose(0,2,1,3,4,5)
+                - w.transpose(1,0,2,3,4,5))
+
+    t1a, t1b = t1
+    t2aa, t2ab, t2bb = t2
+    nocca, noccb = t2ab.shape[:2]
+#   mo_ea, mo_eb = eris.mo_energy
+#   eia = mo_ea[:nocca,None] - mo_ea[nocca:]
+#   eIA = mo_eb[:noccb,None] - mo_eb[noccb:]
+
+
+    eia = lib.direct_sum('i-a->ia', numpy.diag(eris.focka[:nocca,:nocca]), numpy.diag(eris.focka[nocca:,nocca:]))
+    eIA = lib.direct_sum('i-a->ia', numpy.diag(eris.fockb[:noccb,:noccb]), numpy.diag(eris.fockb[noccb:,noccb:]))
+
+    fvo = eris.focka[nocca:,:nocca]
+    fVO = eris.fockb[noccb:,:noccb]
+
+    # aaa
+    d3 = lib.direct_sum('ia+jb+kc->ijkabc', eia, eia, eia)
+    w = numpy.einsum('ijae,kceb->ijkabc', t2aa, numpy.asarray(eris.get_ovvv()).conj())
+    w-= numpy.einsum('mkbc,iajm->ijkabc', t2aa, numpy.asarray(eris.ovoo).conj())
+    r = r6(w)
+    v = numpy.einsum('jbkc,ia->ijkabc', numpy.asarray(eris.ovov).conj(), t1a)
+    v+= numpy.einsum('jkbc,ai->ijkabc', t2aa, fvo) * .5
+    wvd = p6(w + v) 
+    r /= d3 
+    r[numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])] *= 0.0 
+    et = numpy.einsum('ijkabc,ijkabc', wvd.conj(), r)
+
+
+    # bbb
+    d3 = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eIA)
+    w = numpy.einsum('ijae,kceb->ijkabc', t2bb, numpy.asarray(eris.get_OVVV()).conj())
+    w-= numpy.einsum('imab,kcjm->ijkabc', t2bb, numpy.asarray(eris.OVOO).conj())
+    r = r6(w)
+    v = numpy.einsum('jbkc,ia->ijkabc', numpy.asarray(eris.OVOV).conj(), t1b)
+    v+= numpy.einsum('jkbc,ai->ijkabc', t2bb, fVO) * .5
+    r /= d3 
+    r[numpy.ix_(act_hole[1], act_hole[1], act_hole[1], act_particle[1], act_particle[1], act_particle[1])] *= 0.0 
+    wvd = p6(w + v) 
+    et += numpy.einsum('ijkabc,ijkabc', wvd.conj(), r)
+
+    # baa
+    w  = numpy.einsum('jIeA,kceb->IjkAbc', t2ab, numpy.asarray(eris.get_ovvv()).conj()) * 2
+    w += numpy.einsum('jIbE,kcEA->IjkAbc', t2ab, numpy.asarray(eris.get_ovVV()).conj()) * 2
+    w += numpy.einsum('jkbe,IAec->IjkAbc', t2aa, numpy.asarray(eris.get_OVvv()).conj())
+    w -= numpy.einsum('mIbA,kcjm->IjkAbc', t2ab, numpy.asarray(eris.ovoo).conj()) * 2
+    w -= numpy.einsum('jMbA,kcIM->IjkAbc', t2ab, numpy.asarray(eris.ovOO).conj()) * 2
+    w -= numpy.einsum('jmbc,IAkm->IjkAbc', t2aa, numpy.asarray(eris.OVoo).conj())
+    r = w - w.transpose(0,2,1,3,4,5)
+    r = r + r.transpose(0,2,1,3,5,4)
+    v  = numpy.einsum('jbkc,IA->IjkAbc', numpy.asarray(eris.ovov).conj(), t1b)
+    v += numpy.einsum('kcIA,jb->IjkAbc', numpy.asarray(eris.ovOV).conj(), t1a)
+    v += numpy.einsum('kcIA,jb->IjkAbc', numpy.asarray(eris.ovOV).conj(), t1a)
+    v += numpy.einsum('jkbc,AI->IjkAbc', t2aa, fVO) * .5
+    v += numpy.einsum('kIcA,bj->IjkAbc', t2ab, fvo) * 2
+    w += v
+    d3 = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eia, eia)
+    r /= d3
+    r[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])] *= 0.0 
+    et += numpy.einsum('ijkabc,ijkabc', w.conj(), r)
+
+    # bba
+    w  = numpy.einsum('ijae,kceb->ijkabc', t2ab, numpy.asarray(eris.get_OVVV()).conj()) * 2
+    w += numpy.einsum('ijeb,kcea->ijkabc', t2ab, numpy.asarray(eris.get_OVvv()).conj()) * 2
+    w += numpy.einsum('jkbe,iaec->ijkabc', t2bb, numpy.asarray(eris.get_ovVV()).conj())
+    w -= numpy.einsum('imab,kcjm->ijkabc', t2ab, numpy.asarray(eris.OVOO).conj()) * 2
+    w -= numpy.einsum('mjab,kcim->ijkabc', t2ab, numpy.asarray(eris.OVoo).conj()) * 2
+    w -= numpy.einsum('jmbc,iakm->ijkabc', t2bb, numpy.asarray(eris.ovOO).conj())
+    r = w - w.transpose(0,2,1,3,4,5)
+    r = r + r.transpose(0,2,1,3,5,4)
+    v  = numpy.einsum('jbkc,ia->ijkabc', numpy.asarray(eris.OVOV).conj(), t1a)
+    v += numpy.einsum('iakc,jb->ijkabc', numpy.asarray(eris.ovOV).conj(), t1b)
+    v += numpy.einsum('iakc,jb->ijkabc', numpy.asarray(eris.ovOV).conj(), t1b)
+    v += numpy.einsum('JKBC,ai->iJKaBC', t2bb, fvo) * .5
+    v += numpy.einsum('iKaC,BJ->iJKaBC', t2ab, fVO) * 2
+    w += v
+    d3 = lib.direct_sum('ia+jb+kc->ijkabc', eia, eIA, eIA)
+    r /= d3
+
+    r[numpy.ix_(act_hole[0], act_hole[1], act_hole[1], act_particle[0], act_particle[1], act_particle[1])] *= 0.0 
+
+    et += numpy.einsum('ijkabc,ijkabc', w.conj(), r)
+
+    et *= .25
+    return et
+
+
 def _make_4c_integrals(mycc, eris, t1, t2):
     assert mycc._scf.istype('UHF')
 #    cput0 = (logger.process_clock(), logger.perf_counter())

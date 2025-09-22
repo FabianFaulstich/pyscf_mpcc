@@ -1237,6 +1237,7 @@ class UCCSD(ccsd.CCSD):
         if eris is None: eris = self.ao2mo(self.mo_coeff)
 #       return uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
         return uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+#       return uccsd_t_inactive_iterative.kernel_bareV(self, eris, act_hole, act_particle, t1, t2)
     uccsd_t = ccsd_t
 
 #here I will write a few functions that account for perturbative corrections..  
