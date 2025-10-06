@@ -57,13 +57,16 @@ class MPCC(lib.StreamObject):
             #    print('No active fragments found. Exiting loop.')
             #    break
 
-            if (count > 1):
+            # NOTE always use t1, and t2
+            if (count == 1):
+                t1, t2 = self.lowlevel.kernel() #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
+            else:
                t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
 
-#           t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
 
             t1_act = []
             t2_act = []
+            # Y_act = []
 
             #the following loop is parallelizable over fragments
             for frag in self.frags: 
@@ -71,14 +74,20 @@ class MPCC(lib.StreamObject):
                self.screened.frag = frag
                self.highlevel.frag = frag
 
+               # NOTE can we remove the t2 dependence? 
                imds = self.screened.kernel(t1, t2)
                #print the attributes of the imds object
                print('MPCC: Screened kernel calculated for fragment:', frag)
 
+               # NOTE can we remove the t2 dependence? 
+               # YES, remove t2!
                t1_act_tmp, t2_act_tmp = self.highlevel.kernel(imds, t1, t2)
 
                t1_act.append(t1_act_tmp)    
-               t2_act.append(t2_act_tmp)    
+               t2_act.append(t2_act_tmp) 
+
+               # NOTE Include factorization of t2_active
+               # Y_act.append(Y_act_tmp)
 
                print('MPCC: High-level kernel calculated for fragment:')
         #NOTE: when we will use T3 amplitudes, we can directly return it here. we don't need to reuse them for any other purposes. Therefore

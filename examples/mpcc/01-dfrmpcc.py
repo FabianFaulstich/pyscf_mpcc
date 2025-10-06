@@ -8,6 +8,162 @@ import numpy as np
 
 from pyscf import mpcc
 
+
+####### Matrix free Choleski experiment #######
+
+def MFPC(n, diag_fn, col_fn, max_rank=None, tol=None):
+    """
+    Matrix-free Pivoted Cholesky.
+    """
+
+    if max_rank is None: max_rank = n
+    p = np.arange(n)
+    L = np.zeros((n, max_rank), dtype=float)
+    d = np.maximum(diag_fn(), 0.0).copy()  # residual diagonal
+    r = 0
+
+    for k in range(max_rank):
+        # choose pivot
+        j = k + np.argmax(d[k:])
+        if j != k:
+            p[[k, j]] = p[[j, k]]
+            d[[k, j]] = d[[j, k]]
+            L[[k, j], :k] = L[[j, k], :k]
+
+        alpha2 = max(d[k], 0.0)
+        if (tol is not None and np.sqrt(alpha2) <= tol) or alpha2 == 0.0:
+            break
+
+        alpha = np.sqrt(alpha2)
+        L[k, k] = alpha
+
+        if k < n - 1:
+            # full column in original indexing, then take permuted tail
+            col_full = col_fn(p[k])          # shape (n,)
+            a_tail = col_full[p[k+1:]]       # shape (n-k-1,)
+            # Schur update
+            if k > 0:
+                schur = L[k+1:, :k] @ L[k, :k]
+                w = (a_tail - schur) / alpha
+            else:
+                w = a_tail / alpha
+            L[k+1:, k] = w
+            d[k+1:] = np.maximum(d[k+1:] - w**2, 0.0)
+
+        r += 1
+
+    return L[:, :r], p, r
+
+
+def PC(A, max_rank=None, tol=None):
+
+    n = A.shape[0]
+    if max_rank is None:
+        max_rank = n
+
+    p = np.arange(n)
+    L = np.zeros((n, max_rank), dtype=A.dtype)
+
+    # residual diagonal d_k = diag( A_{pp} - L_k L_k^T )
+    d = np.diag(A).copy()
+    d = np.maximum(d, 0.0)
+
+    r = 0
+    for k in range(max_rank):
+        # choose pivot
+        j = k + np.argmax(d[k:])
+        if d[j] < 0:
+            d[j] = 0.0
+
+        # swap
+        if j != k:
+            p[[k, j]] = p[[j, k]]
+            d[[k, j]] = d[[j, k]]
+            L[[k, j], :k] = L[[j, k], :k]
+
+        alpha = np.sqrt(max(d[k], 0.0))
+        if tol is not None and alpha <= tol: # below tol
+            break
+        if alpha == 0.0:  # nothing more to add
+            break
+
+        L[k, k] = alpha
+        if k < n - 1:
+            # column of A in the permuted indexing: A[p[k+1:], p[k]]
+            a_col = A[p[k+1:], p[k]]
+            # compute Schur complement piece: w = (a_col - L_{k+1:, :k} @ L[k, :k]) / alpha
+            if k > 0:
+                w = (a_col - L[k+1:, :k] @ L[k, :k]) / alpha
+            else:
+                w = a_col / alpha
+
+            # write into L
+            L[k+1:, k] = w
+            # update residual diagonal
+            d[k+1:] -= w**2
+            d[k+1:] = np.maximum(d[k+1:], 0.0)  # guard against roundoff
+
+        r += 1
+
+    return L[:, :r], p, r
+
+
+def approx_D(eri, D):
+
+    ####
+    # Generating reference data, remove later
+    w = eri.eia.reshape(-1)
+    n = w.shape[0]
+    Dmat = 1./(w[:, None] + w[None, :])
+    print(f'Check symmetry of D (||D - D.T||): {np.linalg.norm(Dmat - Dmat.T)}')
+    print(f'Check PSD of D:\n{np.linalg.eigh(Dmat)[0]}')
+
+    # Computing approximation to D
+    vals, vecs = np.linalg.eigh(Dmat)
+    eps = 1e-8  # or whatever floor you want
+    idx = np.where(vals > eps)[0]
+    M = np.diag(np.sqrt(vals[idx])) @ vecs[:,idx].T
+
+    print(f'\nLow rank via SVD')
+    
+    print(f'Reconstructing D: {np.linalg.norm(Dmat - M.T @ M)} requiring {len(idx)} vecs')
+    print("relative Frobenius error:", np.linalg.norm(Dmat - M.T @ M, 'fro') / np.linalg.norm(Dmat, 'fro'))
+    ####
+    
+    
+    L, p, r = PC(Dmat, len(idx) )
+
+    Aprx = L @ L.T
+    Aperm = Dmat[np.ix_(p, p)]
+    print('\nFull matrix')
+    print(f'rank used: {r}')
+    
+    print(f'Reconstructing D: {np.linalg.norm(Aperm - Aprx)}')
+    print("relative Frobenius error:", np.linalg.norm(Aperm - Aprx, 'fro') / np.linalg.norm(Aperm, 'fro'))
+
+    # Trying matrix free 
+    def diag_fn():
+        return 1.0 / (2.0 * w)  # A_ii
+
+    def col_fn(k):
+        return 1.0 / (w + w[k])
+
+    n = w.size
+
+    L, p, r = MFPC(n, diag_fn, col_fn, max_rank=len(idx))
+
+    Aprx = L @ L.T
+    Aperm = Dmat[np.ix_(p, p)]
+    print('\nMatrix free version')
+    print("rank used:", r)
+
+    print(f'Reconstructing D: {np.linalg.norm(Aperm - Aprx)}')
+    print("relative Frobenius error:", np.linalg.norm(Aperm - Aprx, 'fro') / np.linalg.norm(Aperm, 'fro'))
+    breakpoint()
+
+#####################################
+
+
 if __name__ == "__main__":
 
     mol = gto.Mole()
@@ -61,7 +217,7 @@ if __name__ == "__main__":
     print(act_part)
 
     c_lo = mocas
-#    c_lo = mf.mo_coeff
+    c_lo = mf.mo_coeff
 
     print ("dimension of active hole", len(act_hole)) 
     print ("dimension of active part", len(act_part)) 

@@ -2,6 +2,7 @@ import numpy as np
 from pyscf import lib, df
 from pyscf.ao2mo import _ao2mo
 
+from pyscf.mpcc import mpcc_tools
 
 class ERIs:
 
@@ -28,41 +29,23 @@ class ERIs:
         self.fvv = fock_mo[self.nocc : self.nao, self.nocc : self.nao]
         self.fov = fock_mo[: self.nocc, self.nocc : self.nao]
 
+        # NOTE change convetion to virtual, occupied 
         self.eia = lib.direct_sum(
             "-i+a->ia", np.diag(self.foo), np.diag(self.fvv)
         )
 
-
-        self.D = lib.direct_sum("ia+jb->ijab", self.eia, self.eia)
-        #self.make_eri()
+        # NOTE Shall we keep this call here?
         self._make_df_eris()
+        self._make_df_denominator()
 
-    def make_eri(self):
+    def _make_df_denominator(self):
 
-        Loo = np.empty((self.naux, self.nocc, self.nocc))
-        Lov = np.empty((self.naux, self.nocc, self.nvir))
-        Lvo = np.empty((self.naux, self.nvir, self.nocc))
-        Lvv = np.empty((self.naux, self.nvir, self.nvir))
+        self.dD = mpcc_tools.piv_chol_tensor(self.eia)
+        
+        # NOTE REMOVE THIS LATER!!!
+        self.D = lib.direct_sum("ia+jb->ijab", self.eia, self.eia)
 
-        p1 = 0
-        occ, vir = np.s_[: self.nocc], np.s_[self.nocc :]
-
-        for eri1 in self.with_df.loop():
-            eri1 = lib.unpack_tril(eri1).reshape(-1, self.nao, self.nao)
-            Lpq = lib.einsum("Lab,ap,bq->Lpq", eri1, self.mo_coeff, self.mo_coeff)
-            p0, p1 = p1, p1 + Lpq.shape[0]
-            blk = np.s_[p0:p1]
-            Loo[blk] = Lpq[:, occ, occ]
-            Lov[blk] = Lpq[:, occ, vir]
-            Lvo[blk] = Lpq[:, vir, occ]
-            Lvv[blk] = Lpq[:, vir, vir]
-
-        self.Loo = Loo
-        self.Lov = Lov
-        self.Lvo = Lvo
-        self.Lvv = Lvv
-
-    
+          
     def _make_df_eris(self):
         
         Loo = np.empty((self.naux, self.nocc, self.nocc))
