@@ -164,16 +164,10 @@ def update_amps(ints):
     y = u3bba - u3bba.transpose(1,0,2,3,4,5)
     v += y - y.transpose(0,1,2,4,3,5)
 
-
     u3aaa /=d3aaa 
     u3bbb /=d3bbb 
     u3bba = v/d3bba 
     u3baa = r/d3baa 
-
-    t3 = u3aaa, u3bbb, u3baa, u3bba
-
-    t2 = ints.t2aa, ints.t2ab, ints.t2bb
-    t1 = ints.t1a, ints.t1b
 
     u3aaa_tr = numpy.einsum("IJKABC, iI, jJ, kK, aA, bB, cC -> ijkabc", u3aaa, ints.umat_occ_a,
                           ints.umat_occ_a, ints.umat_occ_a, ints.umat_vir_a, ints.umat_vir_a, ints.umat_vir_a,optimize=True)
