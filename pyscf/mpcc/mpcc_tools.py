@@ -43,7 +43,7 @@ def MFPC(n, diag_fn, col_fn, max_rank=22, tol=None):
 
     return L[:, :r], p, r
 
-def piv_chol_tensor(eia, check = True):
+def piv_chol_tensor(eia, check = False):
         
         ni, na = eia.shape
         w = eia.reshape(-1)

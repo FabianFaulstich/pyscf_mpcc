@@ -217,7 +217,7 @@ if __name__ == "__main__":
     print(act_part)
 
     c_lo = mocas
-    c_lo = mf.mo_coeff
+    #c_lo = mf.mo_coeff
 
     print ("dimension of active hole", len(act_hole)) 
     print ("dimension of active part", len(act_part)) 

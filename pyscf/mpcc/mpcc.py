@@ -43,7 +43,7 @@ class MPCC(lib.StreamObject):
         tol = kwargs.get('tol', 1e-6)
         count_tol = kwargs.get('count_tol', 100)
 
-        t1, t2 = self.lowlevel.init_amps()
+        t1, t2, Y = self.lowlevel.init_amps()
 
         #start an iteration loop here:
         while e_diff > tol and count < count_tol:
@@ -59,9 +59,9 @@ class MPCC(lib.StreamObject):
 
             # NOTE always use t1, and t2
             if (count == 1):
-                t1, t2 = self.lowlevel.kernel() #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
+                t1, t2, Y = self.lowlevel.kernel() #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
             else:
-               t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
+               t1, t2, Y = self.lowlevel.kernel(t1, t2, Y) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
 
 
             t1_act = []

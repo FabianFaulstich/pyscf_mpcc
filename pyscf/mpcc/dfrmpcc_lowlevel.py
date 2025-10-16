@@ -57,23 +57,28 @@ class MPCC_LL:
     def nocc(self):
         return self.mf.mol.nelec[0]
 
-    def kernel(self, t1=None, t2=None):
+    def kernel(self, t1=None, t2=None, Y=None):
 
         # NOTE Do we want to initialize t1 and t2?
         # WARNING t2 is incorrectly initialized here!
         if t1 is None and t2 is None and Y is None:
-            t1, t2 = self.init_amps() # so far this is an N^5 step. So potentially initilaization should also be done in the factorized manner.
-            _, Y = self.init_amps_fact()
+            
+            # NOTE So far this is an N^5 step. 
+            # So potentially initilaization should also be done in the factorized manner.
+            t1, t2, Y = self.init_amps() 
 
-            t2_app = lib.einsum("LRia, LRjb -> ijab", Y, Y)    
+            # NOTE remove this once df it running
+            if False:
+                t2_app = lib.einsum("LRai, LRbj -> ijab", Y, Y)    
 
-            fro_rel = np.linalg.norm(t2 - t2_app) / np.linalg.norm(t2)
-            max_abs = np.max(np.abs(t2 - t2_app))
+                fro_rel = np.linalg.norm(t2 - t2_app) / np.linalg.norm(t2)
+                max_abs = np.max(np.abs(t2 - t2_app))
 
-            print(f'Test for init:')
-            print(f"4th-order relative Frobenius error: {fro_rel:.3e}")
-            print(f"4th-order max abs entry error:     {max_abs:.3e}")
-       
+                print(f'Test for init:')
+                print(f"4th-order relative Frobenius error: {fro_rel:.3e}")
+                print(f"4th-order max abs entry error:     {max_abs:.3e}")
+                breakpoint()
+
         err = np.inf
         count = 0
         adiis = lib.diis.DIIS()
@@ -81,29 +86,36 @@ class MPCC_LL:
         e_corr = None
         while err > self.ll_con_tol and count < self.ll_max_its:
 
-            res, e_corr, t1_new, t2_new, Y_new = self.update_amps(t1, Y, t2)
+            res, t1_new, Y_new, Yt = self.update_amps(t1, Y)
             if self.diis:
                 # NOTE no t2 diis
-                t1_new, t2_new = self.run_diis(t1_new, t2_new, adiis)
+                t1_new  = self.run_diis(t1_new, adiis)
             else:
-                t1_new, t2_new = t1_new, t2_new
+                t1_new = t1_new
 
-            t1, t2, Y = t1_new, t2_new, Y_new
-            t1_new, t2_new = None, None  # free memory
+            t1, Y = t1_new, Y_new
+            t1_new, Y_new = None, None  # free memory
             
             count += 1
             err = res
             # NOTE change this to logger!
-            print(f"It {count}; correlation energy {e_corr:.6e}; residual {res:.6e}")
+            print(f"It {count}; residual {res:.6e}")
 
+        
+        # NOTE computing energy
+        t2 = -lib.einsum("LRai, LRbj -> ijab", Y, Y)    
+        e_corr = self.energy(t1, t2) 
+
+        print(f"Correlation Energy: {e_corr}")
+        breakpoint()
         self._e_corr = e_corr
         self._e_tot = self.mf.e_tot + self._e_corr
         #Run update amplitudes to get the intermediate quantities
         #imds_t1 = self.get_t1_imds(t1)
 
-        return t1, t2
+        return t1, t2, Y
 
-    def update_amps(self, t1, Yin, t2):
+    def update_amps(self, t1, Y):
         """
         Following Table XXX in Future Paper
         """
@@ -121,7 +133,7 @@ class MPCC_LL:
         #t2 += t2/self._eris.D
 
         # Step 4 
-        Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1, Yin)
+        Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1, Y)
 
         # NOTE discuss the grouping of actions, 5-7/8 seems to be fit for one step
         # Step 5 
@@ -134,28 +146,17 @@ class MPCC_LL:
         Joo, Jvv = self.update_J(Joo, Jvo, Uoo, Uvv)
 
         # Step 9 
-        Y, t2_new = self.update_Y(Joo, Jvo, D, Uvv, Uoo, t2, Yin)
-        res2 = t2 - t2_new 
+        Y, Yt = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
 
-        ΔE = self.energy(t1, t2)  # use the low-level energy calculation
+        res = Ω.T / self._eris.eia
+        t1 -= res
+ 
+        # NOTE computing energy
+        t2 = -lib.einsum("LRai, LRbj -> ijab", Y, Y)    
+        e_corr = self.energy(t1, t2) 
+        print(f"Correlation energy: {e_corr}")
 
-        #make the active residue to go to zero
-        for frag in self.frags:
-            act_hole = frag[0]
-            act_particle = frag[1]
-            Ω[np.ix_(act_particle, act_hole)] = 0.0
-            #rows, cols = np.ix_(act_hole, act_particle)
-            #Y[:,:,rows, cols] = 0
-            res2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
-
-        res1 = Ω.T / self._eris.eia
-        res2 = res2 / self._eris.D
-        res = np.linalg.norm(res1) + np.linalg.norm(res2)
-
-        t1 += res1
-        t2 += res2
-
-        return res, ΔE, t1, t2, Y
+        return np.linalg.norm(res), t1, Y, Yt
     
     @dataclass
     class _IMDS_T1:
@@ -181,30 +182,24 @@ class MPCC_LL:
         #store Joo, Jvo, Foo etc..
         imds_t1 = self._IMDS_T1(Joo=Joo, Jvv=Jvv, Jov=Jvo, Foo=Foo, Fvv=Fvv, Fov=Fov, Xoo=Xoo, Xvo=Xvo)
         return imds_t1
-    def run_diis(self, t1, t2, adiis):
+    
+    def run_diis(self, t1, adiis):
 
-        vec = self.amplitudes_to_vector(t1, t2)
-        t1, t2 = self.vector_to_amplitudes(adiis.update(vec))
+        vec = self.amplitudes_to_vector(t1)
+        t1 = self.vector_to_amplitudes(adiis.update(vec))
 
-        return t1, t2
+        return t1
 
-    def amplitudes_to_vector(self, t1, t2, out=None):
+    def amplitudes_to_vector(self, t1):
         nov = self.nocc * self.nvir
-        size = nov + nov * (nov + 1) // 2
-        vector = np.ndarray(size, t1.dtype, buffer=out)
-        vector[:nov] = t1.ravel()
-        lib.pack_tril(t2.transpose(0, 2, 1, 3).reshape(nov, nov), out=vector[nov:])
+        vector = t1.ravel()
         return vector
 
     def vector_to_amplitudes(self, vector):
         nov = self.nocc * self.nvir
         t1 = vector[:nov].copy().reshape((self.nocc, self.nvir))
-        # filltriu=lib.SYMMETRIC because t2[iajb] == t2[jbia]
-        t2 = lib.unpack_tril(vector[nov:], filltriu=lib.SYMMETRIC)
-        t2 = t2.reshape(self.nocc, self.nvir, self.nocc, self.nvir).transpose(
-            0, 2, 1, 3
-        )
-        return t1, np.asarray(t2, order="C")
+        return t1
+
 
     def get_X(self, t1):
 
@@ -266,13 +261,13 @@ class MPCC_LL:
 
         Ω += lib.einsum("ib,ab -> ai", t1, Fvv_tmp)
         Ω -= lib.einsum("ka,ki -> ai", t1, Foo_tmp)
-       
+      
         # Here adjust to only update the environment part 
-        Ω_temp = lib.einsum("LRjb, jb -> LR", Y, Fov)
-        Ω += 2* lib.einsum("LR, LRia -> ai", Ω_temp, Y) 
+        Ω_temp = lib.einsum("LRjb, bj -> LR", Y, Fov)
+        Ω += 2* lib.einsum("LR, LRai -> ai", Ω_temp, Y) 
 
-        Ω_temp = lib.einsum("LRib, jb -> LRij", Y, Fov)
-        Ω -= lib.einsum("LRij, LRja", Ω_temp, Y)
+        Ω_temp = lib.einsum("LRbi, jb -> LRij", Y, Fov)
+        Ω -= lib.einsum("LRij, LRaj", Ω_temp, Y)
 
         del Foo_tmp, Fvv_tmp, Ω_temp
 
@@ -286,6 +281,12 @@ class MPCC_LL:
         return Foo, Fvv
 
     def get_D(self, Foo, Fvv):
+
+        Foo = 0.5 * (Foo + Foo.T)
+        Fvv = 0.5 * (Fvv + Fvv.T)
+
+        print(f"Symmetry in Foo: {np.linalg.norm(Foo - Foo.T)}")
+        print(f"Symmetry in Fvv: {np.linalg.norm(Fvv - Fvv.T)}")
 
         e_oo, Uoo = np.linalg.eigh(Foo)
         e_vv, Uvv = np.linalg.eigh(Fvv)
@@ -303,14 +304,13 @@ class MPCC_LL:
 
         return Joo, Jvo
 
-    def update_Y(self, Joo, Jvo, D, Uvv, Uoo, t2, Yin):
+    def update_Y(self, Joo, Jvo, D, Uvv, Uoo, Y):
 
-        Y = Jvo[:, None, :, :] *D.transpose(2, 1, 0)[None, :, :, :]
+        Yt = Jvo[:, None, :, :] *D.transpose(2, 1, 0)[None, :, :, :]
 
         # NOTE REMOVE THE CHECK IF WE ARE HAPPY!!!
-        check = True
-        if check:
-            t2_app = lib.einsum("LRai, LRbj -> ijab", Y, Y)    
+        if False:
+            t2_app = lib.einsum("LRai, LRbj -> ijab", Yt, Yt)    
             
             fro_rel = np.linalg.norm(t2 - t2_app) / np.linalg.norm(t2)
             max_abs = np.max(np.abs(t2 - t2_app))
@@ -319,8 +319,8 @@ class MPCC_LL:
             print(f"4th-order relative Frobenius error: {fro_rel:.3e}")
             print(f"4th-order max abs entry error:     {max_abs:.3e}")
 
-        Y = lib.einsum("LRai, ba, ji -> LRbj", Y, Uvv, Uoo)
-        return Y, t2_app
+        Y = lib.einsum("LRbj, ab, ij -> LRai", Yt, Uvv, Uoo)
+        return Y, Yt
 
     def update_t2(self, t2, Jvo, Foo, Fvv, Fov, t1):
 
@@ -347,11 +347,12 @@ class MPCC_LL:
     def init_amps(self):
 
         # NOTE Check the initialization here!
-        t2 = lib.einsum("Lia,Ljb->ijab", self._eris.Lov, self._eris.Lov)
+        t2 = -lib.einsum("Lia,Ljb->ijab", self._eris.Lov, self._eris.Lov)
         t2 /= self._eris.D     
-        t1 = self._eris.fov/self._eris.eia
-
-        return t1, t2
+        t1 = -self._eris.fov/self._eris.eia
+        Y = -self._eris.Lov.transpose(0,2,1)[:, None, :, :] *self._eris.dD.transpose(2, 1, 0)[None, :, :, :]
+        return t1, t2, Y
+    
     def get_energy(self, t1, t2):
         """
         Calculate the MPCC energy using the current amplitudes.
@@ -365,7 +366,6 @@ class MPCC_LL:
     
     def energy(self, t1, t2):                                                     
        '''RCCSD correlation energy'''                                                               
-       
        fock = self._eris.fov.copy()
        e = 2*lib.einsum('ia,ia', fock, t1)    
        tau = lib.einsum('ia,jb->ijab',t1,t1)                                                         
