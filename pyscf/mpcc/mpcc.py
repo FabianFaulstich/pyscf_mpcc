@@ -62,7 +62,7 @@ class MPCC(lib.StreamObject):
                 t1, t2, Y = self.lowlevel.kernel() #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
             else:
                t1, t2, Y = self.lowlevel.kernel(t1, t2, Y) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
-
+            breakpoint()
 
             t1_act = []
             t2_act = []

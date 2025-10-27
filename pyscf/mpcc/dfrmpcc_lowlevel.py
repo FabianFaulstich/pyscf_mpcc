@@ -77,7 +77,6 @@ class MPCC_LL:
                 print(f'Test for init:')
                 print(f"4th-order relative Frobenius error: {fro_rel:.3e}")
                 print(f"4th-order max abs entry error:     {max_abs:.3e}")
-                breakpoint()
 
         err = np.inf
         count = 0
@@ -107,7 +106,6 @@ class MPCC_LL:
         e_corr = self.energy(t1, t2) 
 
         print(f"Correlation Energy: {e_corr}")
-        breakpoint()
         self._e_corr = e_corr
         self._e_tot = self.mf.e_tot + self._e_corr
         #Run update amplitudes to get the intermediate quantities
