@@ -48,7 +48,8 @@ class MPCC(lib.StreamObject):
         #start an iteration loop here:
         while e_diff > tol and count < count_tol:
             count += 1
-
+            
+            print(f'MPCC macro iteration: {count}')
             #get the active fragments
             #frags = self.lowlevel.get_active_fragments()
             #frags = [frag]  #for now we will use only one fragment, but later we can use multiple fragments
@@ -62,8 +63,8 @@ class MPCC(lib.StreamObject):
                 t1, t2, Y = self.lowlevel.kernel() #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
             else:
                t1, t2, Y = self.lowlevel.kernel(t1, t2, Y) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
-            breakpoint()
 
+            breakpoint()
             t1_act = []
             t2_act = []
             # Y_act = []
@@ -105,7 +106,7 @@ class MPCC(lib.StreamObject):
                frag_i += 1
 
             #calculate the energy:
-            e_mpcc = self.lowlevel.energy(t1, t2)
+            e_mpcc = self.lowlevel.get_energy(t1, t2)
             e_diff = abs(e_mpcc - e_mpcc_prev)
             e_mpcc_prev = e_mpcc
             print(f"It {count}; Energy {e_mpcc:.6e}; Energy difference {e_diff:.6e}")

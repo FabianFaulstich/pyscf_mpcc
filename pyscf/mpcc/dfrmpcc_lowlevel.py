@@ -103,7 +103,7 @@ class MPCC_LL:
         
         # NOTE computing energy
         t2 = -lib.einsum("LRai, LRbj -> ijab", Y, Y)    
-        e_corr = self.energy(t1, t2) 
+        e_corr = self.get_energy(t1, t2) 
 
         print(f"Correlation Energy: {e_corr}")
         self._e_corr = e_corr
@@ -149,9 +149,9 @@ class MPCC_LL:
         res = Ω.T / self._eris.eia
         t1 -= res
  
-        # NOTE computing energy
+        # NOTE computing correlation energy
         t2 = -lib.einsum("LRai, LRbj -> ijab", Y, Y)    
-        e_corr = self.energy(t1, t2) 
+        e_corr = self.get_energy(t1, t2) 
         print(f"Correlation energy: {e_corr}")
 
         return np.linalg.norm(res), t1, Y, Yt
@@ -350,19 +350,8 @@ class MPCC_LL:
         t1 = -self._eris.fov/self._eris.eia
         Y = -self._eris.Lov.transpose(0,2,1)[:, None, :, :] *self._eris.dD.transpose(2, 1, 0)[None, :, :, :]
         return t1, t2, Y
-    
-    def get_energy(self, t1, t2):
-        """
-        Calculate the MPCC energy using the current amplitudes.
-        """
-        X, Xoo, Xvo = self.get_X(t1)
-        Joo, Jvo = self.get_J(Xoo, Xvo, t1)
-        Yvo = self.get_t2_Yvo(t2)
-        e1 = lib.einsum("Lij,ja->Lai", Xoo, t1) + lib.einsum("L,ia->Lai", X, t1) + Jvo
-        e_corr = lib.einsum("Lai,Lai", e1, Yvo)
-        return e_corr
-    
-    def energy(self, t1, t2):                                                     
+       
+    def get_energy(self, t1, t2):                                                     
        '''RCCSD correlation energy'''                                                               
        fock = self._eris.fov.copy()
        e = 2*lib.einsum('ia,ia', fock, t1)    
