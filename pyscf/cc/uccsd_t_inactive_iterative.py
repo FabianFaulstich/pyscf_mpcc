@@ -714,11 +714,20 @@ def iterative_kernel(mcc, eris, t1, t2, t3, act_hole, act_particle):
     t3baa[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])] = 0.0 
     t3bba[numpy.ix_(act_hole[1], act_hole[1], act_hole[0], act_particle[1], act_particle[1], act_particle[0])] = 0.0 
 
+#   t2aa[numpy.ix_(act_hole[0], act_hole[0], act_particle[0], act_particle[0])] *= 0.0 
+#   t2bb[numpy.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])] *= 0.0 
+#   t2ab[numpy.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])] *= 0.0 
+
+#   t1a[numpy.ix_(act_hole[0], act_particle[0])] *= 0.0 
+#   t1b[numpy.ix_(act_hole[1], act_particle[1])] *= 0.0 
+
+#   t2 = t2aa, t2ab, t2bb
+#   t1 = t1a, t1b 
     t3 = t3aaa, t3bbb, t3baa, t3bba
 
     e_triples = lhs_env_triples(ints, t1, t2, t3) 
     print("Inactive contribution", e_triples)
-    return e_triples
+    return t3, e_triples
 
 
 def noniterative_kernel(mcc, eris, t1, t2, t3, act_hole, act_particle): 
@@ -851,9 +860,19 @@ def noniterative_kernel(mcc, eris, t1, t2, t3, act_hole, act_particle):
 
     t3 = x3aaa, x3bbb, x3baa, x3bba
 
+    t2aa[numpy.ix_(act_hole[0], act_hole[0], act_particle[0], act_particle[0])] = 0.0 
+    t2bb[numpy.ix_(act_hole[1], act_hole[1], act_particle[1], act_particle[1])] = 0.0 
+    t2ab[numpy.ix_(act_hole[0], act_hole[1], act_particle[0], act_particle[1])] = 0.0 
+
+    t1a[numpy.ix_(act_hole[0], act_particle[0])] = 0.0 
+    t1b[numpy.ix_(act_hole[1], act_particle[1])] = 0.0 
+
+    t2 = t2aa, t2ab, t2bb
+    t1 = t1a, t1b 
+
     e_triples = lhs_env_triples(ints, t1, t2, t3) 
     print("Inactive contribution", e_triples)
-    return e_triples
+    return t3, e_triples
 
 
 def kernel_bareV(mcc, eris, act_hole, act_particle, t1=None, t2=None):

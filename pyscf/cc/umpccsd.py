@@ -1235,10 +1235,36 @@ class UCCSD(ccsd.CCSD):
         if l1 is None: l1 = self.l1
         if l2 is None: l2 = self.l2
         if eris is None: eris = self.ao2mo(self.mo_coeff)
-        return uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+#       return uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+#       t3_env, energy = uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
 #       return uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+        t3_env, energy = uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+        return energy
 #       return uccsd_t_inactive_iterative.kernel_bareV(self, eris, act_hole, act_particle, t1, t2)
     uccsd_t = ccsd_t
+
+
+    def ccsd_t_amplitudes(self, act_hole, act_particle, t3, t1=None, t2=None, l1=None, l2=None, eris=None):
+        from pyscf.cc import uccsd_t_inactive_iterative
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if l1 is None: l1 = self.l1
+        if l2 is None: l2 = self.l2
+        if eris is None: eris = self.ao2mo(self.mo_coeff)
+#       t3_env, energy = uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+        t3_env, energy = uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+        return t3_env
+
+
+    def save_env_imds(self, act_hole, act_particle, t3, t1=None, t2=None, eris=None):
+        from pyscf.cc import umpcc_t_slow
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if eris is None: eris = self.ao2mo(self.mo_coeff)
+        umpcc_t_slow.get_t3_to_imds_inactive(self, t3, t1, eris, act_hole, act_particle)
+        umpcc_t_slow.update_t3_res_inactive(self, t1, t2, t3, eris, act_hole, act_particle)
+        return 0
+
 
 #here I will write a few functions that account for perturbative corrections..  
 
