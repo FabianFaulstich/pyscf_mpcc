@@ -980,12 +980,6 @@ def get_t3_to_imds_inactive(mcc, t3, t1, eris, act_hole, act_particle):
     inact_particle = (inact_particle_a, inact_particle_b)
     inact_hole = (inact_hole_a, inact_hole_b)
 
-#set active contributions of t3 to zero
-    t3aaa[numpy.ix_(act_hole[0], act_hole[0], act_hole[0], act_particle[0], act_particle[0], act_particle[0])] = 0.0
-    t3bbb[numpy.ix_(act_hole[1], act_hole[1], act_hole[1], act_particle[1], act_particle[1], act_particle[1])] = 0.0
-    t3baa[numpy.ix_(act_hole[1], act_hole[0], act_hole[0], act_particle[1], act_particle[0], act_particle[0])] = 0.0
-    t3bba[numpy.ix_(act_hole[1], act_hole[1], act_hole[0], act_particle[1], act_particle[1], act_particle[0])] = 0.0
-
     # get the active dimensions
 
     eris_ovOV = numpy.asarray(eris.ovOV)

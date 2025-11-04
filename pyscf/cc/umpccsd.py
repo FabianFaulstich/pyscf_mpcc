@@ -1238,7 +1238,8 @@ class UCCSD(ccsd.CCSD):
 #       return uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
 #       t3_env, energy = uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
 #       return uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
-        t3_env, energy = uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+#       t3_env, energy = uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+        energy = uccsd_t_inactive_iterative.inactive_energy(self, eris, t1, t2, t3, act_hole, act_particle)
         return energy
 #       return uccsd_t_inactive_iterative.kernel_bareV(self, eris, act_hole, act_particle, t1, t2)
     uccsd_t = ccsd_t
