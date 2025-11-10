@@ -117,8 +117,10 @@ class MPCC_LL:
             act_particle = frag[1]
             inact_particle = np.delete(range(n_vir), act_particle)
 
-            t2_new[np.ix_(inact_hole, act_hole, act_particle, act_particle)] = dt2_ll_o[k]
-            t2_new[np.ix_(act_hole, act_hole, inact_particle, act_particle)] = dt2_ll_v[k]
+            t2_new[np.ix_(act_hole, act_hole, act_particle, act_particle)] = t2[k]
+
+            t2_new[np.ix_(inact_hole, act_hole, act_particle, act_particle)] += dt2_ll_o[k]
+            t2_new[np.ix_(act_hole, act_hole, inact_particle, act_particle)] += dt2_ll_v[k]
 
         
         e_corr = self.get_energy(t1, t2_new) 
@@ -129,6 +131,7 @@ class MPCC_LL:
         #Run update amplitudes to get the intermediate quantities
         #imds_t1 = self.get_t1_imds(t1)
 
+        breakpoint()
         return t1, t2_new, Y
 
     def update_amps(self, t1, t2, Y):
