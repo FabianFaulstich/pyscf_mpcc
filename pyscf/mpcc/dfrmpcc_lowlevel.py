@@ -1,3 +1,4 @@
+from numpy.lib.index_tricks import ix_
 from pyscf import lib, df
 from pyscf.lib import logger
 import numpy as np
@@ -61,6 +62,7 @@ class MPCC_LL:
 
         # NOTE Do we want to initialize t1 and t2?
         # WARNING t2 is incorrectly initialized here!
+        '''
         if t1 is None and t2 is None and Y is None:
             
             # NOTE So far this is an N^5 step. 
@@ -84,6 +86,7 @@ class MPCC_LL:
                 print(f'Test for init:')
                 print(f"4th-order relative Frobenius error: {fro_rel:.3e}")
                 print(f"4th-order max abs entry error:     {max_abs:.3e}")
+        '''
 
         err = np.inf
         count = 0
@@ -107,6 +110,7 @@ class MPCC_LL:
             # NOTE change this to logger!
             print(f"It {count}; residual {res:.6e}")
 
+        print(f'T2 active correction {np.linalg.norm(dt2_ll_o)} (occ) and {np.linalg.norm(dt2_ll_v)} (vir)')
 
         # NOTE computing energy
         t2_new = -lib.einsum("LRai, LRbj -> ijab", Y, Y)
@@ -121,7 +125,7 @@ class MPCC_LL:
 
             t2_new[np.ix_(inact_hole, act_hole, act_particle, act_particle)] += dt2_ll_o[k]
             t2_new[np.ix_(act_hole, act_hole, inact_particle, act_particle)] += dt2_ll_v[k]
-
+            
         
         e_corr = self.get_energy(t1, t2_new) 
 
@@ -131,7 +135,6 @@ class MPCC_LL:
         #Run update amplitudes to get the intermediate quantities
         #imds_t1 = self.get_t1_imds(t1)
 
-        breakpoint()
         return t1, t2_new, Y
 
     def update_amps(self, t1, t2, Y):
@@ -167,65 +170,9 @@ class MPCC_LL:
         # Step 9 
         Y, Yt = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
 
-        dt2_ll_o = []
-        dt2_ll_v = []
-        n_aux, n_rank, n_vir, n_occ = Y.shape
-        for k, frag in enumerate(self.frags):
-            act_hole = frag[0]
-            inact_hole = np.delete(range(n_occ), act_hole)
-            act_particle = frag[1]
-            inact_particle = np.delete(range(n_vir), act_particle)
-
-            
-            energy_den_o = lib.direct_sum("ia+jb->ijab", self._eris.eia[np.ix_(inact_hole, act_particle)], self._eris.eia[np.ix_(act_hole, act_particle)])
-            energy_den_v = lib.direct_sum("ia+jb->ijab", self._eris.eia[np.ix_(act_hole, inact_particle)], self._eris.eia[np.ix_(act_hole, act_particle)])
-
-            Ω[np.ix_(act_particle, act_hole)] = 0.0
-              
-            # Step 10  
-            #NOTE input t2_act and correct Y
-            dt2 = -lib.einsum("LRai, LRbj -> ijab", Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)], Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)])    
-            Dt2 = t2[k] - dt2  
-  
-            diff_t2_o = -np.einsum('kI, kjab -> Ijab ',Foo[np.ix_(act_hole, range(n_occ))], Dt2)
-            diff_t2_o -=  np.einsum('kJ, ikab -> Jiab ',Foo[np.ix_(act_hole, range(n_occ))], Dt2)
-  
-            diff_t2_v = np.einsum('cA, ijcb -> ijAb ',Fvv[np.ix_(act_particle, range(n_vir))], Dt2)
-            diff_t2_v += np.einsum('cB, ijac -> ijBa ',Fvv[np.ix_(act_particle, range(n_vir))], Dt2)
-                 
-            t2_corr_o = np.copy(diff_t2_o[np.ix_(inact_hole, act_hole, act_particle, act_particle)])
-            # t2_corr_o += diff_t2_o[np.ix_(act_hole, inact_hole, act_particle, act_particle)].transpose((1,0,2,3))
- 
-            t2_corr_v = np.copy(diff_t2_v[np.ix_(act_hole, act_hole, inact_particle, act_particle)])
-            # t2_corr_v += diff_t2_v[np.ix_(act_hole, act_hole, act_particle, inact_particle)].transpose((0,1,3,2))
-           
-            acc = np.infty
-            t2_corr_o_new = np.copy(t2_corr_o)
-            t2_corr_v_new = np.copy(t2_corr_v)
-
-            count = 0 
-            tol = 1e-6
-            while acc > tol:
-                t2_corr_o_new -= np.einsum('jk,ikab -> ijab',Foo[np.ix_(act_hole, act_hole)], t2_corr_o)
-                t2_corr_o_new -= np.einsum('ik,kjab -> ijab',Foo[np.ix_(inact_hole, inact_hole)], t2_corr_o)
-                t2_corr_o_new = t2_corr_o_new / energy_den_o
-                
-                t2_corr_v_new += np.einsum('bc,ijac -> ijab', Fvv[np.ix_(act_particle, act_particle)], t2_corr_v)
-                t2_corr_v_new += np.einsum('ac,ijcb -> ijab', Fvv[np.ix_(inact_particle, inact_particle)], t2_corr_v)
-                t2_corr_v_new = t2_corr_v_new / energy_den_v
-
-                acc_o = np.linalg.norm(t2_corr_o_new - t2_corr_o)
-                acc_v = np.linalg.norm(t2_corr_v_new - t2_corr_v)
-                acc = acc_o + acc_v
-                t2_corr_o -= t2_corr_o_new
-                t2_corr_v -= t2_corr_v_new
-
-           
-            dt2_ll_o.append(t2_corr_o)
-            dt2_ll_v.append(t2_corr_v)
-
-        # Step 11 use corrected t2 active to correct Omega
-
+        # Step 10 & 11
+        dt2_ll_o, dt2_ll_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2, Y, Ω)
+       
         res = Ω.T / self._eris.eia
         t1 -= res
 
@@ -290,17 +237,6 @@ class MPCC_LL:
         )
 
         return Joo, Jvo
-
-#    def get_J_all(self, Xoo, Xvo, t1):
-
-#        Joo = Xoo + self._eris.Loo
-#        Jvo = (
-#            Xvo + self._eris.Lvo - lib.einsum("Lji,ja->Lai", Joo, t1)
-#        )
-
-#        Jvv = self._eris.Lvv - lib.einsum("Lkb,ka->Lab", self._eris.Lov, t1) 
-
-#        return Joo, Jvo, Jvv
 
     def get_F(self, t1, X, Xoo, Xvo):
 
@@ -393,20 +329,80 @@ class MPCC_LL:
         Y = lib.einsum("LRbj, ab, ij -> LRai", Yt, Uvv, Uoo)
         return Y, Yt
 
-    def update_t2(self, t2, Jvo, Foo, Fvv, Fov, t1):
-
-        Foo_tmp = Foo.copy()
-        Fvv_tmp = Fvv.copy() 
-
-        Foo_tmp += lib.einsum("ic,jc->ij",Fov,t1)
-        Fvv_tmp -= lib.einsum("lb,la->ab",Fov,t1)
+    def include_t2_active(self, Foo, Fvv, Fov, t2_act, Y, Ω, tol = 1e-6, count_tol = 100):
         
-        tmp  = lib.einsum("bc,ijac->ijab", Fvv_tmp, t2)
-        tmp -= lib.einsum("mi,mjab->ijab", Foo_tmp, t2)
-        res2 = tmp + tmp.transpose(1,0,3,2)
-        res2 += lib.einsum("Lai,Lbj->ijab", Jvo, Jvo)
+        Δt2s_o = [] 
+        Δt2s_v = [] 
 
-        return res2
+        n_aux, n_rank, n_vir, n_occ = Y.shape
+        for k, frag in enumerate(self.frags):
+
+            # FIXME once fragmentation is assigned, compute these once!!!
+            act_hole = frag[0]
+            inact_hole = np.delete(range(n_occ), act_hole)
+            act_particle = frag[1]
+            inact_particle = np.delete(range(n_vir), act_particle)
+ 
+            eia_o = lib.direct_sum("Ia+jb->Ijab", 
+                                   self._eris.eia[np.ix_(inact_hole, act_particle)], 
+                                   self._eris.eia[np.ix_(act_hole, act_particle)])
+            eia_v = lib.direct_sum("iA+jb->ijAb", 
+                                   self._eris.eia[np.ix_(act_hole, inact_particle)], 
+                                   self._eris.eia[np.ix_(act_hole, act_particle)])
+
+            # NOTE This is the truly iterative part
+            # Step 10  
+            Ω[np.ix_(act_particle, act_hole)] = 0.0
+
+            δt2 = -lib.einsum("LRai, LRbj -> ijab", 
+                               Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)], 
+                               Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)])    
+            Δt2 = t2_act[k] - δt2 
+  
+            Δt2_o = -np.einsum('kI, kjab -> Ijab ',Foo[np.ix_(act_hole, inact_hole)], Δt2)
+            Δt2_o -=  np.einsum('kJ, ikab -> Jiab ',Foo[np.ix_(act_hole, inact_hole)], Δt2)
+  
+            Δt2_v = np.einsum('cA, ijcb -> ijAb ',Fvv[np.ix_(act_particle, inact_particle)], Δt2)
+            Δt2_v += np.einsum('cB, ijac -> ijBa ',Fvv[np.ix_(act_particle, inact_particle)], Δt2)
+                 
+            Δt2_o_it = np.copy(Δt2_o)
+            Δt2_v_it = np.copy(Δt2_v)
+
+            count = 0 
+            acc = np.infty
+            while (acc > tol and count< count_tol):
+                Δt2_o_it -= np.einsum('jk,ikab -> ijab',Foo[np.ix_(act_hole, act_hole)], Δt2_o)
+                Δt2_o_it -= np.einsum('ik,kjab -> ijab',Foo[np.ix_(inact_hole, inact_hole)], Δt2_o)
+                Δt2_o_it = Δt2_o_it / eia_o
+                
+                Δt2_v_it += np.einsum('bc,ijac -> ijab', Fvv[np.ix_(act_particle, act_particle)], Δt2_v)
+                Δt2_v_it += np.einsum('ac,ijcb -> ijab', Fvv[np.ix_(inact_particle, inact_particle)], Δt2_v)
+                Δt2_v_it = Δt2_v_it / eia_v
+
+                acc_o = np.linalg.norm(Δt2_o_it - Δt2_o)
+                acc_v = np.linalg.norm(Δt2_v_it - Δt2_v)
+                acc = acc_o + acc_v
+                Δt2_o -= Δt2_o_it 
+                Δt2_v -= Δt2_v_it 
+
+                count += 1
+            
+            print(f'    Iter. T2 correction finished in {count}/{count_tol} steps at {acc:.2e} accuracy.')
+
+            Δt2s_o.append(Δt2_o)
+            Δt2s_v.append(Δt2_v)
+
+            # Step 11 use t2 active correction to improve Ω
+
+            t2_antisym = 2.0*Δt2_o - np.transpose(Δt2_o, (0, 1, 3, 2))
+            Ω[np.ix_(act_particle, inact_hole)] += np.einsum("Ijab,jb -> aI", t2_antisym, Fov[np.ix_(act_hole, act_particle)])
+  
+            t2_antisym = 2.0*Δt2_v - np.transpose(Δt2_v, (1, 0, 2, 3))
+            Ω[np.ix_(inact_particle, act_hole)] += np.einsum("ijAb,jb -> Ai", t2_antisym, Fov[np.ix_(act_hole, act_particle)])
+
+            return Δt2s_o, Δt2s_v , Ω
+            
+
 
     def init_amps_fact(self):
        
