@@ -58,16 +58,11 @@ class MPCC(lib.StreamObject):
             #    print('No active fragments found. Exiting loop.')
             #    break
 
-            # NOTE always use t1, and t2
-            if (count == 1):
-                t1, t2, Y = self.lowlevel.kernel() #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
-            else:
-               t1, t2, Y = self.lowlevel.kernel(t1, t2, Y) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
+            if (count > 1):
+               t1, t2, Y = self.lowlevel.kernel(t1, t2_act, Y) 
 
-            breakpoint()
             t1_act = []
             t2_act = []
-            # Y_act = []
 
             #the following loop is parallelizable over fragments
             for frag in self.frags: 

@@ -66,6 +66,13 @@ class MPCC_LL:
             # NOTE So far this is an N^5 step. 
             # So potentially initilaization should also be done in the factorized manner.
             t1, t2, Y = self.init_amps() 
+            
+            t2_new = []
+            for frag in self.frags:
+                act_hole = frag[0]
+                act_particle = frag[1]
+                t2_new.append(t2[np.ix_(act_hole, act_hole, act_particle, act_particle)])
+            t2 = t2_new
 
             # NOTE remove this once df it running
             if False:
@@ -85,7 +92,7 @@ class MPCC_LL:
         e_corr = None
         while err > self.ll_con_tol and count < self.ll_max_its:
 
-            res, t1_new, Y_new, Yt = self.update_amps(t1, Y)
+            res, t1_new, dt2_ll_o, dt2_ll_v, Y_new, Yt = self.update_amps(t1, t2, Y)
             if self.diis:
                 # NOTE no t2 diis
                 t1_new  = self.run_diis(t1_new, adiis)
@@ -100,10 +107,21 @@ class MPCC_LL:
             # NOTE change this to logger!
             print(f"It {count}; residual {res:.6e}")
 
-        
+
         # NOTE computing energy
-        t2 = -lib.einsum("LRai, LRbj -> ijab", Y, Y)    
-        e_corr = self.get_energy(t1, t2) 
+        t2_new = -lib.einsum("LRai, LRbj -> ijab", Y, Y)
+        n_aux, n_rank, n_vir, n_occ = Y.shape
+        for k, frag in enumerate(self.frags):
+            act_hole = frag[0]
+            inact_hole = np.delete(range(n_occ), act_hole)
+            act_particle = frag[1]
+            inact_particle = np.delete(range(n_vir), act_particle)
+
+            t2_new[np.ix_(inact_hole, act_hole, act_particle, act_particle)] = dt2_ll_o[k]
+            t2_new[np.ix_(act_hole, act_hole, inact_particle, act_particle)] = dt2_ll_v[k]
+
+        
+        e_corr = self.get_energy(t1, t2_new) 
 
         print(f"Correlation Energy: {e_corr}")
         self._e_corr = e_corr
@@ -111,9 +129,9 @@ class MPCC_LL:
         #Run update amplitudes to get the intermediate quantities
         #imds_t1 = self.get_t1_imds(t1)
 
-        return t1, t2, Y
+        return t1, t2_new, Y
 
-    def update_amps(self, t1, Y):
+    def update_amps(self, t1, t2, Y):
         """
         Following Table XXX in Future Paper
         """
@@ -141,20 +159,74 @@ class MPCC_LL:
         D, Uoo, Uvv = self.get_D(Foo, Fvv)
 
         # Step 8
-        Joo, Jvv = self.update_J(Joo, Jvo, Uoo, Uvv)
+        Jvo = self.update_J(Jvo, Uoo, Uvv)
 
         # Step 9 
         Y, Yt = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
 
+        dt2_ll_o = []
+        dt2_ll_v = []
+        n_aux, n_rank, n_vir, n_occ = Y.shape
+        for k, frag in enumerate(self.frags):
+            act_hole = frag[0]
+            inact_hole = np.delete(range(n_occ), act_hole)
+            act_particle = frag[1]
+            inact_particle = np.delete(range(n_vir), act_particle)
+
+            
+            energy_den_o = lib.direct_sum("ia+jb->ijab", self._eris.eia[np.ix_(inact_hole, act_particle)], self._eris.eia[np.ix_(act_hole, act_particle)])
+            energy_den_v = lib.direct_sum("ia+jb->ijab", self._eris.eia[np.ix_(act_hole, inact_particle)], self._eris.eia[np.ix_(act_hole, act_particle)])
+
+            Ω[np.ix_(act_particle, act_hole)] = 0.0
+              
+            # Step 10  
+            #NOTE input t2_act and correct Y
+            dt2 = -lib.einsum("LRai, LRbj -> ijab", Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)], Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)])    
+            Dt2 = t2[k] - dt2  
+  
+            diff_t2_o = -np.einsum('kI, kjab -> Ijab ',Foo[np.ix_(act_hole, range(n_occ))], Dt2)
+            diff_t2_o -=  np.einsum('kJ, ikab -> Jiab ',Foo[np.ix_(act_hole, range(n_occ))], Dt2)
+  
+            diff_t2_v = np.einsum('cA, ijcb -> ijAb ',Fvv[np.ix_(act_particle, range(n_vir))], Dt2)
+            diff_t2_v += np.einsum('cB, ijac -> ijBa ',Fvv[np.ix_(act_particle, range(n_vir))], Dt2)
+                 
+            t2_corr_o = np.copy(diff_t2_o[np.ix_(inact_hole, act_hole, act_particle, act_particle)])
+            # t2_corr_o += diff_t2_o[np.ix_(act_hole, inact_hole, act_particle, act_particle)].transpose((1,0,2,3))
+ 
+            t2_corr_v = np.copy(diff_t2_v[np.ix_(act_hole, act_hole, inact_particle, act_particle)])
+            # t2_corr_v += diff_t2_v[np.ix_(act_hole, act_hole, act_particle, inact_particle)].transpose((0,1,3,2))
+           
+            acc = np.infty
+            t2_corr_o_new = np.copy(t2_corr_o)
+            t2_corr_v_new = np.copy(t2_corr_v)
+
+            count = 0 
+            tol = 1e-6
+            while acc > tol:
+                t2_corr_o_new -= np.einsum('jk,ikab -> ijab',Foo[np.ix_(act_hole, act_hole)], t2_corr_o)
+                t2_corr_o_new -= np.einsum('ik,kjab -> ijab',Foo[np.ix_(inact_hole, inact_hole)], t2_corr_o)
+                t2_corr_o_new = t2_corr_o_new / energy_den_o
+                
+                t2_corr_v_new += np.einsum('bc,ijac -> ijab', Fvv[np.ix_(act_particle, act_particle)], t2_corr_v)
+                t2_corr_v_new += np.einsum('ac,ijcb -> ijab', Fvv[np.ix_(inact_particle, inact_particle)], t2_corr_v)
+                t2_corr_v_new = t2_corr_v_new / energy_den_v
+
+                acc_o = np.linalg.norm(t2_corr_o_new - t2_corr_o)
+                acc_v = np.linalg.norm(t2_corr_v_new - t2_corr_v)
+                acc = acc_o + acc_v
+                t2_corr_o -= t2_corr_o_new
+                t2_corr_v -= t2_corr_v_new
+
+           
+            dt2_ll_o.append(t2_corr_o)
+            dt2_ll_v.append(t2_corr_v)
+
+        # Step 11 use corrected t2 active to correct Omega
+
         res = Ω.T / self._eris.eia
         t1 -= res
- 
-        # NOTE computing correlation energy
-        t2 = -lib.einsum("LRai, LRbj -> ijab", Y, Y)    
-        e_corr = self.get_energy(t1, t2) 
-        print(f"Correlation energy: {e_corr}")
 
-        return np.linalg.norm(res), t1, Y, Yt
+        return np.linalg.norm(res), t1, dt2_ll_o, dt2_ll_v, Y, Yt
     
     @dataclass
     class _IMDS_T1:
@@ -283,8 +355,8 @@ class MPCC_LL:
         Foo = 0.5 * (Foo + Foo.T)
         Fvv = 0.5 * (Fvv + Fvv.T)
 
-        print(f"Symmetry in Foo: {np.linalg.norm(Foo - Foo.T)}")
-        print(f"Symmetry in Fvv: {np.linalg.norm(Fvv - Fvv.T)}")
+        #print(f"Symmetry in Foo: {np.linalg.norm(Foo - Foo.T)}")
+        #print(f"Symmetry in Fvv: {np.linalg.norm(Fvv - Fvv.T)}")
 
         e_oo, Uoo = np.linalg.eigh(Foo)
         e_vv, Uvv = np.linalg.eigh(Fvv)
@@ -294,13 +366,11 @@ class MPCC_LL:
 
         return D, Uoo, Uvv
 
-    def update_J(self, Joo, Jvo, Uoo, Uvv):
+    def update_J(self, Jvo, Uoo, Uvv):
 
-        # NOTE Do we need Joo? No
-        #Joo = lib.einsum("ik, jl, Lij -> Lkl", Uoo, Uoo, Joo)
         Jvo = lib.einsum("ab, ij, Lai -> Lbj", Uvv, Uoo, Jvo)
 
-        return Joo, Jvo
+        return Jvo
 
     def update_Y(self, Joo, Jvo, D, Uvv, Uoo, Y):
 

@@ -61,7 +61,7 @@ if __name__ == "__main__":
     print(act_part)
 
     c_lo = mocas
-    #c_lo = mf.mo_coeff
+    c_lo = mf.mo_coeff
 
     print ("dimension of active hole", len(act_hole)) 
     print ("dimension of active part", len(act_part)) 
@@ -97,6 +97,7 @@ if __name__ == "__main__":
 
     print("Finished MPCC!")
 
+    #NOTE take the correlation energy from teh HL solver
 
     print(f'CCSD:\n Total energy: {mycc.e_tot} Correlation energ: {mycc.e_corr}')
     print(f'DF-MPCCSD:\n Total energy: {mympcc.lowlevel.e_tot} Correlation energ: {mympcc.lowlevel.e_corr}')
