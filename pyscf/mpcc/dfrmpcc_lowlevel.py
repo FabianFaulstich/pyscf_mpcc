@@ -58,7 +58,7 @@ class MPCC_LL:
     def nocc(self):
         return self.mf.mol.nelec[0]
 
-    def kernel(self, t1=None, t2=None, Y=None):
+    def kernel(self, t1=None, t2_act=None, Y=None):
 
         # NOTE Do we want to initialize t1 and t2?
         # WARNING t2 is incorrectly initialized here!
@@ -88,54 +88,29 @@ class MPCC_LL:
                 print(f"4th-order max abs entry error:     {max_abs:.3e}")
         '''
 
-        err = np.inf
+        res = np.inf
         count = 0
         adiis = lib.diis.DIIS()
 
         e_corr = None
-        while err > self.ll_con_tol and count < self.ll_max_its:
+        while res > self.ll_con_tol and count < self.ll_max_its:
 
-            res, t1_new, dt2_ll_o, dt2_ll_v, Y_new, Yt = self.update_amps(t1, t2, Y)
+            res, t1_it, Δt2s_o, Δt2s_v, Y = self.update_amps(t1, t2_act, Y)
             if self.diis:
-                # NOTE no t2 diis
-                t1_new  = self.run_diis(t1_new, adiis)
-            else:
-                t1_new = t1_new
+                t1_it  = self.run_diis(t1_it, adiis)
 
-            t1, Y = t1_new, Y_new
-            t1_new, Y_new = None, None  # free memory
+            t1 = t1_it
             
             count += 1
-            err = res
             # NOTE change this to logger!
             print(f"It {count}; residual {res:.6e}")
 
-        print(f'T2 active correction {np.linalg.norm(dt2_ll_o)} (occ) and {np.linalg.norm(dt2_ll_v)} (vir)')
 
-        # NOTE computing energy
-        t2_new = -lib.einsum("LRai, LRbj -> ijab", Y, Y)
-        n_aux, n_rank, n_vir, n_occ = Y.shape
-        for k, frag in enumerate(self.frags):
-            act_hole = frag[0]
-            inact_hole = np.delete(range(n_occ), act_hole)
-            act_particle = frag[1]
-            inact_particle = np.delete(range(n_vir), act_particle)
+        # NOTE non-iterative N^5 cost!
+        t2 = self.get_t2(Y, t2_act, Δt2s_o, Δt2s_v)
+        self._e_corr = self.get_energy(t1, t2) 
 
-            t2_new[np.ix_(act_hole, act_hole, act_particle, act_particle)] = t2[k]
-
-            t2_new[np.ix_(inact_hole, act_hole, act_particle, act_particle)] += dt2_ll_o[k]
-            t2_new[np.ix_(act_hole, act_hole, inact_particle, act_particle)] += dt2_ll_v[k]
-            
-        
-        e_corr = self.get_energy(t1, t2_new) 
-
-        print(f"Correlation Energy: {e_corr}")
-        self._e_corr = e_corr
-        self._e_tot = self.mf.e_tot + self._e_corr
-        #Run update amplitudes to get the intermediate quantities
-        #imds_t1 = self.get_t1_imds(t1)
-
-        return t1, t2_new, Y
+        return t1, t2, Y
 
     def update_amps(self, t1, t2, Y):
         """
@@ -171,12 +146,12 @@ class MPCC_LL:
         Y, Yt = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
 
         # Step 10 & 11
-        dt2_ll_o, dt2_ll_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2, Y, Ω)
+        Δt2s_o, Δt2s_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2, Y, Ω)
        
         res = Ω.T / self._eris.eia
         t1 -= res
 
-        return np.linalg.norm(res), t1, dt2_ll_o, dt2_ll_v, Y, Yt
+        return np.linalg.norm(res), t1, Δt2s_o, Δt2s_v, Y
     
     @dataclass
     class _IMDS_T1:
@@ -419,7 +394,24 @@ class MPCC_LL:
         t1 = -self._eris.fov/self._eris.eia
         Y = -self._eris.Lov.transpose(0,2,1)[:, None, :, :] *self._eris.dD.transpose(2, 1, 0)[None, :, :, :]
         return t1, t2, Y
-       
+
+    def get_t2(self, Y, t2_act, Δt2s_o, Δt2s_v):
+
+        t2 = -lib.einsum("LRai, LRbj -> ijab", Y, Y)
+        n_aux, n_rank, n_vir, n_occ = Y.shape
+        for k, frag in enumerate(self.frags):
+            act_hole = frag[0]
+            inact_hole = np.delete(range(n_occ), act_hole)
+            act_particle = frag[1]
+            inact_particle = np.delete(range(n_vir), act_particle)
+
+            t2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = t2_act[k]
+
+            t2[np.ix_(inact_hole, act_hole, act_particle, act_particle)] += Δt2s_o[k]
+            t2[np.ix_(act_hole, act_hole, inact_particle, act_particle)] += Δt2s_v[k]
+
+        return t2
+
     def get_energy(self, t1, t2):                                                     
        '''RCCSD correlation energy'''                                                               
        fock = self._eris.fov.copy()

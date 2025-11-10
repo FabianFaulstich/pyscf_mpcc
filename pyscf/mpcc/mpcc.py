@@ -60,6 +60,7 @@ class MPCC(lib.StreamObject):
             #    break
 
             if (count > 1):
+                print(f'Starting low-level MPCC iteration...')
                 t1, t2, Y = self.lowlevel.kernel(t1, t2_act, Y) 
                 #t1, t2 = self.lowlevel.kernel(t1, t2) 
 
