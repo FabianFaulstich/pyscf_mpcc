@@ -112,7 +112,7 @@ class MPCC_LL:
 
         return t1, t2, Y
 
-    def update_amps(self, t1, t2, Y):
+    def update_amps(self, t1, t2_act, Y):
         """
         Following Table XXX in Future Paper
         """
@@ -146,10 +146,16 @@ class MPCC_LL:
         Y, Yt = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
 
         # Step 10 & 11
-        Δt2s_o, Δt2s_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2, Y, Ω)
+        Δt2s_o, Δt2s_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2_act, Y, Ω)
        
         res = Ω.T / self._eris.eia
         t1 -= res
+
+        # NOTE Checking energy convergence, remove energy computation later!
+        t2 = self.get_t2(Y, t2_act, Δt2s_o, Δt2s_v)
+        e_corr = self.get_energy(t1, t2) 
+        print(f'    CC2 correlation energy: {e_corr}')
+
 
         return np.linalg.norm(res), t1, Δt2s_o, Δt2s_v, Y
     
