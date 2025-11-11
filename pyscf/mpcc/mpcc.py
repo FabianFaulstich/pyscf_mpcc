@@ -24,7 +24,7 @@ class MPCC(lib.StreamObject):
         # Setting MPCC attributes 
         # use "_" for variable protection 
 
-    def kernel(self, **kwargs):
+    def kernel(self, verbose = None, **kwargs):
 
         #if localization:
         #    try:
@@ -35,18 +35,21 @@ class MPCC(lib.StreamObject):
 
 #       self.eris.make_eri()
 
+        log = lib.logger.new_logger(self, verbose)
+
         count = 0
         e_mpcc_prev = -numpy.inf
         e_diff = numpy.inf
         tol = kwargs.get('tol', 1e-6)
         count_tol = kwargs.get('count_tol', 100)
 
-        t1, t2 = self.lowlevel.init_amps()
+        t1, t2, Y = self.lowlevel.init_amps()
 
         #start an iteration loop here:
         while e_diff > tol and count < count_tol:
             count += 1
-
+            
+            print(f'MPCC macro iteration: {count}')
             #get the active fragments
             #frags = self.lowlevel.get_active_fragments()
             #frags = [frag]  #for now we will use only one fragment, but later we can use multiple fragments
@@ -58,7 +61,9 @@ class MPCC(lib.StreamObject):
 #           if (count > 1):
 #              t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
 
-            t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
+#           t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
+            if (count > 1):
+               t1, t2, Y = self.lowlevel.kernel(t1, t2_act, Y) 
 
             t1_act = []
             t2_act = []
@@ -69,14 +74,20 @@ class MPCC(lib.StreamObject):
                self.screened.frag = frag
                self.highlevel.frag = frag
 
+               # NOTE can we remove the t2 dependence? 
                imds = self.screened.kernel(t1, t2)
                #print the attributes of the imds object
                print('MPCC: Screened kernel calculated for fragment:', frag)
 
+               # NOTE can we remove the t2 dependence? 
+               # YES, remove t2!
                t1_act_tmp, t2_act_tmp = self.highlevel.kernel(imds, t1, t2)
 
                t1_act.append(t1_act_tmp)    
-               t2_act.append(t2_act_tmp)    
+               t2_act.append(t2_act_tmp) 
+
+               # NOTE Include factorization of t2_active
+               # Y_act.append(Y_act_tmp)
 
                print('MPCC: High-level kernel calculated for fragment:')
         #NOTE: when we will use T3 amplitudes, we can directly return it here. we don't need to reuse them for any other purposes. Therefore
@@ -94,7 +105,7 @@ class MPCC(lib.StreamObject):
                frag_i += 1
 
             #calculate the energy:
-            e_mpcc = self.lowlevel.energy(t1, t2)
+            e_mpcc = self.lowlevel.get_energy(t1, t2)
             e_diff = abs(e_mpcc - e_mpcc_prev)
             e_mpcc_prev = e_mpcc
             print(f"It {count}; Energy {e_mpcc:.6e}; Energy difference {e_diff:.6e}")

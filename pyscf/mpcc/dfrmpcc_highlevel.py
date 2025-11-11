@@ -324,8 +324,8 @@ class MPCC_HL:
         res1 = R1/ self._eris.eia[numpy.ix_(self.act_hole, self.act_particle)]
         res2 = R2/ self._eris.D[numpy.ix_(self.act_hole, self.act_hole, self.act_particle, self.act_particle)]
  
-        t1 += res1
-        t2 += res2
+        t1 -= res1
+        t2 -= res2
 #        res = numpy.linalg.norm(res1) + numpy.linalg.norm(res2)
         res = numpy.linalg.norm(res2)
 

@@ -13,8 +13,13 @@ def MPCC(mf, mo_coeff, **kwargs):
 
 def RMPCC(mf, with_df, mo_coeff, **kwargs):
     from pyscf.mpcc import dfrmpcc
-    
-    if with_df:
+   
+    if mf.istype('UHF'):
+        raise RuntimeError('RMPCC cannot be used with UHF method.')
+ 
+    # NOTE we are enforcing the meanfield object to be on df type
+    # Is this necessary?
+    if mf.istype('DFRHF'):
         return dfrmpcc.RMPCC(mf, mo_coeff, **kwargs)
     else:
         raise RuntimeError("RMPCC variant is not implemented")
