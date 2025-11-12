@@ -1,10 +1,12 @@
 import numpy as np
 from pyscf import lib, df
+from pyscf.ao2mo import _ao2mo
 
+from pyscf.mpcc import mpcc_tools
 
 class ERIs:
 
-    def __init__(self, mf):
+    def __init__(self, mf, mo_coeff=None):
 
         if getattr(mf, "with_df", None):
             self.with_df = mf.with_df
@@ -16,44 +18,56 @@ class ERIs:
         self.nocc = mf.mol.nelec[0]
         self.nvir = mf.mol.nao - self.nocc
         self.naux = self.with_df.get_naoaux()
-
-        self.mo_coeff = mf.mo_coeff
+        if mo_coeff is None:
+           self.mo_coeff = mf.mo_coeff
+        else:
+           self.mo_coeff = mo_coeff       
         self.mo_energy = mf.mo_energy
 
         fock_mo = self.mo_coeff.T @ mf.get_fock() @ self.mo_coeff
         self.foo = fock_mo[: self.nocc, : self.nocc]
         self.fvv = fock_mo[self.nocc : self.nao, self.nocc : self.nao]
-        self.fov = fock_mo[: self.nao, self.nocc : self.nao]
+        self.fov = fock_mo[: self.nocc, self.nocc : self.nao]
 
+        # NOTE change convetion to virtual, occupied 
         self.eia = lib.direct_sum(
-            "a-i->ia", self.mo_energy[self.nocc :], self.mo_energy[: self.nocc]
+            "-i+a->ia", np.diag(self.foo), np.diag(self.fvv)
         )
-        self.D = lib.direct_sum("-ia-jb->aibj", self.eia, self.eia)
 
-    def make_eri(self):
+        # NOTE Shall we keep this call here?
+        self._make_df_eris()
+        self._make_df_denominator()
 
+    def _make_df_denominator(self):
+
+        self.dD = mpcc_tools.piv_chol_tensor(self.eia)
+        
+        # NOTE REMOVE THIS LATER!!!
+        self.D = lib.direct_sum("ia+jb->ijab", self.eia, self.eia)
+
+          
+    def _make_df_eris(self):
+        
         Loo = np.empty((self.naux, self.nocc, self.nocc))
         Lov = np.empty((self.naux, self.nocc, self.nvir))
-        Lvo = np.empty((self.naux, self.nvir, self.nocc))
         Lvv = np.empty((self.naux, self.nvir, self.nvir))
-
+        mo = np.asarray(self.mo_coeff, order='F')
+        ijslice = (0, self.nao, 0, self.nao)
         p1 = 0
-        occ, vir = np.s_[: self.nocc], np.s_[self.nocc :]
-
-        for eri1 in self.with_df.loop():
-            eri1 = lib.unpack_tril(eri1).reshape(-1, self.nao, self.nao)
-            Lpq = lib.einsum("Lab,ap,bq->Lpq", eri1, self.mo_coeff, self.mo_coeff)
+        Lpq = None
+        for k, eri1 in enumerate(self.with_df.loop()):
+            Lpq = _ao2mo.nr_e2(eri1, mo, ijslice, aosym='s2', mosym='s1', out=Lpq)
             p0, p1 = p1, p1 + Lpq.shape[0]
-            blk = np.s_[p0:p1]
-            Loo[blk] = Lpq[:, occ, occ]
-            Lov[blk] = Lpq[:, occ, vir]
-            Lvo[blk] = Lpq[:, vir, occ]
-            Lvv[blk] = Lpq[:, vir, vir]
-
+            Lpq = Lpq.reshape(p1 - p0, self.nao, self.nao)
+            Loo[p0:p1] = Lpq[:, :self.nocc, :self.nocc]
+            Lov[p0:p1] = Lpq[:, :self.nocc, self.nocc:]
+            Lvv[p0:p1] = Lpq[:, self.nocc:, self.nocc:]
+        Lpq = None
+        Lvo = Lov.transpose(0,2,1).reshape(self.naux,self.nvir,self.nocc)
         self.Loo = Loo
         self.Lov = Lov
         self.Lvo = Lvo
-        self.Lvv = Lvv
+        self.Lvv = Lvv       
 
         # NOTE 06/04 debate about cache 
 

@@ -87,3 +87,6 @@ tmp/
 # mypy
 .mypy_cache/
 
+# Others
+.DS_Store
+
