@@ -139,6 +139,7 @@ class MPCC_LL:
         # Step 6 & 7
         D, Uoo, Uvv = self.get_D(Foo, Fvv)
 
+        # NOTE Can we transform D insead of J, that way we don't have to transform Y back!
         # Step 8
         Jvo = self.update_J(Jvo, Uoo, Uvv)
 
