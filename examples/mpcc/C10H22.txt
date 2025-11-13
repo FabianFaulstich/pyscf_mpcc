@@ -1,0 +1,18 @@
+
+Running for: alkanes, basis = cc-pvdz, rank_reduced = False
+Selected cluster/alkane index: 1
+
+=== Found alkane: c10h22.xyz ===
+
+===== Running calculation 1/1 =====
+converged SCF energy = -391.531901028918
+MPCC fragments: [[[0], [0]]]
+Initializing ...
+
+Running for: alkanes, basis = aug-cc-pvtz, rank_reduced = False
+Selected cluster/alkane index: 1
+
+=== Found alkane: c10h22.xyz ===
+
+===== Running calculation 1/1 =====
+converged SCF energy = -391.640920825877
