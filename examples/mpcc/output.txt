@@ -1,0 +1,127 @@
+converged SCF energy = -76.026744737355
+E(RCCSD) = -76.24015773873849  E_corr = -0.2134130013834568
+[0 1]
+dimension of active hole 5
+dimension of active part 2
+E(RCCSD) = -76.24015773873849  E_corr = -0.2134130013834568
+rank reduced way
+Converged(CPD) in 2 iterations.
+[init=3] X rank 58: error = 7.742e-08
+Converged(CPD) in 2 iterations.
+[init=factors]: 4.339e-08
+Converged(CPD) in 2 iterations.
+[init=factors]: 1.880e-08
+MPCC fragments: [[array([0, 1, 2, 3, 4]), array([0, 1])]]
+MPCC macro iteration: 1
+MPCC: Screened kernel calculated for fragment: [array([0, 1, 2, 3, 4]), array([0, 1])]
+Starting High-level MPCC iteration...
+It 1; residual 5.975791e-03
+    CCSD correlation energy: -0.2043138843487175
+It 2; residual 1.877015e-03
+    CCSD correlation energy: -0.20446088825240377
+It 3; residual 5.389632e-04
+    CCSD correlation energy: -0.20451859655466526
+It 4; residual 4.804304e-05
+    CCSD correlation energy: -0.20451913186212534
+It 5; residual 5.801416e-06
+    CCSD correlation energy: -0.20451866460849338
+It 6; residual 8.822584e-07
+    CCSD correlation energy: -0.20451864808261164
+MPCC: High-level kernel calculated for fragment:
+It 1; Energy -2.045186e-01; Energy difference inf
+MPCC macro iteration: 2
+Starting low-level MPCC iteration...
+    Iter. T2 correction finished in 6/100 steps at 8.80e-07 accuracy.
+    CC2 correlation energy: -0.20452581875464232
+It 1; residual 1.828730e-03
+    Iter. T2 correction finished in 5/100 steps at 8.17e-07 accuracy.
+    CC2 correlation energy: -0.20451974467123413
+It 2; residual 2.927560e-04
+    Iter. T2 correction finished in 5/100 steps at 8.38e-07 accuracy.
+    CC2 correlation energy: -0.20451578559404565
+It 3; residual 6.260257e-05
+    Iter. T2 correction finished in 5/100 steps at 8.34e-07 accuracy.
+    CC2 correlation energy: -0.20451495068124276
+It 4; residual 1.737101e-05
+    Iter. T2 correction finished in 5/100 steps at 8.34e-07 accuracy.
+    CC2 correlation energy: -0.20451451861607872
+It 5; residual 8.227746e-07
+MPCC: Screened kernel calculated for fragment: [array([0, 1, 2, 3, 4]), array([0, 1])]
+Starting High-level MPCC iteration...
+It 1; residual 9.627019e-05
+    CCSD correlation energy: -0.2045137114871471
+It 2; residual 1.594196e-04
+    CCSD correlation energy: -0.20452850186803798
+It 3; residual 5.572439e-05
+    CCSD correlation energy: -0.20453488589442764
+It 4; residual 5.919381e-06
+    CCSD correlation energy: -0.20453489870914787
+It 5; residual 9.701380e-07
+    CCSD correlation energy: -0.2045348114958562
+MPCC: High-level kernel calculated for fragment:
+It 2; Energy -2.045348e-01; Energy difference 1.616341e-05
+MPCC macro iteration: 3
+Starting low-level MPCC iteration...
+    Iter. T2 correction finished in 5/100 steps at 9.68e-07 accuracy.
+    CC2 correlation energy: -0.20453593078796617
+It 1; residual 2.337942e-04
+    Iter. T2 correction finished in 5/100 steps at 9.44e-07 accuracy.
+    CC2 correlation energy: -0.20453513406370244
+It 2; residual 3.975366e-05
+    Iter. T2 correction finished in 5/100 steps at 9.47e-07 accuracy.
+    CC2 correlation energy: -0.20453464373337238
+It 3; residual 8.776848e-06
+    Iter. T2 correction finished in 5/100 steps at 9.47e-07 accuracy.
+    CC2 correlation energy: -0.20453453785855527
+It 4; residual 2.448570e-06
+    Iter. T2 correction finished in 5/100 steps at 9.47e-07 accuracy.
+    CC2 correlation energy: -0.2045344874123962
+It 5; residual 1.315765e-07
+MPCC: Screened kernel calculated for fragment: [array([0, 1, 2, 3, 4]), array([0, 1])]
+Starting High-level MPCC iteration...
+It 1; residual 1.187241e-05
+    CCSD correlation energy: -0.20453418356225567
+It 2; residual 2.375810e-05
+    CCSD correlation energy: -0.2045361529856681
+It 3; residual 9.010013e-06
+    CCSD correlation energy: -0.20453706441846556
+It 4; residual 8.866738e-07
+    CCSD correlation energy: -0.20453706196854748
+MPCC: High-level kernel calculated for fragment:
+It 3; Energy -2.045371e-01; Energy difference 2.250473e-06
+MPCC macro iteration: 4
+Starting low-level MPCC iteration...
+    Iter. T2 correction finished in 5/100 steps at 9.64e-07 accuracy.
+    CC2 correlation energy: -0.20453731273247205
+It 1; residual 3.218435e-05
+    Iter. T2 correction finished in 5/100 steps at 9.61e-07 accuracy.
+    CC2 correlation energy: -0.20453721073677936
+It 2; residual 5.875849e-06
+    Iter. T2 correction finished in 5/100 steps at 9.62e-07 accuracy.
+    CC2 correlation energy: -0.2045371473230684
+It 3; residual 1.358106e-06
+    Iter. T2 correction finished in 5/100 steps at 9.62e-07 accuracy.
+    CC2 correlation energy: -0.20453713345948266
+It 4; residual 3.692354e-07
+MPCC: Screened kernel calculated for fragment: [array([0, 1, 2, 3, 4]), array([0, 1])]
+Starting High-level MPCC iteration...
+It 1; residual 1.705959e-06
+    CCSD correlation energy: -0.2045370615878348
+It 2; residual 3.771260e-06
+    CCSD correlation energy: -0.20453733803523433
+It 3; residual 1.517933e-06
+    CCSD correlation energy: -0.20453747372681036
+It 4; residual 1.358291e-07
+    CCSD correlation energy: -0.20453747359962607
+MPCC: High-level kernel calculated for fragment:
+It 4; Energy -2.045375e-01; Energy difference 4.116311e-07
+Finished MPCC!
+CCSD:
+ Total energy: -76.24015773873849 Correlation energ: -0.21341300138345676
+DF-MPCCSD:
+ Total energy: -76.23128187092884 Correlation energ: -0.20453713357380582
+Difference:
+ Total energy: 0.008875867809649662 Correlation energ: 0.00887586780965094
+> /Users/talha/Documents/Nov_11_MPCC/pyscf_mpcc/examples/mpcc/01-dfrmpcc.py(128)<module>()
+-> breakpoint()
+(Pdb) 

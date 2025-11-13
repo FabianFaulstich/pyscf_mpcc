@@ -1,13 +1,14 @@
 import numpy as np
 from pyscf import lib, df
 from pyscf.ao2mo import _ao2mo
-
 from pyscf.mpcc import mpcc_tools
 
 class ERIs:
+    def __init__(self, mf, mo_coeff=None, rank_reduced=False,rank_opts=None):   
 
-    def __init__(self, mf, mo_coeff=None):
-
+        self.rank_reduced = rank_reduced
+        self.rank_opts = rank_opts 
+       
         if getattr(mf, "with_df", None):
             self.with_df = mf.with_df
         else:
@@ -18,36 +19,31 @@ class ERIs:
         self.nocc = mf.mol.nelec[0]
         self.nvir = mf.mol.nao - self.nocc
         self.naux = self.with_df.get_naoaux()
+        
         if mo_coeff is None:
-           self.mo_coeff = mf.mo_coeff
+            self.mo_coeff = mf.mo_coeff
         else:
-           self.mo_coeff = mo_coeff       
+            self.mo_coeff = mo_coeff       
         self.mo_energy = mf.mo_energy
 
         fock_mo = self.mo_coeff.T @ mf.get_fock() @ self.mo_coeff
         self.foo = fock_mo[: self.nocc, : self.nocc]
-        self.fvv = fock_mo[self.nocc : self.nao, self.nocc : self.nao]
-        self.fov = fock_mo[: self.nocc, self.nocc : self.nao]
+        self.fvv = fock_mo[self.nocc:, self.nocc:]
+        self.fov = fock_mo[: self.nocc, self.nocc:]
 
-        # NOTE change convetion to virtual, occupied 
-        self.eia = lib.direct_sum(
-            "-i+a->ia", np.diag(self.foo), np.diag(self.fvv)
-        )
+        self.eia = lib.direct_sum("-i+a->ia", np.diag(self.foo), np.diag(self.fvv))
 
-        # NOTE Shall we keep this call here?
         self._make_df_eris()
         self._make_df_denominator()
 
-    def _make_df_denominator(self):
+        if self.rank_reduced:
+            self._make_cpd_df_eris()
 
+    def _make_df_denominator(self):
         self.dD = mpcc_tools.piv_chol_tensor(self.eia)
-        
-        # NOTE REMOVE THIS LATER!!!
         self.D = lib.direct_sum("ia+jb->ijab", self.eia, self.eia)
 
-          
     def _make_df_eris(self):
-        
         Loo = np.empty((self.naux, self.nocc, self.nocc))
         Lov = np.empty((self.naux, self.nocc, self.nvir))
         Lvv = np.empty((self.naux, self.nvir, self.nvir))
@@ -55,6 +51,7 @@ class ERIs:
         ijslice = (0, self.nao, 0, self.nao)
         p1 = 0
         Lpq = None
+
         for k, eri1 in enumerate(self.with_df.loop()):
             Lpq = _ao2mo.nr_e2(eri1, mo, ijslice, aosym='s2', mosym='s1', out=Lpq)
             p0, p1 = p1, p1 + Lpq.shape[0]
@@ -63,12 +60,35 @@ class ERIs:
             Lov[p0:p1] = Lpq[:, :self.nocc, self.nocc:]
             Lvv[p0:p1] = Lpq[:, self.nocc:, self.nocc:]
         Lpq = None
-        Lvo = Lov.transpose(0,2,1).reshape(self.naux,self.nvir,self.nocc)
-        self.Loo = Loo
-        self.Lov = Lov
-        self.Lvo = Lvo
-        self.Lvv = Lvv       
 
+        Lvo = Lov.transpose(0, 2, 1).reshape(self.naux, self.nvir, self.nocc)
+        self.Loo, self.Lov, self.Lvo, self.Lvv = Loo, Lov, Lvo, Lvv
+
+    def _make_cpd_df_eris(self):
+        # Default multipliers
+        rLoo_mult = self.rank_opts.get('Loo', 0.5)
+        rLov_mult = self.rank_opts.get('Lov', 1.5)
+        rLvv_mult = self.rank_opts.get('Lvv', 3.0)
+
+        # Loo
+        rLoo = int(rLoo_mult * self.naux)
+        self.Loo, factors, weights = mpcc_tools.cp_d(self.Loo, rank=rLoo)
+        #self.Qij, self.Ii, self.Ij = factors
+        #self.Qij = weights * self.Qij
+
+        # Lov
+        rLov = int(rLov_mult * self.naux)
+        self.Lov, factors1, weights1 = mpcc_tools.cp_d1(self.Lov, factors, ran=rLov, lOption=1)
+        #self.Qia, self.Iia, self.Aia = factors1
+        #self.Qia = weights1 * self.Qia
+
+        # Lvv
+        rLvv = int(rLvv_mult * self.naux)
+        self.Lvv, factors2, weights2 = mpcc_tools.cp_d1(self.Lvv, factors1, ran=rLvv, lOption=2)
+        #self.Qab, self.Aa, self.Ab = factors2
+        #self.Qab = weights2 * self.Qab
+
+        self.Lvo = self.Lov.transpose(0, 2, 1).reshape(self.naux, self.nvir, self.nocc)
         # NOTE 06/04 debate about cache 
 
     # hold all a-a, a-i, i-i tensor segments here 

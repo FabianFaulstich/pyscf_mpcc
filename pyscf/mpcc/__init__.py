@@ -8,12 +8,12 @@ def MPCC(mf, mo_coeff, **kwargs):
         raise RuntimeError("GMPCC is not implemented")
     else:
         # NOTE only DF implemented! Change this later
-        return RMPCC(mf, with_df= True, **kwargs)
+        return RMPCC(mf, with_df= True,**kwargs)
 
 
 def RMPCC(mf, with_df, mo_coeff, **kwargs):
-    from pyscf.mpcc import dfrmpcc
-   
+    from pyscf.mpcc import dfrmpcc 
+
     if mf.istype('UHF'):
         raise RuntimeError('RMPCC cannot be used with UHF method.')
  
@@ -23,3 +23,4 @@ def RMPCC(mf, with_df, mo_coeff, **kwargs):
         return dfrmpcc.RMPCC(mf, mo_coeff, **kwargs)
     else:
         raise RuntimeError("RMPCC variant is not implemented")
+

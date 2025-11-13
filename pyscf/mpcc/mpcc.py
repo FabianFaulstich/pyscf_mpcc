@@ -4,13 +4,14 @@ import numpy
 class MPCC(lib.StreamObject):
 
     def __init__(self, mf, lowlevel, screened, highlevel, eri, mo_coeff=None, **kwargs):
-
         self.mol = mf.mol
         self._scf = mf
-
         self.mo_coeff = mo_coeff if mo_coeff is not None else mf.mo_coeff
 
-        self.eris = eri.ERIs(mf, self.mo_coeff)
+        # ✅ Pass rank_reduced flag to ERIs
+        #rank_opts = kwargs.get("rank_opts", None)
+        self.eris = eri.ERIs(mf,self.mo_coeff,rank_reduced=kwargs.get("rank_reduced", False), rank_opts = kwargs.get("rank_opts",None))
+
         self.frags = kwargs.get('frag')
         if self.frags is None:
             raise ValueError("Missing required keyword argument 'frag' in kwargs.")

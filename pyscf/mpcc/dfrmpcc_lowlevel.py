@@ -1,4 +1,4 @@
-from numpy.lib.index_tricks import ix_
+from numpy import ix_
 from pyscf import lib, df
 from pyscf.lib import logger
 import numpy as np
@@ -350,7 +350,7 @@ class MPCC_LL:
             Δt2_v_it = np.copy(Δt2_v)
 
             count = 0 
-            acc = np.infty
+            acc = np.inf
             while (acc > tol and count< count_tol):
                 Δt2_o_it -= np.einsum('jk,ikab -> ijab',Foo[np.ix_(act_hole, act_hole)], Δt2_o)
                 Δt2_o_it -= np.einsum('ik,kjab -> ijab',Foo[np.ix_(inact_hole, inact_hole)], Δt2_o)
