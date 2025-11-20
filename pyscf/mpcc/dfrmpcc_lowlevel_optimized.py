@@ -107,7 +107,7 @@ class MPCC_LL:
 
         res2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
 
-        ΔE = self.energy(t1, t2)  # use the low-level energy calculation
+        ΔE = self.get_energy(t1, t2)  # use the low-level energy calculation
 
         #make the active residue to go to zero
 
@@ -265,18 +265,8 @@ class MPCC_LL:
         t1 = self._eris.fov/self._eris.eia
 
         return t1, t2
-    def get_energy(self, t1, t2):
-        """
-        Calculate the MPCC energy using the current amplitudes.
-        """
-        X, Xoo, Xvo = self.get_X(t1)
-        Joo, Jvo = self.get_J(Xoo, Xvo, t1)
-        Yvo = self.get_t2_Yvo(t2)
-        e1 = lib.einsum("Lij,ja->Lai", Xoo, t1) + lib.einsum("L,ia->Lai", X, t1) + Jvo
-        e_corr = lib.einsum("Lai,Lai", e1, Yvo)
-        return e_corr
     
-    def energy(self, t1, t2):                                                     
+    def get_energy(self, t1, t2):                                                     
        '''RCCSD correlation energy'''                                                               
        
        fock = self._eris.fov.copy()

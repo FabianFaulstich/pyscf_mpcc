@@ -363,10 +363,31 @@ class MPCC_HL:
           #print(f"It {count}; correlation energy {e_corr:.6e}; residual {res:.6e}")
           print(f"It {count}; residual {res:.6e}")
 
+          # NOTE Checking CCSD correlation energy convergence, remove later
+          e_cc = self.get_cc_energy(t1full, t2full, t1, t2)
+          print(f'    CCSD correlation energy: {e_cc}')
+
       #self._e_corr = e_corr
       #self._e_tot = self.mf.e_tot + self._e_corr
 
 
       return t1, t2
 
+    def get_cc_energy(self, t1, t2, t1_act, t2_act):
+
+        act_hole = self.frag[0]
+        act_particle = self.frag[1]
+       
+        t1[numpy.ix_(act_hole, act_particle)] = t1_act
+        t2[numpy.ix_(act_hole, act_hole, act_particle, act_particle)] = t2_act
+
+
+        fock = self._eris.fov.copy()
+        e = 2*lib.einsum('ia,ia', fock, t1)    
+        tau = lib.einsum('ia,jb->ijab',t1,t1)                                                         
+        tau += t2 
+        eris_ovov = lib.einsum("Lia,Ljb->iajb", self._eris.Lov, self._eris.Lov)
+        e += 2*lib.einsum('ijab,iajb', tau, eris_ovov)                                                
+        e -=  lib.einsum('ijab,ibja', tau, eris_ovov)                                                
+        return e.real                       
 

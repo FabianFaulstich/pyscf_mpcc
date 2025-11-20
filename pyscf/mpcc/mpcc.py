@@ -44,6 +44,7 @@ class MPCC(lib.StreamObject):
         count_tol = kwargs.get('count_tol', 100)
 
         t1, t2, Y = self.lowlevel.init_amps()
+        #t1, t2 = self.lowlevel.init_amps()
 
         #start an iteration loop here:
         while e_diff > tol and count < count_tol:
@@ -63,7 +64,9 @@ class MPCC(lib.StreamObject):
 
 #           t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
             if (count > 1):
-               t1, t2, Y = self.lowlevel.kernel(t1, t2_act, Y) 
+                print(f'Starting low-level MPCC iteration...')
+                t1, t2, Y = self.lowlevel.kernel(t1, t2_act, Y) 
+                #t1, t2 = self.lowlevel.kernel(t1, t2) 
 
             t1_act = []
             t2_act = []
@@ -85,9 +88,6 @@ class MPCC(lib.StreamObject):
 
                t1_act.append(t1_act_tmp)    
                t2_act.append(t2_act_tmp) 
-
-               # NOTE Include factorization of t2_active
-               # Y_act.append(Y_act_tmp)
 
                print('MPCC: High-level kernel calculated for fragment:')
         #NOTE: when we will use T3 amplitudes, we can directly return it here. we don't need to reuse them for any other purposes. Therefore
