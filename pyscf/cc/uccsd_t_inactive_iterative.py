@@ -1382,6 +1382,114 @@ def _make_4c_integrals(mycc, eris, t1, t2):
     return ints
 
 
+def _make_t2_act_integrals(ints_3c, t2, act_hole, act_particle):
+
+   
+
+    
+    Mvo_t2 = lib.einsum("Lme, imae -> Lai", ints_3c.Lov, t2)
+
+    Foo = lib.einsum("Lie,Lej->ij", ints_3c.Lov_aa, Mvo_t2)
+    Fvv = -lib.einsum("Lmb,Lam->ab", ints_3c.Lov_aa,Mvo_t2)
+
+#aaaa
+
+    naux = ints_3c.Lov.shape[0]
+    nvira = ints_3c.Lov.shape[2]
+
+    eris_vvov = lib.einsum("Lae, Lmf -> aemf", ints_3c.Lvv[numpy.ix_(numpy.arange(naux), numpy.arange(nvira),
+                                            act_particle[0])], ints_3c.Lov[numpy.ix_(numpy.arange(naux), act_hole[0],
+                                            act_particle[0])]) 
+    eris_vvOV = lib.einsum("Lae, Lmf -> aemf", ints_3c.Lvv[numpy.ix_(numpy.arange(naux), numpy.arange(nvira),act_particle[0])],
+                                            ints_3c.LOV[numpy.ix_(numpy.arange(naux), act_hole[1], act_particle[1])]) 
+
+    vvov = eris_vvov - eris_vvov.transpose(0,3,2,1)
+
+    wvvvo  = lib.einsum('aemf,mifb->aebi', vvov, t2aa)
+    wvvvo -= lib.einsum('bemf,mifa->beai', vvov, t2aa)
+
+    wvvvo += lib.einsum('aeMF,iMbF->aebi', eris_vvOV, t2ab)
+    wvvvo -= lib.einsum('beMF,iMaF->beai', eris_vvOV, t2ab)
+    
+    wvvvo = wvvvo - wvvvo.transpose(2,1,0,3)
+
+
+#   eris_VVOV = lib.einsum("Lae,Lmf -> aemf", ints_3c.LVV[:,:nact_vir_b,:], ints_3c.LOV) 
+
+
+    eris_vvov = lib.einsum("Lae, Lmf -> aemf", ints_3c.LVV[numpy.ix_(numpy.arange(naux), numpy.arange(nvirb),
+                                            act_particle[1])], ints_3c.LOV[numpy.ix_(numpy.arange(naux), act_hole[1],
+                                            act_particle[1])]) 
+
+
+#   eris_VVov = lib.einsum("Lae,Lmf -> aemf", ints_3c.LVV[:,:nact_vir_b,:], ints_3c.Lov) 
+
+
+    eris_vvov = lib.einsum("Lae, Lmf -> aemf", ints_3c.LVV[numpy.ix_(numpy.arange(naux), numpy.arange(nvirb),
+                                            act_particle[1])], ints_3c.Lov[numpy.ix_(numpy.arange(naux), act_hole[0],
+                                            act_particle[0])]) 
+
+
+#   eris_VVov = lib.ddot(ints_3c.LVV[:,:nact_vir_b,:].T, ints_3c.Lov).reshape(nact_vir_b,nvirb,nocca,nvira)
+
+
+    wVVVO = eris_VVOV[numpy.ix_(numpy.arange(nact_vir_b), numpy.arange(nvirb), act_hole[1], act_particle[1])].transpose(0,1,3,2) 
+    VVOV = eris_VVOV - eris_VVOV.transpose(0,3,2,1)
+
+
+    wVVVO += lib.einsum('aemf,mifb->aebi', VVOV, t2bb[numpy.ix_(numpy.arange(noccb), act_hole[1], numpy.arange(nvirb), act_particle[1])])
+
+    wVVVO += lib.einsum('AEmf,mIfB->AEBI', eris_VVov, t2ab[numpy.ix_(numpy.arange(nocca), act_hole[1], numpy.arange(nvira), act_particle[1])])
+
+    wVVVO = wVVVO - wVVVO.transpose(2,1,0,3)
+
+    #
+
+    wVVvo = eris_VVov[numpy.ix_(numpy.arange(nact_vir_b), numpy.arange(nvirb), act_hole[0], act_particle[0])].transpose(0,1,3,2) 
+     
+    wVVvo += lib.einsum('AEmf,mifb->AEbi', eris_VVov, t2aa[numpy.ix_(numpy.arange(nocca), act_hole[0], numpy.arange(nvira), act_particle[0])])
+    wVVvo += lib.einsum('AEMF,iMbF->AEbi', VVOV,t2ab[numpy.ix_(act_hole[0], numpy.arange(noccb), act_particle[0], numpy.arange(nvirb))])
+    wVVvo -= lib.einsum('bfME,iMfA->AEbi', eris_vvOV, t2ab[numpy.ix_(act_hole[0], numpy.arange(noccb), numpy.arange(nvira), act_particle[1])])
+
+
+##
+
+    wvvVO = eris_vvOV[numpy.ix_(numpy.arange(nact_vir_a), numpy.arange(nvira), act_hole[1], act_particle[1])].transpose(0,1,3,2) 
+
+
+    wvvVO += lib.einsum('aemf,mIfB->aeBI', vvov, t2ab[numpy.ix_(numpy.arange(nocca), act_hole[1], numpy.arange(nvira), act_particle[1])])
+
+    wvvVO += lib.einsum('aeMF,IMBF->aeBI', eris_vvOV, t2bb[numpy.ix_(act_hole[1], numpy.arange(noccb), act_particle[1], numpy.arange(nvirb))])
+
+    wvvVO -= lib.einsum('BFme,mIaF->aeBI', eris_VVov, t2ab[numpy.ix_(numpy.arange(nocca), act_hole[1], act_particle[0], numpy.arange(nvirb))])
+##
+
+    vvov = VVOV = eris_VVov = eris_vvOV = eris_VVOV = eris_vvov = None
+
+     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def _make_4c_integrals_bare(mycc, eris, t1, t2):
     assert mycc._scf.istype('UHF')
 #    cput0 = (logger.process_clock(), logger.perf_counter())
