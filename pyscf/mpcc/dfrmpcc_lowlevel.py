@@ -25,7 +25,17 @@ class MPCC_LL:
             self.ll_con_tol = kwargs['ll_con_tol']
         else:
             self.ll_con_tol = 1e-6
-        
+ 
+        if 'll_update' in kwargs:
+            self.kernel_type = kwargs['kernel_type']
+        else:
+            self.kernel_type = 'factorized'
+
+        self._kernels = {
+                'factorized': self._factorized_kernel,
+                'unfactorized': self._unfactorized_kernel, 
+                }
+
         self.frags = frags
 
         # NOTE can be potentially initialized
@@ -58,7 +68,16 @@ class MPCC_LL:
     def nocc(self):
         return self.mf.mol.nelec[0]
 
-    def kernel(self, t1=None, t2_act=None, Y=None):
+    def kernel(self, t1, t2_act ,**kwargs):
+
+        try:
+            func = self._kernels[self.kernel_type]
+        except KeyError:
+            raise ValueError(f'Unknown low-level kernel theory: {kind}')
+        
+        return func(t1, t2_act ,**kwargs)
+
+    def _factorized_kernel(self, t1=None, t2_act=None, Y=None):
 
         # NOTE Do we want to initialize t1 and t2?
         # WARNING t2 is incorrectly initialized here!

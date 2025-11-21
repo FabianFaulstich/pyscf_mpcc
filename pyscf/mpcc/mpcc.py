@@ -17,8 +17,11 @@ class MPCC(lib.StreamObject):
 
         print('MPCC fragments:', self.frags)
 
+        # FIXME include which low level theory / update amps should be used
         self.lowlevel = lowlevel.MPCC_LL(mf, self.eris, self.frags, **kwargs)
         self.screened = screened.screened(mf, self.eris, self.frags[0], **kwargs)
+
+
         self.highlevel = highlevel.MPCC_HL(mf, self.eris, self.frags[0], **kwargs)
        
         # Setting MPCC attributes 
