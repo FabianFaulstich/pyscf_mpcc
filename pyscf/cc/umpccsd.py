@@ -96,13 +96,13 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     t2bb_act = np.zeros_like(t2bb)   
     t2ab_act = np.zeros_like(t2ab)   
 
-    t2aa_act[np.ix_(act_hole[0][0], act_hole[0][0], act_particle[0][0], act_particle[0][0])]  = t2aa[np.ix_(act_hole[0][0], act_hole[0][0], act_particle[0][0], act_particle[0][0])]
-    t2ab_act[np.ix_(act_hole[0][0], act_hole[0][1], act_particle[0][0], act_particle[0][1])]  = t2ab[np.ix_(act_hole[0][0], act_hole[0][1], act_particle[0][0], act_particle[0][1])]
-    t2bb_act[np.ix_(act_hole[0][1], act_hole[0][1], act_particle[0][1], act_particle[0][1])]  = t2bb[np.ix_(act_hole[0][1], act_hole[0][1], act_particle[0][1], act_particle[0][1])]
+#   t2aa_act[np.ix_(act_hole[0][0], act_hole[0][0], act_particle[0][0], act_particle[0][0])]  += t2aa[np.ix_(act_hole[0][0], act_hole[0][0], act_particle[0][0], act_particle[0][0])]
+#   t2ab_act[np.ix_(act_hole[0][0], act_hole[0][1], act_particle[0][0], act_particle[0][1])]  += t2ab[np.ix_(act_hole[0][0], act_hole[0][1], act_particle[0][0], act_particle[0][1])]
+#   t2bb_act[np.ix_(act_hole[0][1], act_hole[0][1], act_particle[0][1], act_particle[0][1])]  += t2bb[np.ix_(act_hole[0][1], act_hole[0][1], act_particle[0][1], act_particle[0][1])]
 
-#   t2aa_act = t2aa
-#   t2ab_act = t2ab
-#   t2bb_act = t2bb
+    t2aa_act = t2aa
+    t2ab_act = t2ab
+    t2bb_act = t2bb
 
     Fooa =  .5 * lib.einsum('me,ie->mi', fova, t1a)
     Foob =  .5 * lib.einsum('me,ie->mi', fovb, t1b)
@@ -139,7 +139,8 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     wOvVo = np.zeros((noccb,nvira,nvirb,nocca), dtype=dtype)
     wOvvO = np.zeros((noccb,nvira,nvira,noccb), dtype=dtype)
 
-    tauaa, tauab, taubb = make_tau((t2aa_act,t2ab_act,t2bb_act) , t1, t1)
+#   tauaa, tauab, taubb = make_tau((t2aa_act,t2ab_act,t2bb_act) , t1, t1)
+    tauaa, tauab, taubb = make_tau((0*t2[0],0*t2[1],0*t2[2]) , t1, t1)
 #   tauaa, tauab, taubb = make_tau((t2aa,t2ab,t2bb) , t1, t1)
     u2aa, u2ab, u2bb = cc._add_vvvv(None, (tauaa,tauab,taubb), eris)
     
@@ -167,7 +168,8 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
             u2aa[:,p0:p1] += lib.einsum('ie,mbea->imab', t1a, ovvv.conj())
 
             tmp1aa = lib.einsum('ijef,mebf->ijmb', tauaa, ovvv)
-            tmp1aa += lib.einsum('ijef,mebf->ijmb', t2aa_act, ovvv)
+#           tmp1aa += lib.einsum('ijef,mebf->ijmb', t2aa_act, ovvv)
+            tmp1aa += lib.einsum('ijef,mebf->ijmb', t2aa, ovvv)
             u2aa -= lib.einsum('ijmb,ma->ijab', tmp1aa, t1a[p0:p1]*.5)
             ovvv = tmp1aa = None
 
@@ -185,7 +187,8 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
             u2bb[:,p0:p1] += lib.einsum('ie,mbea->imab', t1b, OVVV.conj())
 
             tmp1bb = lib.einsum('ijef,mebf->ijmb', taubb, OVVV)
-            tmp1bb += lib.einsum('ijef,mebf->ijmb', t2bb_act, OVVV)
+#           tmp1bb += lib.einsum('ijef,mebf->ijmb', t2bb_act, OVVV)
+            tmp1bb += lib.einsum('ijef,mebf->ijmb', t2bb, OVVV)
             u2bb -= lib.einsum('ijmb,ma->ijab', tmp1bb, t1b[p0:p1]*.5)
 
             OVVV = tmp1bb = None
@@ -204,7 +207,8 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
             u2ab[p0:p1] += lib.einsum('IE,maEB->mIaB', t1b, ovVV.conj())
 
             tmp1ab = lib.einsum('iJeF,meBF->iJmB', tauab, ovVV)
-            tmp1ab += lib.einsum('iJeF,meBF->iJmB', t2ab_act, ovVV)
+#           tmp1ab += lib.einsum('iJeF,meBF->iJmB', t2ab_act, ovVV)
+            tmp1ab += lib.einsum('iJeF,meBF->iJmB', t2ab, ovVV)
             u2ab -= lib.einsum('iJmB,ma->iJaB', tmp1ab, t1a[p0:p1])
 
             ovVV = tmp1ab = None
@@ -222,7 +226,8 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
             u2ab[:,p0:p1] += lib.einsum('ie,MBea->iMaB', t1a, OVvv.conj())
 
             tmp1abba = lib.einsum('iJeF,MFbe->iJbM', tauab, OVvv)
-            tmp1abba += lib.einsum('iJeF,MFbe->iJbM', t2ab_act, OVvv) #additional term
+#            tmp1abba += lib.einsum('iJeF,MFbe->iJbM', t2ab_act, OVvv) #additional term
+            tmp1abba += lib.einsum('iJeF,MFbe->iJbM', t2ab, OVvv) #additional term
             u2ab -= lib.einsum('iJbM,MA->iJbA', tmp1abba, t1b[p0:p1])
 
             OVvv = tmp1abba = None
@@ -279,7 +284,6 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
 #Implementation of the additional terms [V, T2^act] to singles residue
 #   u1b += 0.5*lib.einsum('mnae,meni->ia', t2bb_act, OVOO)
     u1b += 0.5*lib.einsum('mnae,meni->ia', t2bb, OVOO)
-
 
     wOVVO += lib.einsum('nb,nemj->mbej', t1b, OVOO)
     OVOO = eris_OVOO = None
@@ -433,17 +437,31 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
 
 #Implementation of the additional terms [V, T2^act] to doubles residue
 
-    u2aa += 2*lib.einsum('imae,mbej->ijab', t2aa_act, wovvo)
-    u2aa += 2*lib.einsum('iMaE,MbEj->ijab', t2ab_act, wOvVo)
-    u2bb += 2*lib.einsum('imae,mbej->ijab', t2bb_act, wOVVO)
-    u2bb += 2*lib.einsum('mIeA,mBeJ->IJAB', t2ab_act, woVvO)
-    u2ab += lib.einsum('imae,mBeJ->iJaB', t2aa_act, woVvO)
-    u2ab += lib.einsum('iMaE,MBEJ->iJaB', t2ab_act, wOVVO)
-    u2ab += lib.einsum('iMeA,MbeJ->iJbA', t2ab_act, wOvvO)
-    u2ab += lib.einsum('IMAE,MbEj->jIbA', t2bb_act, wOvVo)
-    u2ab += lib.einsum('mIeA,mbej->jIbA', t2ab_act, wovvo)
-    u2ab += lib.einsum('mIaE,mBEj->jIaB', t2ab_act, woVVo)
+#   u2aa += 2*lib.einsum('imae,mbej->ijab', t2aa_act, wovvo)
+#   u2aa += 2*lib.einsum('iMaE,MbEj->ijab', t2ab_act, wOvVo)
+#   u2bb += 2*lib.einsum('imae,mbej->ijab', t2bb_act, wOVVO)
+#   u2bb += 2*lib.einsum('mIeA,mBeJ->IJAB', t2ab_act, woVvO)
+#   u2ab += lib.einsum('imae,mBeJ->iJaB', t2aa_act, woVvO)
+#   u2ab += lib.einsum('iMaE,MBEJ->iJaB', t2ab_act, wOVVO)
+#   u2ab += lib.einsum('iMeA,MbeJ->iJbA', t2ab_act, wOvvO)
+#   u2ab += lib.einsum('IMAE,MbEj->jIbA', t2bb_act, wOvVo)
+#   u2ab += lib.einsum('mIeA,mbej->jIbA', t2ab_act, wovvo)
+#   u2ab += lib.einsum('mIaE,mBEj->jIaB', t2ab_act, woVVo)
+#   wovvo = wOVVO = woVvO = wOvVo = woVVo = wOvvO = None
+
+    u2aa += 2*lib.einsum('imae,mbej->ijab', t2aa, wovvo)
+    u2aa += 2*lib.einsum('iMaE,MbEj->ijab', t2ab, wOvVo)
+    u2bb += 2*lib.einsum('imae,mbej->ijab', t2bb, wOVVO)
+    u2bb += 2*lib.einsum('mIeA,mBeJ->IJAB', t2ab, woVvO)
+    u2ab += lib.einsum('imae,mBeJ->iJaB', t2aa, woVvO)
+    u2ab += lib.einsum('iMaE,MBEJ->iJaB', t2ab, wOVVO)
+    u2ab += lib.einsum('iMeA,MbeJ->iJbA', t2ab, wOvvO)
+    u2ab += lib.einsum('IMAE,MbEj->jIbA', t2bb, wOvVo)
+    u2ab += lib.einsum('mIeA,mbej->jIbA', t2ab, wovvo)
+    u2ab += lib.einsum('mIaE,mBEj->jIaB', t2ab, woVVo)
     wovvo = wOVVO = woVvO = wOvVo = woVVo = wOvvO = None
+
+
 
     Ftmpa = Fvva - .5*lib.einsum('mb,me->be', t1a, Fova)
     Ftmpb = Fvvb - .5*lib.einsum('mb,me->be', t1b, Fovb)
