@@ -42,7 +42,7 @@ MEMORYMIN = getattr(__config__, 'cc_ccsd_memorymin', 2000)
 # t1: ia
 # t2: ijab
 def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-7,
-           tolnormt=1e-5, verbose=None, callback=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None):
+           tolnormt=1e-5, verbose=None, callback=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None, oomp2_variant=None):
     log = logger.new_logger(mycc, verbose)
     if eris is None:
         eris = mycc.ao2mo(mycc.mo_coeff)
@@ -86,7 +86,6 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-7,
           adiis_t3 = None
 
 
-
     converged = False
     mycc.cycles = 0
     for istep in range(max_cycle):
@@ -95,7 +94,11 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-7,
         elif act_particle is not None and pert_triples:
             t1new, t2new, t3act = mycc.update_amps(t1, t2, eris, act_hole, act_particle, idx_s, idx_d, pert_triples, t3old)
         elif oo_mp2:
-            t1new, t2new = mycc.update_amps_oomp2(t1, t2, eris, act_hole, act_particle, idx_s, idx_d)
+
+        # I want to call 3 different variants of oomp2 update functions:
+
+
+            t1new, t2new = mycc.select_update_amps_oomp2(t1, t2, eris, act_hole, act_particle, idx_s, idx_d, oomp2_variant)
         else:
             t1new, t2new = mycc.update_amps(t1, t2, eris)
         if callback is not None:
@@ -1128,9 +1131,9 @@ class CCSDBase(lib.StreamObject):
     _add_vvvv = _add_vvvv
     update_amps = update_amps
 
-    def kernel(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None):
-        return self.ccsd(t1, t2, eris, act_particle, act_hole, idx_s, idx_d, oo_mp2, pert_triples, t3old)
-    def ccsd(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None):
+    def kernel(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None, oomp2_variant=None):
+        return self.ccsd(t1, t2, eris, act_particle, act_hole, idx_s, idx_d, oo_mp2, pert_triples, t3old, oomp2_variant)
+    def ccsd(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None, oomp2_variant=None):
         assert (self.mo_coeff is not None)
         assert (self.mo_occ is not None)
 
@@ -1148,13 +1151,13 @@ class CCSDBase(lib.StreamObject):
                  kernel(self, eris, t1, t2, max_cycle=self.max_cycle,
                        tol=self.conv_tol, tolnormt=self.conv_tol_normt,
                        verbose=self.verbose, callback=self.callback, act_particle=act_particle, 
-                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples, t3old=t3old)
+                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples, t3old=t3old,oomp2_variant=oomp2_variant)
         else:
             self.converged, self.e_corr, self.t1, self.t2 = \
                  kernel(self, eris, t1, t2, max_cycle=self.max_cycle,
                        tol=self.conv_tol, tolnormt=self.conv_tol_normt,
                        verbose=self.verbose, callback=self.callback, act_particle=act_particle, 
-                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples, t3old=t3old)
+                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples, t3old=t3old,oomp2_variant=oomp2_variant)
 
         self._finalize()
         if pert_triples:
