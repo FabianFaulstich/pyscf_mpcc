@@ -73,7 +73,7 @@ def get_index_tuples(act_hole, act_particle, nocc, nvir):
 
     return singles, doubles
 
-def select_update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles,oomp2_variant='standard'):
+def select_update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles,oomp2_variant=None):
     # call individual functions based on variant string input
 
     variants = {
@@ -147,8 +147,6 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
 
     tauaa, tauab, taubb = make_tau((0*t2[0],0*t2[1],0*t2[2]) , t1, t1)
     u2aa, u2ab, u2bb = cc._add_vvvv(None, (tauaa,tauab,taubb), eris)
-    
-    tauaa = tauab = taubb = None
 
     u2aa *= .5
     u2bb *= .5
@@ -2599,8 +2597,8 @@ class UCCSD(ccsd.CCSD):
 #       return uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
 #       t3_env, energy = uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
 #       return uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
-#       t3_env, energy = uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
-        energy = uccsd_t_inactive_iterative.inactive_energy(self, eris, t1, t2, t3, act_hole, act_particle)
+        t3_env, energy = uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+#       energy = uccsd_t_inactive_iterative.inactive_energy(self, eris, t1, t2, t3, act_hole, act_particle)
         return energy
 #       return uccsd_t_inactive_iterative.kernel_bareV(self, eris, act_hole, act_particle, t1, t2)
     uccsd_t = ccsd_t
