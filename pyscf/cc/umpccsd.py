@@ -1005,8 +1005,6 @@ def update_amps_oomp2_t2_fock(cc, t1, t2, eris, act_hole, act_particle, idx_sing
     tauaa, tauab, taubb = make_tau((0*t2[0],0*t2[1],0*t2[2]) , t1, t1)
     u2aa, u2ab, u2bb = cc._add_vvvv(None, (tauaa,tauab,taubb), eris)
     
-    tauaa = tauab = taubb = None
-
     u2aa *= .5
     u2bb *= .5
 
