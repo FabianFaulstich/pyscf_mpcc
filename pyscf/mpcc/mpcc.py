@@ -46,26 +46,17 @@ class MPCC(lib.StreamObject):
         tol = kwargs.get('tol', 1e-6)
         count_tol = kwargs.get('count_tol', 100)
 
-        t1, t2, Y = self.lowlevel.init_amps()
-        #t1, t2 = self.lowlevel.init_amps()
+        t1, t2 = self.lowlevel.init_amps()
 
         #start an iteration loop here:
         while e_diff > tol and count < count_tol:
             count += 1
             
             print(f'MPCC macro iteration: {count}')
-            #get the active fragments
-            #frags = self.lowlevel.get_active_fragments()
-            #frags = [frag]  #for now we will use only one fragment, but later we can use multiple fragments
-            #if no fragments are found, break the loop
-            #if not frags:
-            #    print('No active fragments found. Exiting loop.')
-            #    break
 
             if (count > 1):
-                print(f'Starting low-level MPCC iteration...')
-                t1, t2, Y = self.lowlevel.kernel(t1, t2_act, Y) 
-                #t1, t2 = self.lowlevel.kernel(t1, t2) 
+                print(f'Starting low-level MPCC iteration. Low-level kernel type {self.lowlevel.kernel_type}')
+                t1, t2 = self.lowlevel.kernel(t1, t2_act, **kwargs) 
 
             t1_act = []
             t2_act = []
