@@ -1,48 +1,39 @@
 from pyscf import lib
-import numpy
+import numpy as np
 
 class MPCC(lib.StreamObject):
 
-    def __init__(self, mf, lowlevel, screened, highlevel, eri, mo_coeff=None, **kwargs):
+    def __init__(self, mf, lowlevel, screened, highlevel, eri, **kwargs):
 
         self.mol = mf.mol
         self._scf = mf
 
-        self.mo_coeff = mo_coeff if mo_coeff is not None else mf.mo_coeff
+        if 'lo_coeff' in kwargs:
+            self.lo_coeff = kwargs['lo_coeff'] 
+        else:
+            # FIXME Have a default localization here 
+            raise ValueError(f'No local orbitals provided!')
 
-        self.eris = eri.ERIs(mf, self.mo_coeff)
+
+        self.eris = eri.ERIs(mf, self.lo_coeff)
         self.frags = kwargs.get('frag')
         if self.frags is None:
             raise ValueError("Missing required keyword argument 'frag' in kwargs.")
 
         print('MPCC fragments:', self.frags)
 
-        # FIXME include which low level theory / update amps should be used
         self.lowlevel = lowlevel.MPCC_LL(mf, self.eris, self.frags, **kwargs)
         self.screened = screened.screened(mf, self.eris, self.frags[0], **kwargs)
-
-
         self.highlevel = highlevel.MPCC_HL(mf, self.eris, self.frags[0], **kwargs)
        
-        # Setting MPCC attributes 
-        # use "_" for variable protection 
 
     def kernel(self, verbose = None, **kwargs):
-
-        #if localization:
-        #    try:
-        #        c_lo = kwargs['c_lo']
-        #    except:
-        #        print('Localization orbital transformation and fragments not provided. \nDefaulting to AVAS!')
-        #        breakpoint() 
-
-#       self.eris.make_eri()
 
         log = lib.logger.new_logger(self, verbose)
 
         count = 0
-        e_mpcc_prev = -numpy.inf
-        e_diff = numpy.inf
+        e_mpcc_prev = -np.inf
+        e_diff = np.inf
         tol = kwargs.get('tol', 1e-6)
         count_tol = kwargs.get('count_tol', 100)
 
@@ -89,8 +80,8 @@ class MPCC(lib.StreamObject):
                act_hole = frag[0]
                act_particle = frag[1]
                 
-               t1[numpy.ix_(act_hole, act_particle)] = t1_act[frag_i]
-               t2[numpy.ix_(act_hole, act_hole, act_particle, act_particle)] = t2_act[frag_i]
+               t1[np.ix_(act_hole, act_particle)] = t1_act[frag_i]
+               t2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = t2_act[frag_i]
 
                frag_i += 1
 
