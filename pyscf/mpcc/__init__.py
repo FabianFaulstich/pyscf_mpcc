@@ -1,7 +1,7 @@
 from pyscf import scf
 
 
-def MPCC(mf, mo_coeff, **kwargs):
+def MPCC(mf, **kwargs):
     if isinstance(mf, scf.uhf.UHF):
         raise RuntimeError("UMPCC is not implemented")
     elif isinstance(mf, scf.ghf.GHF):
@@ -11,7 +11,7 @@ def MPCC(mf, mo_coeff, **kwargs):
         return RMPCC(mf, with_df= True, **kwargs)
 
 
-def RMPCC(mf, with_df, mo_coeff, **kwargs):
+def RMPCC(mf, with_df, **kwargs):
     from pyscf.mpcc import dfrmpcc
    
     if mf.istype('UHF'):
@@ -20,6 +20,6 @@ def RMPCC(mf, with_df, mo_coeff, **kwargs):
     # NOTE we are enforcing the meanfield object to be on df type
     # Is this necessary?
     if mf.istype('DFRHF'):
-        return dfrmpcc.RMPCC(mf, mo_coeff, **kwargs)
+        return dfrmpcc.RMPCC(mf, **kwargs)
     else:
         raise RuntimeError("RMPCC variant is not implemented")

@@ -1,4 +1,5 @@
 from numpy.lib.index_tricks import ix_
+from numpy.linalg import qr
 from pyscf import lib, df
 from pyscf.lib import logger
 import numpy as np
@@ -26,8 +27,8 @@ class MPCC_LL:
         else:
             self.ll_con_tol = 1e-6
  
-        if 'll_update' in kwargs:
-            self.kernel_type = kwargs['kernel_type']
+        if 'll_kernel_type' in kwargs:
+            self.kernel_type = kwargs['ll_kernel_type']
         else:
             self.kernel_type = 'factorized'
 
@@ -38,9 +39,10 @@ class MPCC_LL:
 
         self.frags = frags
 
-        # NOTE can be potentially initialized
-       # self.t1 = None
-       # self.t2 = None
+        #NOTE can be potentially initialized
+        #self.t1 = None
+        self.t2 = None
+        self._Y = None
 
         # NOTE use DIIS as default
         self.diis = True
@@ -73,39 +75,73 @@ class MPCC_LL:
         try:
             func = self._kernels[self.kernel_type]
         except KeyError:
-            raise ValueError(f'Unknown low-level kernel theory: {kind}')
+            raise ValueError(f'Unknown low-level kernel type: {kind}')
         
         return func(t1, t2_act ,**kwargs)
 
-    def _factorized_kernel(self, t1=None, t2_act=None, Y=None):
+    def _unfactorized_kernel(self, t1=None, t2_act=None):
+        print('In unfactorized Kernel')
+        
+        res = np.inf
+        count = 0
+        adiis = lib.diis.DIIS()
 
-        # NOTE Do we want to initialize t1 and t2?
-        # WARNING t2 is incorrectly initialized here!
-        '''
-        if t1 is None and t2 is None and Y is None:
+        e_corr = None
+
+        while res > self.ll_con_tol and count < self.ll_max_its:
+
+            res, e_corr, t1_new, t2_new = self.update_amps_unfactorized(t1, self._t2)
+            if self.diis:
+                t1_new, t2_new = self.run_diis_full(t1_new, t2_new, adiis)
+            else:
+                t1_new, t2_new = t1_new, t2_new
+
+            t1, t2 = t1_new, t2_new
+            t1_new, t2_new = None, None  # free memory
             
-            # NOTE So far this is an N^5 step. 
-            # So potentially initilaization should also be done in the factorized manner.
-            t1, t2, Y = self.init_amps() 
-            
-            t2_new = []
-            for frag in self.frags:
-                act_hole = frag[0]
-                act_particle = frag[1]
-                t2_new.append(t2[np.ix_(act_hole, act_hole, act_particle, act_particle)])
-            t2 = t2_new
+            count += 1
+            err = res
+            # NOTE change this to logger!
+            print(f"It {count}; correlation energy {e_corr:.6e}; residual {res:.6e}")
 
-            # NOTE remove this once df it running
-            if False:
-                t2_app = lib.einsum("LRai, LRbj -> ijab", Y, Y)    
+        self._e_corr = e_corr
+        self._e_tot = self.mf.e_tot + self._e_corr
 
-                fro_rel = np.linalg.norm(t2 - t2_app) / np.linalg.norm(t2)
-                max_abs = np.max(np.abs(t2 - t2_app))
+        return t1, t2
 
-                print(f'Test for init:')
-                print(f"4th-order relative Frobenius error: {fro_rel:.3e}")
-                print(f"4th-order max abs entry error:     {max_abs:.3e}")
-        '''
+    def update_amps_unfactorized(self, t1, t2):
+
+        # Contractions
+        Xoo, Xvo, X = self.get_X(t1)
+
+        Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+        
+        Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+
+        Ω = self.get_Ω_slow(X, Xvo, Foo, Fvv, Fov, t1, t2)
+
+        res2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
+    
+        ΔE = self.get_energy(t1, t2)
+
+        for frag in self.frags:
+            act_hole = frag[0]
+            act_particle = frag[1]
+            Ω[np.ix_(act_particle, act_hole)] = 0.0
+            res2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
+
+        res1 = Ω.T / self._eris.eia
+        res2 = res2 / self._eris.D
+        res = np.linalg.norm(res1) + np.linalg.norm(res2)
+
+        t1 -= res1
+        t2 -= res2
+
+        return res, ΔE, t1, t2
+    
+
+
+    def _factorized_kernel(self, t1=None, t2_act=None):
 
         res = np.inf
         count = 0
@@ -114,11 +150,12 @@ class MPCC_LL:
         e_corr = None
         while res > self.ll_con_tol and count < self.ll_max_its:
 
-            res, t1_it, Δt2s_o, Δt2s_v, Y = self.update_amps(t1, t2_act, Y)
+            res, t1_it, Δt2s_o, Δt2s_v, Y = self.update_amps_factorized(t1, t2_act, self._Y)
             if self.diis:
                 t1_it  = self.run_diis(t1_it, adiis)
 
             t1 = t1_it
+            self._Y = Y
             
             count += 1
             # NOTE change this to logger!
@@ -129,9 +166,9 @@ class MPCC_LL:
         t2 = self.get_t2(Y, t2_act, Δt2s_o, Δt2s_v)
         self._e_corr = self.get_energy(t1, t2) 
 
-        return t1, t2, Y
+        return t1, t2
 
-    def update_amps(self, t1, t2_act, Y):
+    def update_amps_factorized(self, t1, t2_act, Y):
         """
         Following Table XXX in Future Paper
         """
@@ -143,10 +180,6 @@ class MPCC_LL:
        
         # Step 3
         Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
-
-        # NOTE remove this once t2 is correctly fatorized
-        #t2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
-        #t2 += t2/self._eris.D
 
         # Step 4 
         Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1, Y)
@@ -204,6 +237,31 @@ class MPCC_LL:
         imds_t1 = self._IMDS_T1(Joo=Joo, Jvv=Jvv, Jov=Jvo, Foo=Foo, Fvv=Fvv, Fov=Fov, Xoo=Xoo, Xvo=Xvo)
         return imds_t1
     
+    def run_diis_full(self, t1, t2, adiis):
+
+        vec = self.amplitudes_to_vector_full(t1, t2)
+        t1, t2 = self.vector_to_amplitudes_full(adiis.update(vec))
+
+        return t1, t2
+
+    def amplitudes_to_vector_full(self, t1, t2, out=None):
+        nov = self.nocc * self.nvir
+        size = nov + nov * (nov + 1) // 2
+        vector = np.ndarray(size, t1.dtype, buffer=out)
+        vector[:nov] = t1.ravel()
+        lib.pack_tril(t2.transpose(0, 2, 1, 3).reshape(nov, nov), out=vector[nov:])
+        return vector
+
+    def vector_to_amplitudes_full(self, vector):
+        nov = self.nocc * self.nvir
+        t1 = vector[:nov].copy().reshape((self.nocc, self.nvir))
+        # filltriu=lib.SYMMETRIC because t2[iajb] == t2[jbia]
+        t2 = lib.unpack_tril(vector[nov:], filltriu=lib.SYMMETRIC)
+        t2 = t2.reshape(self.nocc, self.nvir, self.nocc, self.nvir).transpose(
+            0, 2, 1, 3
+        )
+        return t1, np.asarray(t2, order="C")
+
     def run_diis(self, t1, adiis):
 
         vec = self.amplitudes_to_vector(t1)
@@ -249,12 +307,51 @@ class MPCC_LL:
         Fvv += lib.einsum("Lab,L->ab",self._eris.Lvv,X) 
         Fvv -= lib.einsum("Lmb,Lam->ab",self._eris.Lov,Xvo)
 
-
         Fov  = self._eris.fov.copy()
         Fov += lib.einsum("Ljb,L->jb", self._eris.Lov, X)
         Fov -= lib.einsum("Lji,Lib->jb", Xoo, self._eris.Lov)
 
         return Foo, Fvv, Fov
+
+    
+    # FIXME There is substantial code overlap with get_Ω
+    def get_Ω_slow(self, X, Xvo, Foo, Fvv, Fov, t1, t2):
+
+        Foo_tmp = Foo.copy()
+        Fvv_tmp = Fvv.copy() 
+
+        Foo_tmp += lib.einsum("ic,jc->ij",Fov,t1)*0.5
+        Fvv_tmp -= lib.einsum("lb,la->ab",Fov,t1)*0.5 
+
+        Ω = self._eris.fov.T.copy()
+
+        Ω -= lib.einsum("Laj,Lji->ai", Xvo, self._eris.Loo)
+        Ω += lib.einsum("Lai,L->ai", self._eris.Lvo, X)
+
+        Ω += lib.einsum("ib,ab -> ai", t1, Fvv_tmp)
+        Ω -= lib.einsum("ka,ki -> ai", t1, Foo_tmp)
+
+        t2_antisym = 2.0*t2 - np.transpose(t2, (0, 1, 3, 2))
+        Ω += lib.einsum("ijab,jb->ai", t2_antisym, Fov)
+
+        del Foo_tmp, Fvv_tmp
+        
+        return Ω 
+
+    def update_t2(self, t2, Jvo, Foo, Fvv, Fov, t1):
+
+        Foo_tmp = Foo.copy()
+        Fvv_tmp = Fvv.copy() 
+
+        Foo_tmp += lib.einsum("ic,jc->ij",Fov,t1)
+        Fvv_tmp -= lib.einsum("lb,la->ab",Fov,t1)
+        
+        tmp  = lib.einsum("bc,ijac->ijab", Fvv_tmp, t2)
+        tmp -= lib.einsum("mi,mjab->ijab", Foo_tmp, t2)
+        res2 = tmp + tmp.transpose(1,0,3,2)
+        res2 += lib.einsum("Lai,Lbj->ijab", Jvo, Jvo)
+
+        return res2
 
     def get_Ω(self, X, Xvo, Foo, Fvv, Fov, t1, Y):
 
@@ -403,8 +500,6 @@ class MPCC_LL:
 
             return Δt2s_o, Δt2s_v , Ω
             
-
-
     def init_amps_fact(self):
        
         Y = self._eris.Lov[:, None, :, :] *self._eris.dD.transpose(2, 0, 1)[None, :, :, :]
@@ -419,7 +514,10 @@ class MPCC_LL:
         t2 /= self._eris.D     
         t1 = -self._eris.fov/self._eris.eia
         Y = -self._eris.Lov.transpose(0,2,1)[:, None, :, :] *self._eris.dD.transpose(2, 1, 0)[None, :, :, :]
-        return t1, t2, Y
+        
+        self._Y = Y
+        self._t2 = t2
+        return t1, t2
 
     def get_t2(self, Y, t2_act, Δt2s_o, Δt2s_v):
 
