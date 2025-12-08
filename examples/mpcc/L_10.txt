@@ -1,0 +1,337 @@
+converged SCF energy = -760.415343901209
+shape of Lpq:(200, 240, 240)
+
+Accessed _make_df_eris successfully!
+Loo shape: (1160, 50, 50)
+Lov shape: (1160, 50, 190)
+Lvv shape: (1160, 190, 190)
+Lvo shape: (1160, 190, 50)
+error at iteration 0: inf
+error at iteration 1: 0.19967767421077304
+error at iteration 2: 0.09261174397708075
+error at iteration 3: 0.06136246810251503
+error at iteration 4: 0.03827610278530172
+error at iteration 5: 0.022336991480455974
+error at iteration 6: 0.013095943246394709
+error at iteration 7: 0.008334897850249157
+error at iteration 8: 0.005757875482697624
+error at iteration 9: 0.004144373801822018
+error at iteration 10: 0.003044121933601516
+error at iteration 11: 0.00228848146618409
+error at iteration 12: 0.001767468166908353
+error at iteration 13: 0.0013994929847472928
+error at iteration 14: 0.001133175861400871
+error at iteration 15: 0.0009356264662522575
+Converged(CPD) in 16 iterations.
+[init=3] Loo rank 580: error = 1.573e+00
+error at iteration 0: inf
+error at iteration 1: 0.3531134794558713
+error at iteration 2: 0.15454986896096307
+error at iteration 3: 0.06225631900374741
+error at iteration 4: 0.024894360246088328
+error at iteration 5: 0.010688953768433297
+error at iteration 6: 0.005610957271114665
+error at iteration 7: 0.003277362339806328
+error at iteration 8: 0.0021691500038345315
+error at iteration 9: 0.0015670426223290575
+error at iteration 10: 0.0011752413409565413
+error at iteration 11: 0.000926898066288491
+Converged(CPD) in 12 iterations.
+ Lov rank 1160: [init=factors]: 2.638e+00
+error at iteration 0: inf
+error at iteration 1: 0.2849114310902971
+error at iteration 2: 0.18943506921663783
+error at iteration 3: 0.1169474698439453
+error at iteration 4: 0.05241581623114683
+error at iteration 5: 0.023403841011214024
+error at iteration 6: 0.012457362575828121
+error at iteration 7: 0.007626729438612825
+error at iteration 8: 0.005094425631204283
+error at iteration 9: 0.0037787708238812695
+error at iteration 10: 0.0030224824696944708
+error at iteration 11: 0.002555541125492597
+error at iteration 12: 0.002228370290955739
+error at iteration 13: 0.0018772553277330295
+error at iteration 14: 0.001617191059701803
+error at iteration 15: 0.0014328524484022442
+error at iteration 16: 0.0012838604621914773
+error at iteration 17: 0.0011603999600833387
+error at iteration 18: 0.0010582279167865999
+error at iteration 19: 0.0009740669922812528
+Converged(CPD) in 20 iterations.
+error at iteration 0: inf
+error at iteration 1: 0.0709683911922197
+error at iteration 2: 0.035355672687004236
+error at iteration 3: 0.019598732459950335
+error at iteration 4: 0.012553803835691602
+error at iteration 5: 0.008762818272544354
+error at iteration 6: 0.00651123960565636
+error at iteration 7: 0.005062852118182082
+error at iteration 8: 0.004080906506878104
+error at iteration 9: 0.0034131874154421094
+error at iteration 10: 0.002945386763408289
+error at iteration 11: 0.0025626753211759334
+error at iteration 12: 0.002244732768692692
+error at iteration 13: 0.0019953470897117187
+error at iteration 14: 0.00179092987638578
+error at iteration 15: 0.0016195485396717502
+error at iteration 16: 0.0014751505140301185
+error at iteration 17: 0.0013535943755277752
+error at iteration 18: 0.0012510732850553458
+error at iteration 19: 0.0011637976174344034
+error at iteration 20: 0.0010882190972612976
+error at iteration 21: 0.0010214149527124489
+error at iteration 22: 0.0009613711265467617
+Converged(CPD) in 23 iterations.
+ Lvv rank 1160: [init =3]: 6.858e+00 [init=factors]: 8.540e+00
+error at iteration 0: inf
+error at iteration 1: 0.33345341589309635
+error at iteration 2: 0.1416180746946807
+error at iteration 3: 0.0651302612035923
+error at iteration 4: 0.029673168438004195
+error at iteration 5: 0.013432267418064296
+error at iteration 6: 0.006629752326424199
+error at iteration 7: 0.003679290144377876
+error at iteration 8: 0.0022723782840892714
+error at iteration 9: 0.001505128024365152
+error at iteration 10: 0.001053460945007051
+error at iteration 11: 0.0007929240339440129
+Converged(CPD) in 12 iterations.
+ Lov rank 1740: [init=factors]: 1.200e+00
+error at iteration 0: inf
+error at iteration 1: 0.2870837506846246
+error at iteration 2: 0.19982673301575635
+error at iteration 3: 0.10929999356251782
+error at iteration 4: 0.04436369897798663
+error at iteration 5: 0.01893785003329311
+error at iteration 6: 0.009763945635198945
+error at iteration 7: 0.0058465571697401755
+error at iteration 8: 0.0037894856479473507
+error at iteration 9: 0.0026644371794983038
+error at iteration 10: 0.0020174433764793415
+error at iteration 11: 0.0016319448801755745
+error at iteration 12: 0.0013625311585412359
+error at iteration 13: 0.0011605365535377332
+error at iteration 14: 0.0009968440471501902
+Converged(CPD) in 15 iterations.
+error at iteration 0: inf
+error at iteration 1: 0.07581953506377237
+error at iteration 2: 0.03188513793959402
+error at iteration 3: 0.015750606031782785
+error at iteration 4: 0.009155571964780326
+error at iteration 5: 0.006145487016247217
+error at iteration 6: 0.004437755489118997
+error at iteration 7: 0.003409369391705233
+error at iteration 8: 0.0027454444466946115
+error at iteration 9: 0.0022543229130691164
+error at iteration 10: 0.001913181955838221
+error at iteration 11: 0.0016657226521701526
+error at iteration 12: 0.0014759730728985884
+error at iteration 13: 0.0013244787865730745
+error at iteration 14: 0.0012001026216365007
+error at iteration 15: 0.0010961849676676752
+error at iteration 16: 0.001008153827599112
+error at iteration 17: 0.000932454214674569
+Converged(CPD) in 18 iterations.
+ Lvv rank 1740: [init =3]: 3.411e+00 [init=factors]: 5.121e+00
+error at iteration 0: inf
+error at iteration 1: 0.305667991948662
+error at iteration 2: 0.12330098979830001
+error at iteration 3: 0.061236204340036834
+error at iteration 4: 0.033487178145014646
+error at iteration 5: 0.018671588144072784
+error at iteration 6: 0.010726911751394997
+error at iteration 7: 0.006443560992343649
+error at iteration 8: 0.0040897637645131955
+error at iteration 9: 0.0027372379963745176
+error at iteration 10: 0.0019142072957466939
+error at iteration 11: 0.001387555844789964
+error at iteration 12: 0.001033626489607255
+error at iteration 13: 0.0007927873475613613
+Converged(CPD) in 14 iterations.
+ Lov rank 2320: [init=factors]: 8.012e-01
+error at iteration 0: inf
+error at iteration 1: 0.2821860942642109
+error at iteration 2: 0.2034347521235077
+error at iteration 3: 0.0986547616800691
+error at iteration 4: 0.038852238326867766
+error at iteration 5: 0.016801685439675314
+error at iteration 6: 0.008506130816401287
+error at iteration 7: 0.0047294716844462695
+error at iteration 8: 0.002862371855488096
+error at iteration 9: 0.0019310480981055284
+error at iteration 10: 0.0013730153213228
+error at iteration 11: 0.0010369390995481169
+error at iteration 12: 0.0008302809390020004
+Converged(CPD) in 13 iterations.
+error at iteration 0: inf
+error at iteration 1: 0.07379424580219959
+error at iteration 2: 0.02965867066482969
+error at iteration 3: 0.014219245207579743
+error at iteration 4: 0.008061755402071234
+error at iteration 5: 0.005143110712057634
+error at iteration 6: 0.003569788955635207
+error at iteration 7: 0.002644171797815585
+error at iteration 8: 0.0020612048672701277
+error at iteration 9: 0.0016501695030509689
+error at iteration 10: 0.00135663199698062
+error at iteration 11: 0.0011450576769232307
+error at iteration 12: 0.000982658799555225
+Converged(CPD) in 13 iterations.
+ Lvv rank 2320: [init =3]: 1.845e+00 [init=factors]: 3.244e+00
+error at iteration 0: inf
+error at iteration 1: 0.28114802166989256
+error at iteration 2: 0.1017878883078285
+error at iteration 3: 0.05026994196002102
+error at iteration 4: 0.03034976665539317
+error at iteration 5: 0.02008140123187384
+error at iteration 6: 0.013848717318394939
+error at iteration 7: 0.00977832804155871
+error at iteration 8: 0.007059226769334036
+error at iteration 9: 0.005221336111349475
+error at iteration 10: 0.003950572290614095
+error at iteration 11: 0.003059331138650461
+error at iteration 12: 0.0024207863669589436
+error at iteration 13: 0.0019508542859273253
+error at iteration 14: 0.0015970569093034532
+error at iteration 15: 0.0013262676989125675
+error at iteration 16: 0.0011156735784197246
+error at iteration 17: 0.0009491541297421413
+Converged(CPD) in 18 iterations.
+ Lov rank 2900: [init=factors]: 1.133e+00
+error at iteration 0: inf
+error at iteration 1: 0.2821069348096289
+error at iteration 2: 0.1968777012219286
+error at iteration 3: 0.08778163229768889
+error at iteration 4: 0.03399306475970266
+error at iteration 5: 0.014606419215459888
+error at iteration 6: 0.007209286067713559
+error at iteration 7: 0.004018055745085427
+error at iteration 8: 0.002455507925906035
+error at iteration 9: 0.0016226484718377225
+error at iteration 10: 0.001137393619244028
+error at iteration 11: 0.0008345426458414625
+Converged(CPD) in 12 iterations.
+error at iteration 0: inf
+error at iteration 1: 0.08318653064111511
+error at iteration 2: 0.034711143252467394
+error at iteration 3: 0.01671797423357748
+error at iteration 4: 0.009224055289105769
+error at iteration 5: 0.005663850772168702
+error at iteration 6: 0.003801888579005857
+error at iteration 7: 0.0027263128323920874
+error at iteration 8: 0.0020585057175614846
+error at iteration 9: 0.0016043832640816325
+error at iteration 10: 0.0012852660879199042
+error at iteration 11: 0.0010549725615588805
+error at iteration 12: 0.0008845897928165605
+Converged(CPD) in 13 iterations.
+ Lvv rank 2900: [init =3]: 1.157e+00 [init=factors]: 2.037e+00
+error at iteration 0: inf
+error at iteration 1: 0.2574490640751778
+error at iteration 2: 0.08794118185026009
+error at iteration 3: 0.04246673895599762
+error at iteration 4: 0.025419841699814608
+error at iteration 5: 0.01721812322580718
+error at iteration 6: 0.012534867428781751
+error at iteration 7: 0.009588865692096715
+error at iteration 8: 0.007589801557875024
+error at iteration 9: 0.006150494523363033
+error at iteration 10: 0.005066310179476334
+error at iteration 11: 0.0042239666180990745
+error at iteration 12: 0.0035572664553744637
+error at iteration 13: 0.0030237320005434415
+error at iteration 14: 0.002592784241425186
+error at iteration 15: 0.0022416882560414506
+error at iteration 16: 0.0019535030318909748
+error at iteration 17: 0.0017152999466065258
+error at iteration 18: 0.0015170127987211256
+error at iteration 19: 0.0013507248870665428
+error at iteration 20: 0.0012101983961417782
+error at iteration 21: 0.0010905256416458564
+error at iteration 22: 0.0009878387612496271
+Converged(CPD) in 23 iterations.
+ Lov rank 3480: [init=factors]: 2.143e+00
+error at iteration 0: inf
+error at iteration 1: 0.2741221593253497
+error at iteration 2: 0.19292703427512375
+error at iteration 3: 0.08299240455547464
+error at iteration 4: 0.03144542864968933
+error at iteration 5: 0.013301608441019783
+error at iteration 6: 0.006413060043441561
+error at iteration 7: 0.0034954896188158693
+error at iteration 8: 0.0020908424741630325
+error at iteration 9: 0.0013548454867108647
+error at iteration 10: 0.0009413770563351347
+Converged(CPD) in 11 iterations.
+error at iteration 0: inf
+error at iteration 1: 0.09815948569280097
+error at iteration 2: 0.047708191323758836
+error at iteration 3: 0.025459939708668264
+error at iteration 4: 0.014692041772069245
+error at iteration 5: 0.008746633000848228
+error at iteration 6: 0.005427791920476217
+error at iteration 7: 0.0035511003345390715
+error at iteration 8: 0.002433513177000725
+error at iteration 9: 0.001756890892472572
+error at iteration 10: 0.0013304361317486406
+error at iteration 11: 0.0010462571381090729
+error at iteration 12: 0.000845647407046797
+Converged(CPD) in 13 iterations.
+ Lvv rank 3480: [init =3]: 8.647e-01 [init=factors]: 1.365e+00
+error at iteration 0: inf
+error at iteration 1: 0.2341621449079247
+error at iteration 2: 0.07606211878896907
+error at iteration 3: 0.0380018987503338
+error at iteration 4: 0.022955824157770838
+error at iteration 5: 0.015541392877859522
+error at iteration 6: 0.011281419850317012
+error at iteration 7: 0.008587902116457172
+error at iteration 8: 0.006788464247939566
+error at iteration 9: 0.005534611107828588
+error at iteration 10: 0.004628697980155666
+error at iteration 11: 0.003944161018153813
+error at iteration 12: 0.003408966771416673
+error at iteration 13: 0.0029804567983450075
+error at iteration 14: 0.0026303783015021245
+error at iteration 15: 0.002339570319447176
+error at iteration 16: 0.0020946681623992963
+error at iteration 17: 0.0018858407074193173
+error at iteration 18: 0.0017057071053114131
+error at iteration 19: 0.0015493297342573167
+error at iteration 20: 0.0014132836369233695
+error at iteration 21: 0.0012944234585990852
+error at iteration 22: 0.0011900106241721359
+error at iteration 23: 0.001097825025665404
+error at iteration 24: 0.0010160447792559105
+error at iteration 25: 0.0009431469455419283
+Converged(CPD) in 26 iterations.
+ Lov rank 4060: [init=factors]: 3.493e+00
+error at iteration 0: inf
+error at iteration 1: 0.2689551670388006
+error at iteration 2: 0.18672899345050298
+error at iteration 3: 0.07732695766390665
+error at iteration 4: 0.028208902757871017
+error at iteration 5: 0.011792546298375811
+error at iteration 6: 0.005783605680111069
+error at iteration 7: 0.0032236494617343594
+error at iteration 8: 0.0019780214819970342
+error at iteration 9: 0.001278416362210732
+error at iteration 10: 0.0008508179721198762
+Converged(CPD) in 11 iterations.
+error at iteration 0: inf
+error at iteration 1: 0.11370246469364803
+error at iteration 2: 0.06221166634987339
+error at iteration 3: 0.03483567434500316
+error at iteration 4: 0.021087408232697523
+error at iteration 5: 0.012972019583420542
+error at iteration 6: 0.007962526846470377
+error at iteration 7: 0.0050056983920981
+error at iteration 8: 0.0032813466445625068
+error at iteration 9: 0.00225393185325117
+error at iteration 10: 0.0016170109721545273
+error at iteration 11: 0.0012028421028469627
+error at iteration 12: 0.0009227772579530908
+Converged(CPD) in 13 iterations.
+ Lvv rank 4060: [init =3]: 6.349e-01 [init=factors]: 9.456e-01
+Experiment complete.

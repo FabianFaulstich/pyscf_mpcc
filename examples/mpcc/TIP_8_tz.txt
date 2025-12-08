@@ -1,0 +1,729 @@
+converged SCF energy = -608.542252136249
+MPCC fragments: [[[0], [0]]]
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/examples/mpcc/example.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    28     92.0 MiB     92.0 MiB           1       @profile
+    29                                             def init_scf_and_mpcc(species, basis, rank_reduced_option, rank_value):
+    30     92.1 MiB      0.2 MiB           1           mol, mol_name = build_molecule(species, basis)
+    31                                         
+    32                                             # ---------- SCF ----------
+    33   1263.1 MiB   1171.0 MiB           1           mf = scf.RHF(mol).density_fit().run()
+    34   1263.1 MiB      0.0 MiB           1           mf.mol.max_memory = 20000
+    35                                         
+    36   1263.1 MiB      0.0 MiB           1           c_lo = mf.mo_coeff
+    37                                         
+    38                                             # MPCC options
+    39   1263.1 MiB      0.0 MiB           1           frag_info = {'frag': [[[0], [0]]]}
+    40   1263.1 MiB      0.0 MiB           1           conv_info = {'ll_con_tol': 1e-6, 'll_max_its': 80}
+    41   1263.1 MiB      0.0 MiB           1           rank_control = {
+    42   1263.1 MiB      0.0 MiB           1               'rank_reduced': rank_reduced_option,
+    43   1263.1 MiB      0.0 MiB           1               'rank_opts': {'Loo': 1, 'Lov': rank_value, 'Lvv': rank_value}
+    44                                                 }
+    45   1263.1 MiB      0.0 MiB           1           kwargs = frag_info | conv_info | rank_control
+    46                                         
+    47                                             # ---------- Initialize low-level MPCC ----------
+    48   6821.3 MiB   5558.1 MiB           1           mympcc = mpcc.RMPCC(mf, 'True', c_lo, **kwargs)
+    49                                         
+    50   6821.3 MiB      0.0 MiB           1           return mol, mf, mympcc
+
+
+this way
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    33   6821.6 MiB   6821.6 MiB           1       @profile
+    34                                             def __init__(self, mf, frozen=None, mo_coeff=None, mo_occ=None):
+    35   6821.6 MiB      0.0 MiB           1           ccsd.CCSD.__init__(self, mf, frozen, mo_coeff, mo_occ)
+    36   6821.6 MiB      0.0 MiB           1           if getattr(mf, 'with_df', None):
+    37   6821.6 MiB      0.0 MiB           1               self.with_df = mf.with_df
+    38                                                 else:
+    39                                                     self.with_df = df.DF(mf.mol)
+    40                                                     self.with_df.auxbasis = df.make_auxbasis(mf.mol, mp2fit=True)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   129   6821.6 MiB   6821.6 MiB           1   @profile
+   130                                         def _make_df_eris(cc, mo_coeff=None):
+   131   6821.6 MiB      0.0 MiB           1       assert cc._scf.istype('RHF')
+   132   6821.6 MiB      0.0 MiB           1       eris = _ChemistsERIs()
+   133   6828.9 MiB      7.3 MiB           1       eris._common_init_(cc, mo_coeff)
+   134   6828.9 MiB      0.0 MiB           1       nocc = eris.nocc
+   135   6828.9 MiB      0.0 MiB           1       nmo = eris.fock.shape[0]
+   136   6828.9 MiB      0.0 MiB           1       nvir = nmo - nocc
+   137   6828.9 MiB      0.0 MiB           1       nvir_pair = nvir*(nvir+1)//2
+   138   6828.9 MiB      0.0 MiB           1       with_df = cc.with_df
+   139   6828.9 MiB      0.0 MiB           1       naux = eris.naux = with_df.get_naoaux()
+   140                                         
+   141   6828.9 MiB      0.0 MiB           1       eris.feri = lib.H5TmpFile()
+   142   6828.9 MiB      0.0 MiB           1       eris.oooo = eris.feri.create_dataset('oooo', (nocc,nocc,nocc,nocc), 'f8')
+   143   6828.9 MiB      0.0 MiB           1       eris.ovoo = eris.feri.create_dataset('ovoo', (nocc,nvir,nocc,nocc), 'f8', chunks=(nocc,1,nocc,nocc))
+   144   6828.9 MiB      0.0 MiB           1       eris.ovov = eris.feri.create_dataset('ovov', (nocc,nvir,nocc,nvir), 'f8', chunks=(nocc,1,nocc,nvir))
+   145   6828.9 MiB      0.0 MiB           1       eris.ovvo = eris.feri.create_dataset('ovvo', (nocc,nvir,nvir,nocc), 'f8', chunks=(nocc,1,nvir,nocc))
+   146   6828.9 MiB      0.0 MiB           1       eris.oovv = eris.feri.create_dataset('oovv', (nocc,nocc,nvir,nvir), 'f8', chunks=(nocc,nocc,1,nvir))
+   147                                             # nrow ~ 4e9/8/blockdim to ensure hdf5 chunk < 4GB
+   148   6828.9 MiB      0.0 MiB           1       chunks = (min(nvir_pair,int(4e8/with_df.blockdim)), min(naux,with_df.blockdim))
+   149   6828.9 MiB      0.0 MiB           1       eris.vvL = eris.feri.create_dataset('vvL', (nvir_pair,naux), 'f8', chunks=chunks)
+   150                                         
+   151   6828.9 MiB      0.0 MiB           1       Loo = numpy.empty((naux,nocc,nocc))
+   152   6828.9 MiB      0.0 MiB           1       Lov = numpy.empty((naux,nocc,nvir))
+   153   6828.9 MiB      0.0 MiB           1       mo = numpy.asarray(eris.mo_coeff, order='F')
+   154   6828.9 MiB      0.0 MiB           1       ijslice = (0, nmo, 0, nmo)
+   155   6828.9 MiB      0.0 MiB           1       p1 = 0
+   156   6828.9 MiB      0.0 MiB           1       Lpq = None
+   157   7522.8 MiB    -41.7 MiB           6       for k, eri1 in enumerate(with_df.loop()):
+   158   7522.8 MiB    397.5 MiB           5           Lpq = _ao2mo.nr_e2(eri1, mo, ijslice, aosym='s2', mosym='s1', out=Lpq)
+   159   7522.8 MiB      0.0 MiB           5           p0, p1 = p1, p1 + Lpq.shape[0]
+   160   7522.8 MiB      0.0 MiB           5           Lpq = Lpq.reshape(p1-p0,nmo,nmo)
+   161   7523.5 MiB      6.4 MiB           5           Loo[p0:p1] = Lpq[:,:nocc,:nocc]
+   162   7541.6 MiB    143.9 MiB           5           Lov[p0:p1] = Lpq[:,:nocc,nocc:]
+   163   7522.8 MiB    104.5 MiB           5           Lvv = lib.pack_tril(Lpq[:,nocc:,nocc:])
+   164   7522.8 MiB    -41.7 MiB           5           eris.vvL[:,p0:p1] = Lvv.T
+   165   6982.4 MiB   -540.4 MiB           1       Lpq = Lvv = None
+   166   6982.4 MiB      0.0 MiB           1       Loo = Loo.reshape(naux,nocc**2)
+   167                                             #Lvo = Lov.transpose(0,2,1).reshape(naux,nvir*nocc)
+   168   6982.4 MiB      0.0 MiB           1       Lov = Lov.reshape(naux,nocc*nvir)
+   169   6982.4 MiB      0.0 MiB           1       eris.oooo[:] = lib.ddot(Loo.T, Loo).reshape(nocc,nocc,nocc,nocc)
+   170   7022.4 MiB     40.0 MiB           1       eris.ovoo[:] = lib.ddot(Lov.T, Loo).reshape(nocc,nvir,nocc,nocc)
+   171   9217.0 MiB   2194.5 MiB           1       ovov = lib.ddot(Lov.T, Lov).reshape(nocc,nvir,nocc,nvir)
+   172   9218.8 MiB      1.9 MiB           1       eris.ovov[:] = ovov
+   173   9218.8 MiB      0.0 MiB           1       eris.ovvo[:] = ovov.transpose(0,1,3,2)
+   174   7024.3 MiB  -2194.5 MiB           1       ovov = None
+   175                                         
+   176   7024.3 MiB      0.0 MiB           1       mem_now = lib.current_memory()[0]
+   177   7024.3 MiB      0.0 MiB           1       max_memory = max(0, cc.max_memory - mem_now)
+   178   7024.3 MiB      0.0 MiB           1       blksize = max(ccsd.BLKMIN, int((max_memory*.9e6/8-nocc**2*nvir_pair)/(nocc**2+naux)))
+   179   7024.3 MiB      0.0 MiB           1       oovv_tril = numpy.empty((nocc*nocc,nvir_pair))
+   180   8126.2 MiB      1.4 MiB       22526       for p0, p1 in lib.prange(0, nvir_pair, blksize):
+   181   8126.2 MiB   1100.5 MiB       22525           oovv_tril[:,p0:p1] = lib.ddot(Loo.T, _cp(eris.vvL[p0:p1]).T)
+   182   8126.2 MiB      0.0 MiB           1       eris.oovv[:] = lib.unpack_tril(oovv_tril).reshape(nocc,nocc,nvir,nvir)
+   183   7026.4 MiB  -1099.9 MiB           1       oovv_tril = Loo = None
+   184                                         
+   185   7026.4 MiB      0.0 MiB           1       Lov = Lov.reshape(naux,nocc,nvir)
+   186   7026.4 MiB      0.0 MiB           1       vblk = max(nocc, int((max_memory*.15e6/8)/(nocc*nvir_pair)))
+   187   7026.4 MiB      0.0 MiB           1       vvblk = int(min(nvir_pair, 4e8/nocc, max(4, (max_memory*.8e6/8)/(vblk*nocc+naux))))
+   188   7026.4 MiB      0.0 MiB           2       eris.ovvv = eris.feri.create_dataset('ovvv', (nocc,nvir,nvir_pair), 'f8',
+   189   7026.4 MiB      0.0 MiB           1                                            chunks=(nocc,1,vvblk))
+   190   7177.9 MiB      0.0 MiB       22526       for q0, q1 in lib.prange(0, nvir_pair, vvblk):
+   191   7177.9 MiB      0.0 MiB       22525           vvL = _cp(eris.vvL[q0:q1])
+   192   7177.9 MiB      4.4 MiB      270300           for p0, p1 in lib.prange(0, nvir, vblk):
+   193   7177.9 MiB    112.2 MiB      247775               tmpLov = _cp(Lov[:,:,p0:p1]).reshape(naux,-1)
+   194   7177.9 MiB     34.9 MiB      247775               eris.ovvv[:,p0:p1,q0:q1] = lib.ddot(tmpLov.T, vvL.T).reshape(nocc,p1-p0,q1-q0)
+   195   7177.9 MiB      0.0 MiB       22525           vvL = None
+   196   7177.9 MiB      0.0 MiB           1       return eris
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    45   6821.6 MiB   6821.6 MiB           1       @profile
+    46                                             def ao2mo(self, mo_coeff=None):
+    47   7034.0 MiB    212.4 MiB           1           return _make_df_eris(self, mo_coeff)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    56  10338.5 MiB  10338.5 MiB           1   @profile
+    57                                         def _contract_vvvv_t2(mycc, mol, vvL, VVL, t2, out=None, verbose=None):
+    58                                             '''Ht2 = numpy.einsum('ijcd,acdb->ijab', t2, vvvv)
+    59                                         
+    60                                             Args:
+    61                                                 vvvv : None or integral object
+    62                                                     if vvvv is None, contract t2 to AO-integrals using AO-direct algorithm
+    63                                             '''
+    64  10338.5 MiB      0.0 MiB           1       _dgemm = lib.numpy_helper._dgemm
+    65  10338.5 MiB      0.0 MiB           1       time0 = logger.process_clock(), logger.perf_counter()
+    66  10338.5 MiB      0.0 MiB           1       log = logger.new_logger(mol, verbose)
+    67                                         
+    68  10338.5 MiB      0.0 MiB           1       naux = vvL.shape[-1]
+    69  10338.5 MiB      0.0 MiB           1       nvira, nvirb = t2.shape[-2:]
+    70  10338.5 MiB      0.0 MiB           1       x2 = t2.reshape(-1,nvira,nvirb)
+    71  10338.5 MiB      0.0 MiB           1       nocc2 = x2.shape[0]
+    72  10338.5 MiB      0.0 MiB           1       nvir2 = nvira * nvirb
+    73  10338.5 MiB      0.0 MiB           1       Ht2 = numpy.ndarray(x2.shape, buffer=out)
+    74  11463.2 MiB   1124.7 MiB           1       Ht2[:] = 0
+    75                                         
+    76  11463.2 MiB      0.0 MiB           1       max_memory = max(MEMORYMIN, mycc.max_memory - lib.current_memory()[0])
+    77  12531.9 MiB  -2959.6 MiB         211       def contract_blk_(eri, i0, i1, j0, j1):
+    78  12531.9 MiB  -2959.6 MiB         210           ic = i1 - i0
+    79  12531.9 MiB  -2959.6 MiB         210           jc = j1 - j0
+    80                                                 #:Ht2[:,j0:j1] += numpy.einsum('xef,efab->xab', x2[:,i0:i1], eri)
+    81  12531.9 MiB  -5919.1 MiB         420           _dgemm('N', 'N', nocc2, jc*nvirb, ic*nvirb,
+    82  12531.9 MiB  -2959.5 MiB         210                  x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    83  12531.9 MiB  -2959.6 MiB         210                  Ht2.reshape(-1,nvir2), 1, 1, i0*nvirb, 0, j0*nvirb)
+    84                                         
+    85  12531.9 MiB  -2959.5 MiB         210           if i0 > j0:
+    86                                                     #:Ht2[:,i0:i1] += numpy.einsum('xef,abef->xab', x2[:,j0:j1], eri)
+    87  12531.8 MiB  -5520.9 MiB         380               _dgemm('N', 'T', nocc2, ic*nvirb, jc*nvirb,
+    88  12531.8 MiB  -2755.6 MiB         190                      x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    89  12531.8 MiB  -2755.6 MiB         190                      Ht2.reshape(-1,nvir2), 1, 1, j0*nvirb, 0, i0*nvirb)
+    90                                         
+    91                                         #TODO: check if vvL can be entirely loaded into memory_profiler
+    92  11463.2 MiB      0.0 MiB           1       nvir_pair = nvirb * (nvirb+1) // 2
+    93  11463.2 MiB      0.0 MiB           1       dmax = numpy.sqrt(max_memory*.7e6/8/nvirb**2/2)
+    94  11463.2 MiB      0.0 MiB           1       dmax = int(min((nvira+3)//4, max(ccsd.BLKMIN, dmax)))
+    95  11463.2 MiB      0.0 MiB           1       vvblk = (max_memory*1e6/8 - dmax**2*(nvirb**2*1.5+naux))/naux
+    96  11463.2 MiB      0.0 MiB           1       vvblk = int(min((nvira+3)//4, max(ccsd.BLKMIN, vvblk/naux)))
+    97  11463.2 MiB      0.0 MiB           1       eribuf = numpy.empty((dmax,dmax,nvir_pair))
+    98  11463.2 MiB      0.0 MiB           1       loadbuf = numpy.empty((dmax,dmax,nvirb,nvirb))
+    99  11463.2 MiB      0.0 MiB           1       tril2sq = lib.square_mat_in_trilu_indices(nvira)
+   100                                         
+   101  12531.9 MiB   -194.2 MiB          21       for i0, i1 in lib.prange(0, nvira, dmax):
+   102  12531.9 MiB   -141.2 MiB          20           off0 = i0*(i0+1)//2
+   103  12531.9 MiB   -141.2 MiB          20           off1 = i1*(i1+1)//2
+   104  12530.3 MiB   -140.3 MiB          20           vvL0 = _cp(vvL[off0:off1])
+   105  12531.9 MiB  -3156.3 MiB         230           for j0, j1 in lib.prange(0, i1, dmax):
+   106  12531.8 MiB  -2969.8 MiB         210               ijL = vvL0[tril2sq[i0:i1,j0:j1] - off0].reshape(-1,naux)
+   107  12531.8 MiB  -2959.4 MiB         210               eri = numpy.ndarray(((i1-i0)*(j1-j0),nvir_pair), buffer=eribuf)
+   108  12531.9 MiB -2786808.1 MiB      197400               for p0, p1 in lib.prange(0, nvir_pair, vvblk):
+   109  12531.9 MiB -2783858.9 MiB      197190                   vvL1 = _cp(VVL[p0:p1])
+   110  12531.9 MiB -2783516.9 MiB      197190                   eri[:,p0:p1] = lib.ddot(ijL, vvL1.T)
+   111  12531.9 MiB -2783844.9 MiB      197190                   vvL1 = None
+   112                                         
+   113  12531.9 MiB  -2959.6 MiB         210               tmp = numpy.ndarray((i1-i0,nvirb,j1-j0,nvirb), buffer=loadbuf)
+   114  12531.9 MiB  -5255.3 MiB         420               _ccsd.libcc.CCload_eri(tmp.ctypes.data_as(ctypes.c_void_p),
+   115  12531.9 MiB  -2959.6 MiB         210                                      eri.ctypes.data_as(ctypes.c_void_p),
+   116  12531.9 MiB  -2959.6 MiB         210                                      (ctypes.c_int*4)(i0, i1, j0, j1),
+   117  12531.9 MiB  -2959.6 MiB         210                                      ctypes.c_int(nvirb))
+   118  12531.9 MiB  -2949.8 MiB         210               contract_blk_(tmp, i0, i1, j0, j1)
+   119  12531.9 MiB  -2959.5 MiB         210               del ijL,eri,tmp
+   120  12531.9 MiB  -2959.5 MiB         210               time0 = log.timer_debug1('vvvv [%d:%d,%d:%d]'%(i0,i1,j0,j1), *time0)
+   121  12478.9 MiB    -53.0 MiB           1       return Ht2.reshape(t2.shape)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   124  10338.5 MiB  10338.5 MiB           1       @profile
+   125                                             def _contract_vvvv_t2(self, mycc, t2, direct=False, out=None, verbose=None):
+   126  10338.5 MiB      0.0 MiB           1           assert (not direct)
+   127  11482.4 MiB   1143.9 MiB           1           return _contract_vvvv_t2(mycc, self.mol, self.vvL, self.vvL, t2, out, verbose)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    48   9193.4 MiB   9193.4 MiB           1       @profile
+    49                                             def _add_vvvv(self, t1, t2, eris, out=None, with_ovvv=False, t2sym=None):
+    50   9193.4 MiB      0.0 MiB           1           assert (not self.direct)
+    51  11427.5 MiB   2234.2 MiB           1           return ccsd.CCSD._add_vvvv(self, t1, t2, eris, out, with_ovvv, t2sym)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    56  12580.3 MiB  12580.3 MiB           1   @profile
+    57                                         def _contract_vvvv_t2(mycc, mol, vvL, VVL, t2, out=None, verbose=None):
+    58                                             '''Ht2 = numpy.einsum('ijcd,acdb->ijab', t2, vvvv)
+    59                                         
+    60                                             Args:
+    61                                                 vvvv : None or integral object
+    62                                                     if vvvv is None, contract t2 to AO-integrals using AO-direct algorithm
+    63                                             '''
+    64  12580.3 MiB      0.0 MiB           1       _dgemm = lib.numpy_helper._dgemm
+    65  12580.3 MiB      0.0 MiB           1       time0 = logger.process_clock(), logger.perf_counter()
+    66  12580.3 MiB      0.0 MiB           1       log = logger.new_logger(mol, verbose)
+    67                                         
+    68  12580.3 MiB      0.0 MiB           1       naux = vvL.shape[-1]
+    69  12580.3 MiB      0.0 MiB           1       nvira, nvirb = t2.shape[-2:]
+    70  12580.3 MiB      0.0 MiB           1       x2 = t2.reshape(-1,nvira,nvirb)
+    71  12580.3 MiB      0.0 MiB           1       nocc2 = x2.shape[0]
+    72  12580.3 MiB      0.0 MiB           1       nvir2 = nvira * nvirb
+    73  12580.3 MiB      0.0 MiB           1       Ht2 = numpy.ndarray(x2.shape, buffer=out)
+    74  13705.0 MiB   1124.7 MiB           1       Ht2[:] = 0
+    75                                         
+    76  13705.0 MiB      0.0 MiB           1       max_memory = max(MEMORYMIN, mycc.max_memory - lib.current_memory()[0])
+    77  14719.7 MiB      0.0 MiB         211       def contract_blk_(eri, i0, i1, j0, j1):
+    78  14719.7 MiB      0.0 MiB         210           ic = i1 - i0
+    79  14719.7 MiB      0.0 MiB         210           jc = j1 - j0
+    80                                                 #:Ht2[:,j0:j1] += numpy.einsum('xef,efab->xab', x2[:,i0:i1], eri)
+    81  14719.7 MiB      0.0 MiB         420           _dgemm('N', 'N', nocc2, jc*nvirb, ic*nvirb,
+    82  14719.7 MiB      0.0 MiB         210                  x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    83  14719.7 MiB      0.0 MiB         210                  Ht2.reshape(-1,nvir2), 1, 1, i0*nvirb, 0, j0*nvirb)
+    84                                         
+    85  14719.7 MiB      0.0 MiB         210           if i0 > j0:
+    86                                                     #:Ht2[:,i0:i1] += numpy.einsum('xef,abef->xab', x2[:,j0:j1], eri)
+    87  14719.6 MiB      0.0 MiB         380               _dgemm('N', 'T', nocc2, ic*nvirb, jc*nvirb,
+    88  14719.6 MiB      0.0 MiB         190                      x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    89  14719.6 MiB      0.0 MiB         190                      Ht2.reshape(-1,nvir2), 1, 1, j0*nvirb, 0, i0*nvirb)
+    90                                         
+    91                                         #TODO: check if vvL can be entirely loaded into memory_profiler
+    92  13705.0 MiB      0.0 MiB           1       nvir_pair = nvirb * (nvirb+1) // 2
+    93  13705.0 MiB      0.0 MiB           1       dmax = numpy.sqrt(max_memory*.7e6/8/nvirb**2/2)
+    94  13705.0 MiB      0.0 MiB           1       dmax = int(min((nvira+3)//4, max(ccsd.BLKMIN, dmax)))
+    95  13705.0 MiB      0.0 MiB           1       vvblk = (max_memory*1e6/8 - dmax**2*(nvirb**2*1.5+naux))/naux
+    96  13705.0 MiB      0.0 MiB           1       vvblk = int(min((nvira+3)//4, max(ccsd.BLKMIN, vvblk/naux)))
+    97  13705.0 MiB      0.0 MiB           1       eribuf = numpy.empty((dmax,dmax,nvir_pair))
+    98  13705.0 MiB      0.0 MiB           1       loadbuf = numpy.empty((dmax,dmax,nvirb,nvirb))
+    99  13705.0 MiB      0.0 MiB           1       tril2sq = lib.square_mat_in_trilu_indices(nvira)
+   100                                         
+   101  14719.7 MiB      0.0 MiB          21       for i0, i1 in lib.prange(0, nvira, dmax):
+   102  14717.9 MiB      0.0 MiB          20           off0 = i0*(i0+1)//2
+   103  14717.9 MiB      0.0 MiB          20           off1 = i1*(i1+1)//2
+   104  14717.9 MiB      0.0 MiB          20           vvL0 = _cp(vvL[off0:off1])
+   105  14719.7 MiB      0.0 MiB         230           for j0, j1 in lib.prange(0, i1, dmax):
+   106  14719.6 MiB      0.0 MiB         210               ijL = vvL0[tril2sq[i0:i1,j0:j1] - off0].reshape(-1,naux)
+   107  14719.6 MiB      0.0 MiB         210               eri = numpy.ndarray(((i1-i0)*(j1-j0),nvir_pair), buffer=eribuf)
+   108  14719.7 MiB      0.0 MiB      197400               for p0, p1 in lib.prange(0, nvir_pair, vvblk):
+   109  14719.7 MiB      0.0 MiB      197190                   vvL1 = _cp(VVL[p0:p1])
+   110  14719.7 MiB    341.9 MiB      197190                   eri[:,p0:p1] = lib.ddot(ijL, vvL1.T)
+   111  14719.7 MiB      8.9 MiB      197190                   vvL1 = None
+   112                                         
+   113  14719.7 MiB      0.0 MiB         210               tmp = numpy.ndarray((i1-i0,nvirb,j1-j0,nvirb), buffer=loadbuf)
+   114  14719.7 MiB    663.8 MiB         420               _ccsd.libcc.CCload_eri(tmp.ctypes.data_as(ctypes.c_void_p),
+   115  14719.7 MiB      0.0 MiB         210                                      eri.ctypes.data_as(ctypes.c_void_p),
+   116  14719.7 MiB      0.0 MiB         210                                      (ctypes.c_int*4)(i0, i1, j0, j1),
+   117  14719.7 MiB      0.0 MiB         210                                      ctypes.c_int(nvirb))
+   118  14719.7 MiB      0.0 MiB         210               contract_blk_(tmp, i0, i1, j0, j1)
+   119  14719.7 MiB      0.0 MiB         210               del ijL,eri,tmp
+   120  14719.7 MiB      0.0 MiB         210               time0 = log.timer_debug1('vvvv [%d:%d,%d:%d]'%(i0,i1,j0,j1), *time0)
+   121  14719.7 MiB      0.0 MiB           1       return Ht2.reshape(t2.shape)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   124  12580.3 MiB  12580.3 MiB           1       @profile
+   125                                             def _contract_vvvv_t2(self, mycc, t2, direct=False, out=None, verbose=None):
+   126  12580.3 MiB      0.0 MiB           1           assert (not direct)
+   127  13723.1 MiB   1142.9 MiB           1           return _contract_vvvv_t2(mycc, self.mol, self.vvL, self.vvL, t2, out, verbose)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    48  11455.6 MiB  11455.6 MiB           1       @profile
+    49                                             def _add_vvvv(self, t1, t2, eris, out=None, with_ovvv=False, t2sym=None):
+    50  11455.6 MiB      0.0 MiB           1           assert (not self.direct)
+    51  13668.2 MiB   2212.7 MiB           1           return ccsd.CCSD._add_vvvv(self, t1, t2, eris, out, with_ovvv, t2sym)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    56  13160.6 MiB  13160.6 MiB           1   @profile
+    57                                         def _contract_vvvv_t2(mycc, mol, vvL, VVL, t2, out=None, verbose=None):
+    58                                             '''Ht2 = numpy.einsum('ijcd,acdb->ijab', t2, vvvv)
+    59                                         
+    60                                             Args:
+    61                                                 vvvv : None or integral object
+    62                                                     if vvvv is None, contract t2 to AO-integrals using AO-direct algorithm
+    63                                             '''
+    64  13160.6 MiB      0.0 MiB           1       _dgemm = lib.numpy_helper._dgemm
+    65  13160.6 MiB      0.0 MiB           1       time0 = logger.process_clock(), logger.perf_counter()
+    66  13160.6 MiB      0.0 MiB           1       log = logger.new_logger(mol, verbose)
+    67                                         
+    68  13160.6 MiB      0.0 MiB           1       naux = vvL.shape[-1]
+    69  13160.6 MiB      0.0 MiB           1       nvira, nvirb = t2.shape[-2:]
+    70  13160.6 MiB      0.0 MiB           1       x2 = t2.reshape(-1,nvira,nvirb)
+    71  13160.6 MiB      0.0 MiB           1       nocc2 = x2.shape[0]
+    72  13160.6 MiB      0.0 MiB           1       nvir2 = nvira * nvirb
+    73  13160.6 MiB      0.0 MiB           1       Ht2 = numpy.ndarray(x2.shape, buffer=out)
+    74  14285.3 MiB   1124.7 MiB           1       Ht2[:] = 0
+    75                                         
+    76  14285.3 MiB      0.0 MiB           1       max_memory = max(MEMORYMIN, mycc.max_memory - lib.current_memory()[0])
+    77  15299.8 MiB      0.0 MiB         211       def contract_blk_(eri, i0, i1, j0, j1):
+    78  15299.8 MiB      0.0 MiB         210           ic = i1 - i0
+    79  15299.8 MiB      0.0 MiB         210           jc = j1 - j0
+    80                                                 #:Ht2[:,j0:j1] += numpy.einsum('xef,efab->xab', x2[:,i0:i1], eri)
+    81  15299.8 MiB      0.0 MiB         420           _dgemm('N', 'N', nocc2, jc*nvirb, ic*nvirb,
+    82  15299.8 MiB      0.0 MiB         210                  x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    83  15299.8 MiB      0.0 MiB         210                  Ht2.reshape(-1,nvir2), 1, 1, i0*nvirb, 0, j0*nvirb)
+    84                                         
+    85  15299.8 MiB      0.0 MiB         210           if i0 > j0:
+    86                                                     #:Ht2[:,i0:i1] += numpy.einsum('xef,abef->xab', x2[:,j0:j1], eri)
+    87  15299.8 MiB      0.0 MiB         380               _dgemm('N', 'T', nocc2, ic*nvirb, jc*nvirb,
+    88  15299.8 MiB      0.0 MiB         190                      x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    89  15299.8 MiB      0.0 MiB         190                      Ht2.reshape(-1,nvir2), 1, 1, j0*nvirb, 0, i0*nvirb)
+    90                                         
+    91                                         #TODO: check if vvL can be entirely loaded into memory_profiler
+    92  14285.3 MiB      0.0 MiB           1       nvir_pair = nvirb * (nvirb+1) // 2
+    93  14285.3 MiB      0.0 MiB           1       dmax = numpy.sqrt(max_memory*.7e6/8/nvirb**2/2)
+    94  14285.3 MiB      0.0 MiB           1       dmax = int(min((nvira+3)//4, max(ccsd.BLKMIN, dmax)))
+    95  14285.3 MiB      0.0 MiB           1       vvblk = (max_memory*1e6/8 - dmax**2*(nvirb**2*1.5+naux))/naux
+    96  14285.3 MiB      0.0 MiB           1       vvblk = int(min((nvira+3)//4, max(ccsd.BLKMIN, vvblk/naux)))
+    97  14285.3 MiB      0.0 MiB           1       eribuf = numpy.empty((dmax,dmax,nvir_pair))
+    98  14285.3 MiB      0.0 MiB           1       loadbuf = numpy.empty((dmax,dmax,nvirb,nvirb))
+    99  14285.3 MiB      0.0 MiB           1       tril2sq = lib.square_mat_in_trilu_indices(nvira)
+   100                                         
+   101  15299.8 MiB      0.0 MiB          21       for i0, i1 in lib.prange(0, nvira, dmax):
+   102  15298.1 MiB      0.0 MiB          20           off0 = i0*(i0+1)//2
+   103  15298.1 MiB      0.0 MiB          20           off1 = i1*(i1+1)//2
+   104  15298.1 MiB      0.0 MiB          20           vvL0 = _cp(vvL[off0:off1])
+   105  15299.8 MiB      0.0 MiB         230           for j0, j1 in lib.prange(0, i1, dmax):
+   106  15299.8 MiB      0.0 MiB         210               ijL = vvL0[tril2sq[i0:i1,j0:j1] - off0].reshape(-1,naux)
+   107  15299.8 MiB      0.0 MiB         210               eri = numpy.ndarray(((i1-i0)*(j1-j0),nvir_pair), buffer=eribuf)
+   108  15299.8 MiB      0.0 MiB      197400               for p0, p1 in lib.prange(0, nvir_pair, vvblk):
+   109  15299.8 MiB      0.0 MiB      197190                   vvL1 = _cp(VVL[p0:p1])
+   110  15299.8 MiB    341.7 MiB      197190                   eri[:,p0:p1] = lib.ddot(ijL, vvL1.T)
+   111  15299.8 MiB      9.0 MiB      197190                   vvL1 = None
+   112                                         
+   113  15299.8 MiB      0.0 MiB         210               tmp = numpy.ndarray((i1-i0,nvirb,j1-j0,nvirb), buffer=loadbuf)
+   114  15299.8 MiB    663.8 MiB         420               _ccsd.libcc.CCload_eri(tmp.ctypes.data_as(ctypes.c_void_p),
+   115  15299.8 MiB      0.0 MiB         210                                      eri.ctypes.data_as(ctypes.c_void_p),
+   116  15299.8 MiB      0.0 MiB         210                                      (ctypes.c_int*4)(i0, i1, j0, j1),
+   117  15299.8 MiB      0.0 MiB         210                                      ctypes.c_int(nvirb))
+   118  15299.8 MiB      0.0 MiB         210               contract_blk_(tmp, i0, i1, j0, j1)
+   119  15299.8 MiB      0.0 MiB         210               del ijL,eri,tmp
+   120  15299.8 MiB      0.0 MiB         210               time0 = log.timer_debug1('vvvv [%d:%d,%d:%d]'%(i0,i1,j0,j1), *time0)
+   121  15299.8 MiB      0.0 MiB           1       return Ht2.reshape(t2.shape)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   124  13160.6 MiB  13160.6 MiB           1       @profile
+   125                                             def _contract_vvvv_t2(self, mycc, t2, direct=False, out=None, verbose=None):
+   126  13160.6 MiB      0.0 MiB           1           assert (not direct)
+   127  14303.3 MiB   1142.7 MiB           1           return _contract_vvvv_t2(mycc, self.mol, self.vvL, self.vvL, t2, out, verbose)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    48  12035.9 MiB  12035.9 MiB           1       @profile
+    49                                             def _add_vvvv(self, t1, t2, eris, out=None, with_ovvv=False, t2sym=None):
+    50  12035.9 MiB      0.0 MiB           1           assert (not self.direct)
+    51  14248.4 MiB   2212.6 MiB           1           return ccsd.CCSD._add_vvvv(self, t1, t2, eris, out, with_ovvv, t2sym)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    56  13372.4 MiB  13372.4 MiB           1   @profile
+    57                                         def _contract_vvvv_t2(mycc, mol, vvL, VVL, t2, out=None, verbose=None):
+    58                                             '''Ht2 = numpy.einsum('ijcd,acdb->ijab', t2, vvvv)
+    59                                         
+    60                                             Args:
+    61                                                 vvvv : None or integral object
+    62                                                     if vvvv is None, contract t2 to AO-integrals using AO-direct algorithm
+    63                                             '''
+    64  13372.4 MiB      0.0 MiB           1       _dgemm = lib.numpy_helper._dgemm
+    65  13372.4 MiB      0.0 MiB           1       time0 = logger.process_clock(), logger.perf_counter()
+    66  13372.4 MiB      0.0 MiB           1       log = logger.new_logger(mol, verbose)
+    67                                         
+    68  13372.4 MiB      0.0 MiB           1       naux = vvL.shape[-1]
+    69  13372.4 MiB      0.0 MiB           1       nvira, nvirb = t2.shape[-2:]
+    70  13372.4 MiB      0.0 MiB           1       x2 = t2.reshape(-1,nvira,nvirb)
+    71  13372.4 MiB      0.0 MiB           1       nocc2 = x2.shape[0]
+    72  13372.4 MiB      0.0 MiB           1       nvir2 = nvira * nvirb
+    73  13372.4 MiB      0.0 MiB           1       Ht2 = numpy.ndarray(x2.shape, buffer=out)
+    74  14497.1 MiB   1124.7 MiB           1       Ht2[:] = 0
+    75                                         
+    76  14497.1 MiB      0.0 MiB           1       max_memory = max(MEMORYMIN, mycc.max_memory - lib.current_memory()[0])
+    77  15511.9 MiB      0.0 MiB         211       def contract_blk_(eri, i0, i1, j0, j1):
+    78  15511.9 MiB      0.0 MiB         210           ic = i1 - i0
+    79  15511.9 MiB      0.0 MiB         210           jc = j1 - j0
+    80                                                 #:Ht2[:,j0:j1] += numpy.einsum('xef,efab->xab', x2[:,i0:i1], eri)
+    81  15511.9 MiB      0.0 MiB         420           _dgemm('N', 'N', nocc2, jc*nvirb, ic*nvirb,
+    82  15511.9 MiB      0.0 MiB         210                  x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    83  15511.9 MiB      0.0 MiB         210                  Ht2.reshape(-1,nvir2), 1, 1, i0*nvirb, 0, j0*nvirb)
+    84                                         
+    85  15511.9 MiB      0.0 MiB         210           if i0 > j0:
+    86                                                     #:Ht2[:,i0:i1] += numpy.einsum('xef,abef->xab', x2[:,j0:j1], eri)
+    87  15511.8 MiB      0.0 MiB         380               _dgemm('N', 'T', nocc2, ic*nvirb, jc*nvirb,
+    88  15511.8 MiB      0.0 MiB         190                      x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    89  15511.8 MiB      0.0 MiB         190                      Ht2.reshape(-1,nvir2), 1, 1, j0*nvirb, 0, i0*nvirb)
+    90                                         
+    91                                         #TODO: check if vvL can be entirely loaded into memory_profiler
+    92  14497.1 MiB      0.0 MiB           1       nvir_pair = nvirb * (nvirb+1) // 2
+    93  14497.1 MiB      0.0 MiB           1       dmax = numpy.sqrt(max_memory*.7e6/8/nvirb**2/2)
+    94  14497.1 MiB      0.0 MiB           1       dmax = int(min((nvira+3)//4, max(ccsd.BLKMIN, dmax)))
+    95  14497.1 MiB      0.0 MiB           1       vvblk = (max_memory*1e6/8 - dmax**2*(nvirb**2*1.5+naux))/naux
+    96  14497.1 MiB      0.0 MiB           1       vvblk = int(min((nvira+3)//4, max(ccsd.BLKMIN, vvblk/naux)))
+    97  14497.1 MiB      0.0 MiB           1       eribuf = numpy.empty((dmax,dmax,nvir_pair))
+    98  14497.1 MiB      0.0 MiB           1       loadbuf = numpy.empty((dmax,dmax,nvirb,nvirb))
+    99  14497.1 MiB      0.0 MiB           1       tril2sq = lib.square_mat_in_trilu_indices(nvira)
+   100                                         
+   101  15511.9 MiB      0.0 MiB          21       for i0, i1 in lib.prange(0, nvira, dmax):
+   102  15510.2 MiB      0.0 MiB          20           off0 = i0*(i0+1)//2
+   103  15510.2 MiB      0.0 MiB          20           off1 = i1*(i1+1)//2
+   104  15510.2 MiB      0.0 MiB          20           vvL0 = _cp(vvL[off0:off1])
+   105  15511.9 MiB      0.0 MiB         230           for j0, j1 in lib.prange(0, i1, dmax):
+   106  15511.8 MiB      0.0 MiB         210               ijL = vvL0[tril2sq[i0:i1,j0:j1] - off0].reshape(-1,naux)
+   107  15511.8 MiB      0.0 MiB         210               eri = numpy.ndarray(((i1-i0)*(j1-j0),nvir_pair), buffer=eribuf)
+   108  15511.9 MiB      0.0 MiB      197400               for p0, p1 in lib.prange(0, nvir_pair, vvblk):
+   109  15511.9 MiB      0.0 MiB      197190                   vvL1 = _cp(VVL[p0:p1])
+   110  15511.9 MiB    342.0 MiB      197190                   eri[:,p0:p1] = lib.ddot(ijL, vvL1.T)
+   111  15511.9 MiB      8.9 MiB      197190                   vvL1 = None
+   112                                         
+   113  15511.9 MiB      0.0 MiB         210               tmp = numpy.ndarray((i1-i0,nvirb,j1-j0,nvirb), buffer=loadbuf)
+   114  15511.9 MiB    663.8 MiB         420               _ccsd.libcc.CCload_eri(tmp.ctypes.data_as(ctypes.c_void_p),
+   115  15511.9 MiB      0.0 MiB         210                                      eri.ctypes.data_as(ctypes.c_void_p),
+   116  15511.9 MiB      0.0 MiB         210                                      (ctypes.c_int*4)(i0, i1, j0, j1),
+   117  15511.9 MiB      0.0 MiB         210                                      ctypes.c_int(nvirb))
+   118  15511.9 MiB      0.0 MiB         210               contract_blk_(tmp, i0, i1, j0, j1)
+   119  15511.9 MiB      0.0 MiB         210               del ijL,eri,tmp
+   120  15511.9 MiB      0.0 MiB         210               time0 = log.timer_debug1('vvvv [%d:%d,%d:%d]'%(i0,i1,j0,j1), *time0)
+   121  15511.9 MiB      0.0 MiB           1       return Ht2.reshape(t2.shape)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   124  13372.4 MiB  13372.4 MiB           1       @profile
+   125                                             def _contract_vvvv_t2(self, mycc, t2, direct=False, out=None, verbose=None):
+   126  13372.4 MiB      0.0 MiB           1           assert (not direct)
+   127  14515.4 MiB   1142.9 MiB           1           return _contract_vvvv_t2(mycc, self.mol, self.vvL, self.vvL, t2, out, verbose)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    48  12247.7 MiB  12247.7 MiB           1       @profile
+    49                                             def _add_vvvv(self, t1, t2, eris, out=None, with_ovvv=False, t2sym=None):
+    50  12247.7 MiB      0.0 MiB           1           assert (not self.direct)
+    51  14460.5 MiB   2212.8 MiB           1           return ccsd.CCSD._add_vvvv(self, t1, t2, eris, out, with_ovvv, t2sym)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    56  13891.9 MiB  13891.9 MiB           1   @profile
+    57                                         def _contract_vvvv_t2(mycc, mol, vvL, VVL, t2, out=None, verbose=None):
+    58                                             '''Ht2 = numpy.einsum('ijcd,acdb->ijab', t2, vvvv)
+    59                                         
+    60                                             Args:
+    61                                                 vvvv : None or integral object
+    62                                                     if vvvv is None, contract t2 to AO-integrals using AO-direct algorithm
+    63                                             '''
+    64  13891.9 MiB      0.0 MiB           1       _dgemm = lib.numpy_helper._dgemm
+    65  13891.9 MiB      0.0 MiB           1       time0 = logger.process_clock(), logger.perf_counter()
+    66  13891.9 MiB      0.0 MiB           1       log = logger.new_logger(mol, verbose)
+    67                                         
+    68  13891.9 MiB      0.0 MiB           1       naux = vvL.shape[-1]
+    69  13891.9 MiB      0.0 MiB           1       nvira, nvirb = t2.shape[-2:]
+    70  13891.9 MiB      0.0 MiB           1       x2 = t2.reshape(-1,nvira,nvirb)
+    71  13891.9 MiB      0.0 MiB           1       nocc2 = x2.shape[0]
+    72  13891.9 MiB      0.0 MiB           1       nvir2 = nvira * nvirb
+    73  13891.9 MiB      0.0 MiB           1       Ht2 = numpy.ndarray(x2.shape, buffer=out)
+    74  15016.6 MiB   1124.7 MiB           1       Ht2[:] = 0
+    75                                         
+    76  15016.6 MiB      0.0 MiB           1       max_memory = max(MEMORYMIN, mycc.max_memory - lib.current_memory()[0])
+    77  16031.2 MiB      0.0 MiB         211       def contract_blk_(eri, i0, i1, j0, j1):
+    78  16031.2 MiB      0.0 MiB         210           ic = i1 - i0
+    79  16031.2 MiB      0.0 MiB         210           jc = j1 - j0
+    80                                                 #:Ht2[:,j0:j1] += numpy.einsum('xef,efab->xab', x2[:,i0:i1], eri)
+    81  16031.2 MiB      0.0 MiB         420           _dgemm('N', 'N', nocc2, jc*nvirb, ic*nvirb,
+    82  16031.2 MiB      0.0 MiB         210                  x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    83  16031.2 MiB      0.0 MiB         210                  Ht2.reshape(-1,nvir2), 1, 1, i0*nvirb, 0, j0*nvirb)
+    84                                         
+    85  16031.2 MiB      0.0 MiB         210           if i0 > j0:
+    86                                                     #:Ht2[:,i0:i1] += numpy.einsum('xef,abef->xab', x2[:,j0:j1], eri)
+    87  16031.1 MiB      0.0 MiB         380               _dgemm('N', 'T', nocc2, ic*nvirb, jc*nvirb,
+    88  16031.1 MiB      0.0 MiB         190                      x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    89  16031.1 MiB      0.0 MiB         190                      Ht2.reshape(-1,nvir2), 1, 1, j0*nvirb, 0, i0*nvirb)
+    90                                         
+    91                                         #TODO: check if vvL can be entirely loaded into memory_profiler
+    92  15016.6 MiB      0.0 MiB           1       nvir_pair = nvirb * (nvirb+1) // 2
+    93  15016.6 MiB      0.0 MiB           1       dmax = numpy.sqrt(max_memory*.7e6/8/nvirb**2/2)
+    94  15016.6 MiB      0.0 MiB           1       dmax = int(min((nvira+3)//4, max(ccsd.BLKMIN, dmax)))
+    95  15016.6 MiB      0.0 MiB           1       vvblk = (max_memory*1e6/8 - dmax**2*(nvirb**2*1.5+naux))/naux
+    96  15016.6 MiB      0.0 MiB           1       vvblk = int(min((nvira+3)//4, max(ccsd.BLKMIN, vvblk/naux)))
+    97  15016.6 MiB      0.0 MiB           1       eribuf = numpy.empty((dmax,dmax,nvir_pair))
+    98  15016.6 MiB      0.0 MiB           1       loadbuf = numpy.empty((dmax,dmax,nvirb,nvirb))
+    99  15016.6 MiB      0.0 MiB           1       tril2sq = lib.square_mat_in_trilu_indices(nvira)
+   100                                         
+   101  16031.2 MiB      0.0 MiB          21       for i0, i1 in lib.prange(0, nvira, dmax):
+   102  16029.5 MiB      0.0 MiB          20           off0 = i0*(i0+1)//2
+   103  16029.5 MiB      0.0 MiB          20           off1 = i1*(i1+1)//2
+   104  16029.5 MiB      0.0 MiB          20           vvL0 = _cp(vvL[off0:off1])
+   105  16031.2 MiB      0.0 MiB         230           for j0, j1 in lib.prange(0, i1, dmax):
+   106  16031.1 MiB      0.0 MiB         210               ijL = vvL0[tril2sq[i0:i1,j0:j1] - off0].reshape(-1,naux)
+   107  16031.1 MiB      0.0 MiB         210               eri = numpy.ndarray(((i1-i0)*(j1-j0),nvir_pair), buffer=eribuf)
+   108  16031.2 MiB      0.0 MiB      197400               for p0, p1 in lib.prange(0, nvir_pair, vvblk):
+   109  16031.2 MiB      0.0 MiB      197190                   vvL1 = _cp(VVL[p0:p1])
+   110  16031.2 MiB    341.6 MiB      197190                   eri[:,p0:p1] = lib.ddot(ijL, vvL1.T)
+   111  16031.2 MiB      9.0 MiB      197190                   vvL1 = None
+   112                                         
+   113  16031.2 MiB      0.0 MiB         210               tmp = numpy.ndarray((i1-i0,nvirb,j1-j0,nvirb), buffer=loadbuf)
+   114  16031.2 MiB    663.8 MiB         420               _ccsd.libcc.CCload_eri(tmp.ctypes.data_as(ctypes.c_void_p),
+   115  16031.2 MiB      0.0 MiB         210                                      eri.ctypes.data_as(ctypes.c_void_p),
+   116  16031.2 MiB      0.0 MiB         210                                      (ctypes.c_int*4)(i0, i1, j0, j1),
+   117  16031.2 MiB      0.0 MiB         210                                      ctypes.c_int(nvirb))
+   118  16031.2 MiB      0.0 MiB         210               contract_blk_(tmp, i0, i1, j0, j1)
+   119  16031.2 MiB      0.0 MiB         210               del ijL,eri,tmp
+   120  16031.2 MiB      0.0 MiB         210               time0 = log.timer_debug1('vvvv [%d:%d,%d:%d]'%(i0,i1,j0,j1), *time0)
+   121  16031.2 MiB      0.0 MiB           1       return Ht2.reshape(t2.shape)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   124  13891.9 MiB  13891.9 MiB           1       @profile
+   125                                             def _contract_vvvv_t2(self, mycc, t2, direct=False, out=None, verbose=None):
+   126  13891.9 MiB      0.0 MiB           1           assert (not direct)
+   127  15034.6 MiB   1142.8 MiB           1           return _contract_vvvv_t2(mycc, self.mol, self.vvL, self.vvL, t2, out, verbose)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    48  12767.2 MiB  12767.2 MiB           1       @profile
+    49                                             def _add_vvvv(self, t1, t2, eris, out=None, with_ovvv=False, t2sym=None):
+    50  12767.2 MiB      0.0 MiB           1           assert (not self.direct)
+    51  14979.8 MiB   2212.6 MiB           1           return ccsd.CCSD._add_vvvv(self, t1, t2, eris, out, with_ovvv, t2sym)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    56  14409.0 MiB  14409.0 MiB           1   @profile
+    57                                         def _contract_vvvv_t2(mycc, mol, vvL, VVL, t2, out=None, verbose=None):
+    58                                             '''Ht2 = numpy.einsum('ijcd,acdb->ijab', t2, vvvv)
+    59                                         
+    60                                             Args:
+    61                                                 vvvv : None or integral object
+    62                                                     if vvvv is None, contract t2 to AO-integrals using AO-direct algorithm
+    63                                             '''
+    64  14409.0 MiB      0.0 MiB           1       _dgemm = lib.numpy_helper._dgemm
+    65  14409.0 MiB      0.0 MiB           1       time0 = logger.process_clock(), logger.perf_counter()
+    66  14409.0 MiB      0.0 MiB           1       log = logger.new_logger(mol, verbose)
+    67                                         
+    68  14409.0 MiB      0.0 MiB           1       naux = vvL.shape[-1]
+    69  14409.0 MiB      0.0 MiB           1       nvira, nvirb = t2.shape[-2:]
+    70  14409.0 MiB      0.0 MiB           1       x2 = t2.reshape(-1,nvira,nvirb)
+    71  14409.0 MiB      0.0 MiB           1       nocc2 = x2.shape[0]
+    72  14409.0 MiB      0.0 MiB           1       nvir2 = nvira * nvirb
+    73  14409.0 MiB      0.0 MiB           1       Ht2 = numpy.ndarray(x2.shape, buffer=out)
+    74  15533.7 MiB   1124.7 MiB           1       Ht2[:] = 0
+    75                                         
+    76  15533.7 MiB      0.0 MiB           1       max_memory = max(MEMORYMIN, mycc.max_memory - lib.current_memory()[0])
+    77  16548.3 MiB      0.0 MiB         211       def contract_blk_(eri, i0, i1, j0, j1):
+    78  16548.3 MiB      0.0 MiB         210           ic = i1 - i0
+    79  16548.3 MiB      0.0 MiB         210           jc = j1 - j0
+    80                                                 #:Ht2[:,j0:j1] += numpy.einsum('xef,efab->xab', x2[:,i0:i1], eri)
+    81  16548.3 MiB      0.0 MiB         420           _dgemm('N', 'N', nocc2, jc*nvirb, ic*nvirb,
+    82  16548.3 MiB      0.0 MiB         210                  x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    83  16548.3 MiB      0.0 MiB         210                  Ht2.reshape(-1,nvir2), 1, 1, i0*nvirb, 0, j0*nvirb)
+    84                                         
+    85  16548.3 MiB      0.0 MiB         210           if i0 > j0:
+    86                                                     #:Ht2[:,i0:i1] += numpy.einsum('xef,abef->xab', x2[:,j0:j1], eri)
+    87  16548.2 MiB      0.0 MiB         380               _dgemm('N', 'T', nocc2, ic*nvirb, jc*nvirb,
+    88  16548.2 MiB      0.0 MiB         190                      x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    89  16548.2 MiB      0.0 MiB         190                      Ht2.reshape(-1,nvir2), 1, 1, j0*nvirb, 0, i0*nvirb)
+    90                                         
+    91                                         #TODO: check if vvL can be entirely loaded into memory_profiler
+    92  15533.7 MiB      0.0 MiB           1       nvir_pair = nvirb * (nvirb+1) // 2
+    93  15533.7 MiB      0.0 MiB           1       dmax = numpy.sqrt(max_memory*.7e6/8/nvirb**2/2)
+    94  15533.7 MiB      0.0 MiB           1       dmax = int(min((nvira+3)//4, max(ccsd.BLKMIN, dmax)))
+    95  15533.7 MiB      0.0 MiB           1       vvblk = (max_memory*1e6/8 - dmax**2*(nvirb**2*1.5+naux))/naux
+    96  15533.7 MiB      0.0 MiB           1       vvblk = int(min((nvira+3)//4, max(ccsd.BLKMIN, vvblk/naux)))
+    97  15533.7 MiB      0.0 MiB           1       eribuf = numpy.empty((dmax,dmax,nvir_pair))
+    98  15533.7 MiB      0.0 MiB           1       loadbuf = numpy.empty((dmax,dmax,nvirb,nvirb))
+    99  15533.7 MiB      0.0 MiB           1       tril2sq = lib.square_mat_in_trilu_indices(nvira)
+   100                                         
+   101  16548.3 MiB      0.0 MiB          21       for i0, i1 in lib.prange(0, nvira, dmax):
+   102  16546.5 MiB      0.0 MiB          20           off0 = i0*(i0+1)//2
+   103  16546.5 MiB      0.0 MiB          20           off1 = i1*(i1+1)//2
+   104  16546.5 MiB      0.0 MiB          20           vvL0 = _cp(vvL[off0:off1])
+   105  16548.3 MiB      0.0 MiB         230           for j0, j1 in lib.prange(0, i1, dmax):
+   106  16548.2 MiB      0.0 MiB         210               ijL = vvL0[tril2sq[i0:i1,j0:j1] - off0].reshape(-1,naux)
+   107  16548.2 MiB      0.0 MiB         210               eri = numpy.ndarray(((i1-i0)*(j1-j0),nvir_pair), buffer=eribuf)
+   108  16548.3 MiB      0.0 MiB      197400               for p0, p1 in lib.prange(0, nvir_pair, vvblk):
+   109  16548.3 MiB      0.0 MiB      197190                   vvL1 = _cp(VVL[p0:p1])
+   110  16548.3 MiB    341.8 MiB      197190                   eri[:,p0:p1] = lib.ddot(ijL, vvL1.T)
+   111  16548.3 MiB      8.9 MiB      197190                   vvL1 = None
+   112                                         
+   113  16548.3 MiB      0.0 MiB         210               tmp = numpy.ndarray((i1-i0,nvirb,j1-j0,nvirb), buffer=loadbuf)
+   114  16548.3 MiB    663.8 MiB         420               _ccsd.libcc.CCload_eri(tmp.ctypes.data_as(ctypes.c_void_p),
+   115  16548.3 MiB      0.0 MiB         210                                      eri.ctypes.data_as(ctypes.c_void_p),
+   116  16548.3 MiB      0.0 MiB         210                                      (ctypes.c_int*4)(i0, i1, j0, j1),
+   117  16548.3 MiB      0.0 MiB         210                                      ctypes.c_int(nvirb))
+   118  16548.3 MiB      0.0 MiB         210               contract_blk_(tmp, i0, i1, j0, j1)
+   119  16548.3 MiB      0.0 MiB         210               del ijL,eri,tmp
+   120  16548.3 MiB      0.0 MiB         210               time0 = log.timer_debug1('vvvv [%d:%d,%d:%d]'%(i0,i1,j0,j1), *time0)
+   121  16548.3 MiB      0.0 MiB           1       return Ht2.reshape(t2.shape)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   124  14409.0 MiB  14409.0 MiB           1       @profile
+   125                                             def _contract_vvvv_t2(self, mycc, t2, direct=False, out=None, verbose=None):
+   126  14409.0 MiB      0.0 MiB           1           assert (not direct)
+   127  15551.7 MiB   1142.7 MiB           1           return _contract_vvvv_t2(mycc, self.mol, self.vvL, self.vvL, t2, out, verbose)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    48  13284.3 MiB  13284.3 MiB           1       @profile
+    49                                             def _add_vvvv(self, t1, t2, eris, out=None, with_ovvv=False, t2sym=None):
+    50  13284.3 MiB      0.0 MiB           1           assert (not self.direct)
+    51  15496.9 MiB   2212.6 MiB           1           return ccsd.CCSD._add_vvvv(self, t1, t2, eris, out, with_ovvv, t2sym)
+
+
+RCCSD not converged
+E(RCCSD) = -610.8348998823892  E_corr = -2.29264774614005
+converged SCF energy = -608.542252136249
+MPCC fragments: [[[0], [0]]]
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/examples/mpcc/example.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    28     91.9 MiB     91.9 MiB           1       @profile
+    29                                             def init_scf_and_mpcc(species, basis, rank_reduced_option, rank_value):
+    30     92.0 MiB      0.2 MiB           1           mol, mol_name = build_molecule(species, basis)
+    31                                         
+    32                                             # ---------- SCF ----------
+    33   1264.8 MiB   1172.8 MiB           1           mf = scf.RHF(mol).density_fit().run()
+    34   1264.8 MiB      0.0 MiB           1           mf.mol.max_memory = 30000
+    35                                         
+    36   1264.8 MiB      0.0 MiB           1           c_lo = mf.mo_coeff
+    37                                         
+    38                                             # MPCC options
+    39   1264.8 MiB      0.0 MiB           1           frag_info = {'frag': [[[0], [0]]]}
+    40   1264.8 MiB      0.0 MiB           1           conv_info = {'ll_con_tol': 1e-6, 'll_max_its': 80}
+    41   1264.8 MiB      0.0 MiB           1           rank_control = {
+    42   1264.8 MiB      0.0 MiB           1               'rank_reduced': rank_reduced_option,
+    43   1264.8 MiB      0.0 MiB           1               'rank_opts': {'Loo': 1, 'Lov': rank_value, 'Lvv': rank_value}
+    44                                                 }
+    45   1264.8 MiB      0.0 MiB           1           kwargs = frag_info | conv_info | rank_control
+    46                                         
+    47                                             # ---------- Initialize low-level MPCC ----------
+    48   6822.9 MiB   5558.1 MiB           1           mympcc = mpcc.RMPCC(mf, 'True', c_lo, **kwargs)
+    49                                         
+    50   6822.9 MiB      0.0 MiB           1           return mol, mf, mympcc
+
+
+this way
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    33   6823.0 MiB   6823.0 MiB           1       @profile
+    34                                             def __init__(self, mf, frozen=None, mo_coeff=None, mo_occ=None):
+    35   6823.0 MiB      0.0 MiB           1           ccsd.CCSD.__init__(self, mf, frozen, mo_coeff, mo_occ)
+    36   6823.0 MiB      0.0 MiB           1           if getattr(mf, 'with_df', None):
+    37   6823.0 MiB      0.0 MiB           1               self.with_df = mf.with_df
+    38                                                 else:
+    39                                                     self.with_df = df.DF(mf.mol)
+    40                                                     self.with_df.auxbasis = df.make_auxbasis(mf.mol, mp2fit=True)
+
+

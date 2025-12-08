@@ -1,0 +1,1002 @@
+converged SCF energy = -456.233780062689
+MPCC fragments: [[[0], [0]]]
+this way
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   133    602.1 MiB    602.1 MiB           1   @profile
+   134                                         def _make_df_eris(cc, mo_coeff=None):
+   135    602.1 MiB      0.0 MiB           1       assert cc._scf.istype('RHF')
+   136    602.1 MiB      0.0 MiB           1       eris = _ChemistsERIs()
+   137    602.1 MiB      0.0 MiB           1       eris._common_init_(cc, mo_coeff)
+   138    602.1 MiB      0.0 MiB           1       nocc = eris.nocc
+   139    602.1 MiB      0.0 MiB           1       nmo = eris.fock.shape[0]
+   140    602.1 MiB      0.0 MiB           1       nvir = nmo - nocc
+   141    602.1 MiB      0.0 MiB           1       nvir_pair = nvir*(nvir+1)//2
+   142    602.1 MiB      0.0 MiB           1       with_df = cc.with_df
+   143    602.1 MiB      0.0 MiB           1       naux = eris.naux = with_df.get_naoaux()
+   144                                         
+   145    602.1 MiB      0.0 MiB           1       eris.feri = lib.H5TmpFile()
+   146    602.1 MiB      0.0 MiB           1       eris.oooo = eris.feri.create_dataset('oooo', (nocc,nocc,nocc,nocc), 'f8')
+   147    602.1 MiB      0.0 MiB           1       eris.ovoo = eris.feri.create_dataset('ovoo', (nocc,nvir,nocc,nocc), 'f8', chunks=(nocc,1,nocc,nocc))
+   148    602.1 MiB      0.0 MiB           1       eris.ovov = eris.feri.create_dataset('ovov', (nocc,nvir,nocc,nvir), 'f8', chunks=(nocc,1,nocc,nvir))
+   149    602.1 MiB      0.0 MiB           1       eris.ovvo = eris.feri.create_dataset('ovvo', (nocc,nvir,nvir,nocc), 'f8', chunks=(nocc,1,nvir,nocc))
+   150    602.1 MiB      0.0 MiB           1       eris.oovv = eris.feri.create_dataset('oovv', (nocc,nocc,nvir,nvir), 'f8', chunks=(nocc,nocc,1,nvir))
+   151                                             # nrow ~ 4e9/8/blockdim to ensure hdf5 chunk < 4GB
+   152    602.1 MiB      0.0 MiB           1       chunks = (min(nvir_pair,int(4e8/with_df.blockdim)), min(naux,with_df.blockdim))
+   153    602.1 MiB      0.0 MiB           1       eris.vvL = eris.feri.create_dataset('vvL', (nvir_pair,naux), 'f8', chunks=chunks)
+   154                                         
+   155    602.1 MiB      0.0 MiB           1       Loo = numpy.empty((naux,nocc,nocc))
+   156    602.1 MiB      0.0 MiB           1       Lov = numpy.empty((naux,nocc,nvir))
+   157    602.1 MiB      0.0 MiB           1       mo = numpy.asarray(eris.mo_coeff, order='F')
+   158    602.1 MiB      0.0 MiB           1       ijslice = (0, nmo, 0, nmo)
+   159    602.1 MiB      0.0 MiB           1       p1 = 0
+   160    602.1 MiB      0.0 MiB           1       Lpq = None
+   161    710.9 MiB      0.0 MiB           4       for k, eri1 in enumerate(with_df.loop()):
+   162    705.6 MiB     38.0 MiB           3           Lpq = _ao2mo.nr_e2(eri1, mo, ijslice, aosym='s2', mosym='s1', out=Lpq)
+   163    705.6 MiB      0.0 MiB           3           p0, p1 = p1, p1 + Lpq.shape[0]
+   164    705.6 MiB      0.0 MiB           3           Lpq = Lpq.reshape(p1-p0,nmo,nmo)
+   165    706.9 MiB      4.8 MiB           3           Loo[p0:p1] = Lpq[:,:nocc,:nocc]
+   166    710.9 MiB     18.2 MiB           3           Lov[p0:p1] = Lpq[:,:nocc,nocc:]
+   167    710.9 MiB     23.8 MiB           3           Lvv = lib.pack_tril(Lpq[:,nocc:,nocc:])
+   168    710.9 MiB     24.0 MiB           3           eris.vvL[:,p0:p1] = Lvv.T
+   169    625.2 MiB    -85.6 MiB           1       Lpq = Lvv = None
+   170    625.2 MiB      0.0 MiB           1       Loo = Loo.reshape(naux,nocc**2)
+   171                                             #Lvo = Lov.transpose(0,2,1).reshape(naux,nvir*nocc)
+   172    625.2 MiB      0.0 MiB           1       Lov = Lov.reshape(naux,nocc*nvir)
+   173    631.3 MiB      6.1 MiB           1       eris.oooo[:] = lib.ddot(Loo.T, Loo).reshape(nocc,nocc,nocc,nocc)
+   174    648.6 MiB     17.3 MiB           1       eris.ovoo[:] = lib.ddot(Lov.T, Loo).reshape(nocc,nvir,nocc,nocc)
+   175    737.8 MiB     89.2 MiB           1       ovov = lib.ddot(Lov.T, Lov).reshape(nocc,nvir,nocc,nvir)
+   176    737.8 MiB      0.0 MiB           1       eris.ovov[:] = ovov
+   177    737.8 MiB      0.0 MiB           1       eris.ovvo[:] = ovov.transpose(0,1,3,2)
+   178    648.6 MiB    -89.2 MiB           1       ovov = None
+   179                                         
+   180    648.6 MiB      0.0 MiB           1       mem_now = lib.current_memory()[0]
+   181    648.6 MiB      0.0 MiB           1       max_memory = max(0, cc.max_memory - mem_now)
+   182    648.6 MiB      0.0 MiB           1       blksize = max(ccsd.BLKMIN, int((max_memory*.9e6/8-nocc**2*nvir_pair)/(nocc**2+naux)))
+   183    648.6 MiB      0.0 MiB           1       oovv_tril = numpy.empty((nocc*nocc,nvir_pair))
+   184    693.6 MiB      0.0 MiB           2       for p0, p1 in lib.prange(0, nvir_pair, blksize):
+   185    693.6 MiB     45.0 MiB           1           oovv_tril[:,p0:p1] = lib.ddot(Loo.T, _cp(eris.vvL[p0:p1]).T)
+   186    693.6 MiB      0.0 MiB           1       eris.oovv[:] = lib.unpack_tril(oovv_tril).reshape(nocc,nocc,nvir,nvir)
+   187    648.6 MiB    -45.0 MiB           1       oovv_tril = Loo = None
+   188                                         
+   189    648.6 MiB      0.0 MiB           1       Lov = Lov.reshape(naux,nocc,nvir)
+   190    648.6 MiB      0.0 MiB           1       vblk = max(nocc, int((max_memory*.15e6/8)/(nocc*nvir_pair)))
+   191    648.6 MiB      0.0 MiB           1       vvblk = int(min(nvir_pair, 4e8/nocc, max(4, (max_memory*.8e6/8)/(vblk*nocc+naux))))
+   192    648.6 MiB      0.0 MiB           2       eris.ovvv = eris.feri.create_dataset('ovvv', (nocc,nvir,nvir_pair), 'f8',
+   193    648.6 MiB      0.0 MiB           1                                            chunks=(nocc,1,vvblk))
+   194    648.6 MiB      0.0 MiB           2       for q0, q1 in lib.prange(0, nvir_pair, vvblk):
+   195    683.4 MiB     34.8 MiB           1           vvL = _cp(eris.vvL[q0:q1])
+   196    683.4 MiB      0.0 MiB           2           for p0, p1 in lib.prange(0, nvir, vblk):
+   197    683.4 MiB      0.0 MiB           1               tmpLov = _cp(Lov[:,:,p0:p1]).reshape(naux,-1)
+   198    683.4 MiB      0.0 MiB           1               eris.ovvv[:,p0:p1,q0:q1] = lib.ddot(tmpLov.T, vvL.T).reshape(nocc,p1-p0,q1-q0)
+   199    648.6 MiB    -34.8 MiB           1           vvL = None
+   200    648.6 MiB      0.0 MiB           1       return eris
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    44    602.1 MiB    602.1 MiB           1       @profile
+    45                                             def ao2mo(self, mo_coeff=None):
+    46    630.4 MiB     28.3 MiB           1           return _make_df_eris(self, mo_coeff)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    61    766.2 MiB    766.2 MiB           1   @profile
+    62                                         def _contract_vvvv_t2(mycc, mol, vvL, VVL, t2, out=None, verbose=None):
+    63                                             '''Ht2 = numpy.einsum('ijcd,acdb->ijab', t2, vvvv)
+    64                                         
+    65                                             Args:
+    66                                                 vvvv : None or integral object
+    67                                                     if vvvv is None, contract t2 to AO-integrals using AO-direct algorithm
+    68                                             '''
+    69    766.2 MiB      0.0 MiB           1       _dgemm = lib.numpy_helper._dgemm
+    70    766.2 MiB      0.0 MiB           1       time0 = logger.process_clock(), logger.perf_counter()
+    71    766.2 MiB      0.0 MiB           1       log = logger.new_logger(mol, verbose)
+    72                                         
+    73    766.2 MiB      0.0 MiB           1       naux = vvL.shape[-1]
+    74    766.2 MiB      0.0 MiB           1       nvira, nvirb = t2.shape[-2:]
+    75    766.2 MiB      0.0 MiB           1       x2 = t2.reshape(-1,nvira,nvirb)
+    76    766.2 MiB      0.0 MiB           1       nocc2 = x2.shape[0]
+    77    766.2 MiB      0.0 MiB           1       nvir2 = nvira * nvirb
+    78    766.2 MiB      0.0 MiB           1       Ht2 = numpy.ndarray(x2.shape, buffer=out)
+    79    812.3 MiB     46.1 MiB           1       Ht2[:] = 0
+    80                                         
+    81    812.3 MiB      0.0 MiB           1       max_memory = max(MEMORYMIN, mycc.max_memory - lib.current_memory()[0])
+    82    950.2 MiB      0.0 MiB          11       def contract_blk_(eri, i0, i1, j0, j1):
+    83    950.2 MiB      0.0 MiB          10           ic = i1 - i0
+    84    950.2 MiB      0.0 MiB          10           jc = j1 - j0
+    85                                                 #:Ht2[:,j0:j1] += numpy.einsum('xef,efab->xab', x2[:,i0:i1], eri)
+    86    950.2 MiB      0.0 MiB          20           _dgemm('N', 'N', nocc2, jc*nvirb, ic*nvirb,
+    87    950.2 MiB      0.0 MiB          10                  x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    88    950.2 MiB      0.0 MiB          10                  Ht2.reshape(-1,nvir2), 1, 1, i0*nvirb, 0, j0*nvirb)
+    89                                         
+    90    950.2 MiB      0.0 MiB          10           if i0 > j0:
+    91                                                     #:Ht2[:,i0:i1] += numpy.einsum('xef,abef->xab', x2[:,j0:j1], eri)
+    92    950.2 MiB      0.0 MiB          12               _dgemm('N', 'T', nocc2, ic*nvirb, jc*nvirb,
+    93    950.2 MiB      0.0 MiB           6                      x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    94    950.2 MiB      0.0 MiB           6                      Ht2.reshape(-1,nvir2), 1, 1, j0*nvirb, 0, i0*nvirb)
+    95                                         
+    96                                         #TODO: check if vvL can be entirely loaded into memory_profiler
+    97    812.3 MiB      0.0 MiB           1       nvir_pair = nvirb * (nvirb+1) // 2
+    98    812.3 MiB      0.0 MiB           1       dmax = numpy.sqrt(max_memory*.7e6/8/nvirb**2/2)
+    99    812.3 MiB      0.0 MiB           1       dmax = int(min((nvira+3)//4, max(ccsd.BLKMIN, dmax)))
+   100    812.3 MiB      0.0 MiB           1       vvblk = (max_memory*1e6/8 - dmax**2*(nvirb**2*1.5+naux))/naux
+   101    812.3 MiB      0.0 MiB           1       vvblk = int(min((nvira+3)//4, max(ccsd.BLKMIN, vvblk/naux)))
+   102    812.3 MiB      0.0 MiB           1       eribuf = numpy.empty((dmax,dmax,nvir_pair))
+   103    812.3 MiB      0.0 MiB           1       loadbuf = numpy.empty((dmax,dmax,nvirb,nvirb))
+   104    812.3 MiB      0.0 MiB           1       tril2sq = lib.square_mat_in_trilu_indices(nvira)
+   105                                         
+   106    950.2 MiB      0.0 MiB           5       for i0, i1 in lib.prange(0, nvira, dmax):
+   107    938.0 MiB      0.0 MiB           4           off0 = i0*(i0+1)//2
+   108    938.0 MiB      0.0 MiB           4           off1 = i1*(i1+1)//2
+   109    950.1 MiB     12.1 MiB           4           vvL0 = _cp(vvL[off0:off1])
+   110    950.2 MiB      0.0 MiB          14           for j0, j1 in lib.prange(0, i1, dmax):
+   111    950.2 MiB      0.0 MiB          10               ijL = vvL0[tril2sq[i0:i1,j0:j1] - off0].reshape(-1,naux)
+   112    950.2 MiB      0.0 MiB          10               eri = numpy.ndarray(((i1-i0)*(j1-j0),nvir_pair), buffer=eribuf)
+   113    950.2 MiB      0.0 MiB        2280               for p0, p1 in lib.prange(0, nvir_pair, vvblk):
+   114    950.2 MiB      0.0 MiB        2270                   vvL1 = _cp(VVL[p0:p1])
+   115    950.2 MiB     42.2 MiB        2270                   eri[:,p0:p1] = lib.ddot(ijL, vvL1.T)
+   116    950.2 MiB      0.1 MiB        2270                   vvL1 = None
+   117                                         
+   118    950.2 MiB      0.0 MiB          10               tmp = numpy.ndarray((i1-i0,nvirb,j1-j0,nvirb), buffer=loadbuf)
+   119    950.2 MiB     83.4 MiB          20               _ccsd.libcc.CCload_eri(tmp.ctypes.data_as(ctypes.c_void_p),
+   120    950.2 MiB      0.0 MiB          10                                      eri.ctypes.data_as(ctypes.c_void_p),
+   121    950.2 MiB      0.0 MiB          10                                      (ctypes.c_int*4)(i0, i1, j0, j1),
+   122    950.2 MiB      0.0 MiB          10                                      ctypes.c_int(nvirb))
+   123    950.2 MiB      0.0 MiB          10               contract_blk_(tmp, i0, i1, j0, j1)
+   124    950.2 MiB      0.0 MiB          10               del ijL,eri,tmp
+   125    950.2 MiB      0.0 MiB          10               time0 = log.timer_debug1('vvvv [%d:%d,%d:%d]'%(i0,i1,j0,j1), *time0)
+   126    950.2 MiB      0.0 MiB           1       return Ht2.reshape(t2.shape)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    61    943.0 MiB    943.0 MiB           1   @profile
+    62                                         def _contract_vvvv_t2(mycc, mol, vvL, VVL, t2, out=None, verbose=None):
+    63                                             '''Ht2 = numpy.einsum('ijcd,acdb->ijab', t2, vvvv)
+    64                                         
+    65                                             Args:
+    66                                                 vvvv : None or integral object
+    67                                                     if vvvv is None, contract t2 to AO-integrals using AO-direct algorithm
+    68                                             '''
+    69    943.0 MiB      0.0 MiB           1       _dgemm = lib.numpy_helper._dgemm
+    70    943.0 MiB      0.0 MiB           1       time0 = logger.process_clock(), logger.perf_counter()
+    71    943.0 MiB      0.0 MiB           1       log = logger.new_logger(mol, verbose)
+    72                                         
+    73    943.0 MiB      0.0 MiB           1       naux = vvL.shape[-1]
+    74    943.0 MiB      0.0 MiB           1       nvira, nvirb = t2.shape[-2:]
+    75    943.0 MiB      0.0 MiB           1       x2 = t2.reshape(-1,nvira,nvirb)
+    76    943.0 MiB      0.0 MiB           1       nocc2 = x2.shape[0]
+    77    943.0 MiB      0.0 MiB           1       nvir2 = nvira * nvirb
+    78    943.0 MiB      0.0 MiB           1       Ht2 = numpy.ndarray(x2.shape, buffer=out)
+    79    989.1 MiB     46.1 MiB           1       Ht2[:] = 0
+    80                                         
+    81    989.1 MiB      0.0 MiB           1       max_memory = max(MEMORYMIN, mycc.max_memory - lib.current_memory()[0])
+    82   1147.1 MiB      0.0 MiB          11       def contract_blk_(eri, i0, i1, j0, j1):
+    83   1147.1 MiB      0.0 MiB          10           ic = i1 - i0
+    84   1147.1 MiB      0.0 MiB          10           jc = j1 - j0
+    85                                                 #:Ht2[:,j0:j1] += numpy.einsum('xef,efab->xab', x2[:,i0:i1], eri)
+    86   1147.1 MiB      0.0 MiB          20           _dgemm('N', 'N', nocc2, jc*nvirb, ic*nvirb,
+    87   1147.1 MiB      0.0 MiB          10                  x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    88   1147.1 MiB      0.0 MiB          10                  Ht2.reshape(-1,nvir2), 1, 1, i0*nvirb, 0, j0*nvirb)
+    89                                         
+    90   1147.1 MiB      0.0 MiB          10           if i0 > j0:
+    91                                                     #:Ht2[:,i0:i1] += numpy.einsum('xef,abef->xab', x2[:,j0:j1], eri)
+    92   1147.1 MiB      0.0 MiB          12               _dgemm('N', 'T', nocc2, ic*nvirb, jc*nvirb,
+    93   1147.1 MiB      0.0 MiB           6                      x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    94   1147.1 MiB      0.0 MiB           6                      Ht2.reshape(-1,nvir2), 1, 1, j0*nvirb, 0, i0*nvirb)
+    95                                         
+    96                                         #TODO: check if vvL can be entirely loaded into memory_profiler
+    97    989.1 MiB      0.0 MiB           1       nvir_pair = nvirb * (nvirb+1) // 2
+    98    989.1 MiB      0.0 MiB           1       dmax = numpy.sqrt(max_memory*.7e6/8/nvirb**2/2)
+    99    989.1 MiB      0.0 MiB           1       dmax = int(min((nvira+3)//4, max(ccsd.BLKMIN, dmax)))
+   100    989.1 MiB      0.0 MiB           1       vvblk = (max_memory*1e6/8 - dmax**2*(nvirb**2*1.5+naux))/naux
+   101    989.1 MiB      0.0 MiB           1       vvblk = int(min((nvira+3)//4, max(ccsd.BLKMIN, vvblk/naux)))
+   102    989.1 MiB      0.0 MiB           1       eribuf = numpy.empty((dmax,dmax,nvir_pair))
+   103    989.1 MiB      0.0 MiB           1       loadbuf = numpy.empty((dmax,dmax,nvirb,nvirb))
+   104    989.1 MiB      0.0 MiB           1       tril2sq = lib.square_mat_in_trilu_indices(nvira)
+   105                                         
+   106   1147.1 MiB      0.0 MiB           5       for i0, i1 in lib.prange(0, nvira, dmax):
+   107   1132.6 MiB      0.0 MiB           4           off0 = i0*(i0+1)//2
+   108   1132.6 MiB      0.0 MiB           4           off1 = i1*(i1+1)//2
+   109   1147.0 MiB     27.8 MiB           4           vvL0 = _cp(vvL[off0:off1])
+   110   1147.1 MiB      0.0 MiB          14           for j0, j1 in lib.prange(0, i1, dmax):
+   111   1147.1 MiB      4.3 MiB          10               ijL = vvL0[tril2sq[i0:i1,j0:j1] - off0].reshape(-1,naux)
+   112   1147.1 MiB      0.0 MiB          10               eri = numpy.ndarray(((i1-i0)*(j1-j0),nvir_pair), buffer=eribuf)
+   113   1147.1 MiB      0.0 MiB        2280               for p0, p1 in lib.prange(0, nvir_pair, vvblk):
+   114   1147.1 MiB      0.0 MiB        2270                   vvL1 = _cp(VVL[p0:p1])
+   115   1147.1 MiB     42.4 MiB        2270                   eri[:,p0:p1] = lib.ddot(ijL, vvL1.T)
+   116   1147.1 MiB      0.1 MiB        2270                   vvL1 = None
+   117                                         
+   118   1147.1 MiB      0.0 MiB          10               tmp = numpy.ndarray((i1-i0,nvirb,j1-j0,nvirb), buffer=loadbuf)
+   119   1147.1 MiB     83.4 MiB          20               _ccsd.libcc.CCload_eri(tmp.ctypes.data_as(ctypes.c_void_p),
+   120   1147.1 MiB      0.0 MiB          10                                      eri.ctypes.data_as(ctypes.c_void_p),
+   121   1147.1 MiB      0.0 MiB          10                                      (ctypes.c_int*4)(i0, i1, j0, j1),
+   122   1147.1 MiB      0.0 MiB          10                                      ctypes.c_int(nvirb))
+   123   1147.1 MiB      0.0 MiB          10               contract_blk_(tmp, i0, i1, j0, j1)
+   124   1147.1 MiB      0.0 MiB          10               del ijL,eri,tmp
+   125   1147.1 MiB      0.0 MiB          10               time0 = log.timer_debug1('vvvv [%d:%d,%d:%d]'%(i0,i1,j0,j1), *time0)
+   126   1147.1 MiB      0.0 MiB           1       return Ht2.reshape(t2.shape)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    61   1032.5 MiB   1032.5 MiB           1   @profile
+    62                                         def _contract_vvvv_t2(mycc, mol, vvL, VVL, t2, out=None, verbose=None):
+    63                                             '''Ht2 = numpy.einsum('ijcd,acdb->ijab', t2, vvvv)
+    64                                         
+    65                                             Args:
+    66                                                 vvvv : None or integral object
+    67                                                     if vvvv is None, contract t2 to AO-integrals using AO-direct algorithm
+    68                                             '''
+    69   1032.5 MiB      0.0 MiB           1       _dgemm = lib.numpy_helper._dgemm
+    70   1032.5 MiB      0.0 MiB           1       time0 = logger.process_clock(), logger.perf_counter()
+    71   1032.5 MiB      0.0 MiB           1       log = logger.new_logger(mol, verbose)
+    72                                         
+    73   1032.5 MiB      0.0 MiB           1       naux = vvL.shape[-1]
+    74   1032.5 MiB      0.0 MiB           1       nvira, nvirb = t2.shape[-2:]
+    75   1032.5 MiB      0.0 MiB           1       x2 = t2.reshape(-1,nvira,nvirb)
+    76   1032.5 MiB      0.0 MiB           1       nocc2 = x2.shape[0]
+    77   1032.5 MiB      0.0 MiB           1       nvir2 = nvira * nvirb
+    78   1032.5 MiB      0.0 MiB           1       Ht2 = numpy.ndarray(x2.shape, buffer=out)
+    79   1078.6 MiB     46.1 MiB           1       Ht2[:] = 0
+    80                                         
+    81   1078.6 MiB      0.0 MiB           1       max_memory = max(MEMORYMIN, mycc.max_memory - lib.current_memory()[0])
+    82   1236.7 MiB      0.0 MiB          11       def contract_blk_(eri, i0, i1, j0, j1):
+    83   1236.7 MiB      0.0 MiB          10           ic = i1 - i0
+    84   1236.7 MiB      0.0 MiB          10           jc = j1 - j0
+    85                                                 #:Ht2[:,j0:j1] += numpy.einsum('xef,efab->xab', x2[:,i0:i1], eri)
+    86   1236.7 MiB      0.0 MiB          20           _dgemm('N', 'N', nocc2, jc*nvirb, ic*nvirb,
+    87   1236.7 MiB      0.0 MiB          10                  x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    88   1236.7 MiB      0.0 MiB          10                  Ht2.reshape(-1,nvir2), 1, 1, i0*nvirb, 0, j0*nvirb)
+    89                                         
+    90   1236.7 MiB      0.0 MiB          10           if i0 > j0:
+    91                                                     #:Ht2[:,i0:i1] += numpy.einsum('xef,abef->xab', x2[:,j0:j1], eri)
+    92   1236.7 MiB      0.0 MiB          12               _dgemm('N', 'T', nocc2, ic*nvirb, jc*nvirb,
+    93   1236.7 MiB      0.0 MiB           6                      x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    94   1236.7 MiB      0.0 MiB           6                      Ht2.reshape(-1,nvir2), 1, 1, j0*nvirb, 0, i0*nvirb)
+    95                                         
+    96                                         #TODO: check if vvL can be entirely loaded into memory_profiler
+    97   1078.6 MiB      0.0 MiB           1       nvir_pair = nvirb * (nvirb+1) // 2
+    98   1078.6 MiB      0.0 MiB           1       dmax = numpy.sqrt(max_memory*.7e6/8/nvirb**2/2)
+    99   1078.6 MiB      0.0 MiB           1       dmax = int(min((nvira+3)//4, max(ccsd.BLKMIN, dmax)))
+   100   1078.6 MiB      0.0 MiB           1       vvblk = (max_memory*1e6/8 - dmax**2*(nvirb**2*1.5+naux))/naux
+   101   1078.6 MiB      0.0 MiB           1       vvblk = int(min((nvira+3)//4, max(ccsd.BLKMIN, vvblk/naux)))
+   102   1078.6 MiB      0.0 MiB           1       eribuf = numpy.empty((dmax,dmax,nvir_pair))
+   103   1078.6 MiB      0.0 MiB           1       loadbuf = numpy.empty((dmax,dmax,nvirb,nvirb))
+   104   1078.6 MiB      0.0 MiB           1       tril2sq = lib.square_mat_in_trilu_indices(nvira)
+   105                                         
+   106   1236.7 MiB      0.0 MiB           5       for i0, i1 in lib.prange(0, nvira, dmax):
+   107   1222.1 MiB      0.0 MiB           4           off0 = i0*(i0+1)//2
+   108   1222.1 MiB      0.0 MiB           4           off1 = i1*(i1+1)//2
+   109   1236.6 MiB     27.8 MiB           4           vvL0 = _cp(vvL[off0:off1])
+   110   1236.7 MiB      0.0 MiB          14           for j0, j1 in lib.prange(0, i1, dmax):
+   111   1236.7 MiB      4.3 MiB          10               ijL = vvL0[tril2sq[i0:i1,j0:j1] - off0].reshape(-1,naux)
+   112   1236.7 MiB      0.0 MiB          10               eri = numpy.ndarray(((i1-i0)*(j1-j0),nvir_pair), buffer=eribuf)
+   113   1236.7 MiB      0.0 MiB        2280               for p0, p1 in lib.prange(0, nvir_pair, vvblk):
+   114   1236.7 MiB      0.0 MiB        2270                   vvL1 = _cp(VVL[p0:p1])
+   115   1236.7 MiB     42.3 MiB        2270                   eri[:,p0:p1] = lib.ddot(ijL, vvL1.T)
+   116   1236.7 MiB      0.1 MiB        2270                   vvL1 = None
+   117                                         
+   118   1236.7 MiB      0.0 MiB          10               tmp = numpy.ndarray((i1-i0,nvirb,j1-j0,nvirb), buffer=loadbuf)
+   119   1236.7 MiB     83.4 MiB          20               _ccsd.libcc.CCload_eri(tmp.ctypes.data_as(ctypes.c_void_p),
+   120   1236.7 MiB      0.0 MiB          10                                      eri.ctypes.data_as(ctypes.c_void_p),
+   121   1236.7 MiB      0.0 MiB          10                                      (ctypes.c_int*4)(i0, i1, j0, j1),
+   122   1236.7 MiB      0.0 MiB          10                                      ctypes.c_int(nvirb))
+   123   1236.7 MiB      0.0 MiB          10               contract_blk_(tmp, i0, i1, j0, j1)
+   124   1236.7 MiB      0.0 MiB          10               del ijL,eri,tmp
+   125   1236.7 MiB      0.0 MiB          10               time0 = log.timer_debug1('vvvv [%d:%d,%d:%d]'%(i0,i1,j0,j1), *time0)
+   126   1236.7 MiB      0.0 MiB           1       return Ht2.reshape(t2.shape)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    61   1122.1 MiB   1122.1 MiB           1   @profile
+    62                                         def _contract_vvvv_t2(mycc, mol, vvL, VVL, t2, out=None, verbose=None):
+    63                                             '''Ht2 = numpy.einsum('ijcd,acdb->ijab', t2, vvvv)
+    64                                         
+    65                                             Args:
+    66                                                 vvvv : None or integral object
+    67                                                     if vvvv is None, contract t2 to AO-integrals using AO-direct algorithm
+    68                                             '''
+    69   1122.1 MiB      0.0 MiB           1       _dgemm = lib.numpy_helper._dgemm
+    70   1122.1 MiB      0.0 MiB           1       time0 = logger.process_clock(), logger.perf_counter()
+    71   1122.1 MiB      0.0 MiB           1       log = logger.new_logger(mol, verbose)
+    72                                         
+    73   1122.1 MiB      0.0 MiB           1       naux = vvL.shape[-1]
+    74   1122.1 MiB      0.0 MiB           1       nvira, nvirb = t2.shape[-2:]
+    75   1122.1 MiB      0.0 MiB           1       x2 = t2.reshape(-1,nvira,nvirb)
+    76   1122.1 MiB      0.0 MiB           1       nocc2 = x2.shape[0]
+    77   1122.1 MiB      0.0 MiB           1       nvir2 = nvira * nvirb
+    78   1122.1 MiB      0.0 MiB           1       Ht2 = numpy.ndarray(x2.shape, buffer=out)
+    79   1168.2 MiB     46.1 MiB           1       Ht2[:] = 0
+    80                                         
+    81   1168.2 MiB      0.0 MiB           1       max_memory = max(MEMORYMIN, mycc.max_memory - lib.current_memory()[0])
+    82   1326.2 MiB      0.0 MiB          11       def contract_blk_(eri, i0, i1, j0, j1):
+    83   1326.2 MiB      0.0 MiB          10           ic = i1 - i0
+    84   1326.2 MiB      0.0 MiB          10           jc = j1 - j0
+    85                                                 #:Ht2[:,j0:j1] += numpy.einsum('xef,efab->xab', x2[:,i0:i1], eri)
+    86   1326.2 MiB      0.0 MiB          20           _dgemm('N', 'N', nocc2, jc*nvirb, ic*nvirb,
+    87   1326.2 MiB      0.0 MiB          10                  x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    88   1326.2 MiB      0.0 MiB          10                  Ht2.reshape(-1,nvir2), 1, 1, i0*nvirb, 0, j0*nvirb)
+    89                                         
+    90   1326.2 MiB      0.0 MiB          10           if i0 > j0:
+    91                                                     #:Ht2[:,i0:i1] += numpy.einsum('xef,abef->xab', x2[:,j0:j1], eri)
+    92   1326.2 MiB      0.0 MiB          12               _dgemm('N', 'T', nocc2, ic*nvirb, jc*nvirb,
+    93   1326.2 MiB      0.0 MiB           6                      x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    94   1326.2 MiB      0.0 MiB           6                      Ht2.reshape(-1,nvir2), 1, 1, j0*nvirb, 0, i0*nvirb)
+    95                                         
+    96                                         #TODO: check if vvL can be entirely loaded into memory_profiler
+    97   1168.2 MiB      0.0 MiB           1       nvir_pair = nvirb * (nvirb+1) // 2
+    98   1168.2 MiB      0.0 MiB           1       dmax = numpy.sqrt(max_memory*.7e6/8/nvirb**2/2)
+    99   1168.2 MiB      0.0 MiB           1       dmax = int(min((nvira+3)//4, max(ccsd.BLKMIN, dmax)))
+   100   1168.2 MiB      0.0 MiB           1       vvblk = (max_memory*1e6/8 - dmax**2*(nvirb**2*1.5+naux))/naux
+   101   1168.2 MiB      0.0 MiB           1       vvblk = int(min((nvira+3)//4, max(ccsd.BLKMIN, vvblk/naux)))
+   102   1168.2 MiB      0.0 MiB           1       eribuf = numpy.empty((dmax,dmax,nvir_pair))
+   103   1168.2 MiB      0.0 MiB           1       loadbuf = numpy.empty((dmax,dmax,nvirb,nvirb))
+   104   1168.2 MiB      0.0 MiB           1       tril2sq = lib.square_mat_in_trilu_indices(nvira)
+   105                                         
+   106   1326.2 MiB      0.0 MiB           5       for i0, i1 in lib.prange(0, nvira, dmax):
+   107   1311.6 MiB      0.0 MiB           4           off0 = i0*(i0+1)//2
+   108   1311.6 MiB      0.0 MiB           4           off1 = i1*(i1+1)//2
+   109   1326.1 MiB     27.8 MiB           4           vvL0 = _cp(vvL[off0:off1])
+   110   1326.2 MiB      0.0 MiB          14           for j0, j1 in lib.prange(0, i1, dmax):
+   111   1326.2 MiB      4.3 MiB          10               ijL = vvL0[tril2sq[i0:i1,j0:j1] - off0].reshape(-1,naux)
+   112   1326.2 MiB      0.0 MiB          10               eri = numpy.ndarray(((i1-i0)*(j1-j0),nvir_pair), buffer=eribuf)
+   113   1326.2 MiB      0.0 MiB        2280               for p0, p1 in lib.prange(0, nvir_pair, vvblk):
+   114   1326.2 MiB      0.0 MiB        2270                   vvL1 = _cp(VVL[p0:p1])
+   115   1326.2 MiB     42.3 MiB        2270                   eri[:,p0:p1] = lib.ddot(ijL, vvL1.T)
+   116   1326.2 MiB      0.1 MiB        2270                   vvL1 = None
+   117                                         
+   118   1326.2 MiB      0.0 MiB          10               tmp = numpy.ndarray((i1-i0,nvirb,j1-j0,nvirb), buffer=loadbuf)
+   119   1326.2 MiB     83.4 MiB          20               _ccsd.libcc.CCload_eri(tmp.ctypes.data_as(ctypes.c_void_p),
+   120   1326.2 MiB      0.0 MiB          10                                      eri.ctypes.data_as(ctypes.c_void_p),
+   121   1326.2 MiB      0.0 MiB          10                                      (ctypes.c_int*4)(i0, i1, j0, j1),
+   122   1326.2 MiB      0.0 MiB          10                                      ctypes.c_int(nvirb))
+   123   1326.2 MiB      0.0 MiB          10               contract_blk_(tmp, i0, i1, j0, j1)
+   124   1326.2 MiB      0.0 MiB          10               del ijL,eri,tmp
+   125   1326.2 MiB      0.0 MiB          10               time0 = log.timer_debug1('vvvv [%d:%d,%d:%d]'%(i0,i1,j0,j1), *time0)
+   126   1326.2 MiB      0.0 MiB           1       return Ht2.reshape(t2.shape)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    61   1211.6 MiB   1211.6 MiB           1   @profile
+    62                                         def _contract_vvvv_t2(mycc, mol, vvL, VVL, t2, out=None, verbose=None):
+    63                                             '''Ht2 = numpy.einsum('ijcd,acdb->ijab', t2, vvvv)
+    64                                         
+    65                                             Args:
+    66                                                 vvvv : None or integral object
+    67                                                     if vvvv is None, contract t2 to AO-integrals using AO-direct algorithm
+    68                                             '''
+    69   1211.6 MiB      0.0 MiB           1       _dgemm = lib.numpy_helper._dgemm
+    70   1211.6 MiB      0.0 MiB           1       time0 = logger.process_clock(), logger.perf_counter()
+    71   1211.6 MiB      0.0 MiB           1       log = logger.new_logger(mol, verbose)
+    72                                         
+    73   1211.6 MiB      0.0 MiB           1       naux = vvL.shape[-1]
+    74   1211.6 MiB      0.0 MiB           1       nvira, nvirb = t2.shape[-2:]
+    75   1211.6 MiB      0.0 MiB           1       x2 = t2.reshape(-1,nvira,nvirb)
+    76   1211.6 MiB      0.0 MiB           1       nocc2 = x2.shape[0]
+    77   1211.6 MiB      0.0 MiB           1       nvir2 = nvira * nvirb
+    78   1211.6 MiB      0.0 MiB           1       Ht2 = numpy.ndarray(x2.shape, buffer=out)
+    79   1257.7 MiB     46.1 MiB           1       Ht2[:] = 0
+    80                                         
+    81   1257.7 MiB      0.0 MiB           1       max_memory = max(MEMORYMIN, mycc.max_memory - lib.current_memory()[0])
+    82   1415.7 MiB      0.0 MiB          11       def contract_blk_(eri, i0, i1, j0, j1):
+    83   1415.7 MiB      0.0 MiB          10           ic = i1 - i0
+    84   1415.7 MiB      0.0 MiB          10           jc = j1 - j0
+    85                                                 #:Ht2[:,j0:j1] += numpy.einsum('xef,efab->xab', x2[:,i0:i1], eri)
+    86   1415.7 MiB      0.0 MiB          20           _dgemm('N', 'N', nocc2, jc*nvirb, ic*nvirb,
+    87   1415.7 MiB      0.0 MiB          10                  x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    88   1415.7 MiB      0.0 MiB          10                  Ht2.reshape(-1,nvir2), 1, 1, i0*nvirb, 0, j0*nvirb)
+    89                                         
+    90   1415.7 MiB      0.0 MiB          10           if i0 > j0:
+    91                                                     #:Ht2[:,i0:i1] += numpy.einsum('xef,abef->xab', x2[:,j0:j1], eri)
+    92   1415.7 MiB      0.0 MiB          12               _dgemm('N', 'T', nocc2, ic*nvirb, jc*nvirb,
+    93   1415.7 MiB      0.0 MiB           6                      x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    94   1415.7 MiB      0.0 MiB           6                      Ht2.reshape(-1,nvir2), 1, 1, j0*nvirb, 0, i0*nvirb)
+    95                                         
+    96                                         #TODO: check if vvL can be entirely loaded into memory_profiler
+    97   1257.7 MiB      0.0 MiB           1       nvir_pair = nvirb * (nvirb+1) // 2
+    98   1257.7 MiB      0.0 MiB           1       dmax = numpy.sqrt(max_memory*.7e6/8/nvirb**2/2)
+    99   1257.7 MiB      0.0 MiB           1       dmax = int(min((nvira+3)//4, max(ccsd.BLKMIN, dmax)))
+   100   1257.7 MiB      0.0 MiB           1       vvblk = (max_memory*1e6/8 - dmax**2*(nvirb**2*1.5+naux))/naux
+   101   1257.7 MiB      0.0 MiB           1       vvblk = int(min((nvira+3)//4, max(ccsd.BLKMIN, vvblk/naux)))
+   102   1257.7 MiB      0.0 MiB           1       eribuf = numpy.empty((dmax,dmax,nvir_pair))
+   103   1257.7 MiB      0.0 MiB           1       loadbuf = numpy.empty((dmax,dmax,nvirb,nvirb))
+   104   1257.7 MiB      0.0 MiB           1       tril2sq = lib.square_mat_in_trilu_indices(nvira)
+   105                                         
+   106   1415.7 MiB      0.0 MiB           5       for i0, i1 in lib.prange(0, nvira, dmax):
+   107   1401.2 MiB      0.0 MiB           4           off0 = i0*(i0+1)//2
+   108   1401.2 MiB      0.0 MiB           4           off1 = i1*(i1+1)//2
+   109   1415.6 MiB     27.8 MiB           4           vvL0 = _cp(vvL[off0:off1])
+   110   1415.7 MiB      0.0 MiB          14           for j0, j1 in lib.prange(0, i1, dmax):
+   111   1415.7 MiB      4.3 MiB          10               ijL = vvL0[tril2sq[i0:i1,j0:j1] - off0].reshape(-1,naux)
+   112   1415.7 MiB      0.0 MiB          10               eri = numpy.ndarray(((i1-i0)*(j1-j0),nvir_pair), buffer=eribuf)
+   113   1415.7 MiB      0.0 MiB        2280               for p0, p1 in lib.prange(0, nvir_pair, vvblk):
+   114   1415.7 MiB      0.0 MiB        2270                   vvL1 = _cp(VVL[p0:p1])
+   115   1415.7 MiB     42.3 MiB        2270                   eri[:,p0:p1] = lib.ddot(ijL, vvL1.T)
+   116   1415.7 MiB      0.1 MiB        2270                   vvL1 = None
+   117                                         
+   118   1415.7 MiB      0.0 MiB          10               tmp = numpy.ndarray((i1-i0,nvirb,j1-j0,nvirb), buffer=loadbuf)
+   119   1415.7 MiB     83.4 MiB          20               _ccsd.libcc.CCload_eri(tmp.ctypes.data_as(ctypes.c_void_p),
+   120   1415.7 MiB      0.0 MiB          10                                      eri.ctypes.data_as(ctypes.c_void_p),
+   121   1415.7 MiB      0.0 MiB          10                                      (ctypes.c_int*4)(i0, i1, j0, j1),
+   122   1415.7 MiB      0.0 MiB          10                                      ctypes.c_int(nvirb))
+   123   1415.7 MiB      0.0 MiB          10               contract_blk_(tmp, i0, i1, j0, j1)
+   124   1415.7 MiB      0.0 MiB          10               del ijL,eri,tmp
+   125   1415.7 MiB      0.0 MiB          10               time0 = log.timer_debug1('vvvv [%d:%d,%d:%d]'%(i0,i1,j0,j1), *time0)
+   126   1415.7 MiB      0.0 MiB           1       return Ht2.reshape(t2.shape)
+
+
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/cc/dfccsd.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    61   1301.1 MiB   1301.1 MiB           1   @profile
+    62                                         def _contract_vvvv_t2(mycc, mol, vvL, VVL, t2, out=None, verbose=None):
+    63                                             '''Ht2 = numpy.einsum('ijcd,acdb->ijab', t2, vvvv)
+    64                                         
+    65                                             Args:
+    66                                                 vvvv : None or integral object
+    67                                                     if vvvv is None, contract t2 to AO-integrals using AO-direct algorithm
+    68                                             '''
+    69   1301.1 MiB      0.0 MiB           1       _dgemm = lib.numpy_helper._dgemm
+    70   1301.1 MiB      0.0 MiB           1       time0 = logger.process_clock(), logger.perf_counter()
+    71   1301.1 MiB      0.0 MiB           1       log = logger.new_logger(mol, verbose)
+    72                                         
+    73   1301.1 MiB      0.0 MiB           1       naux = vvL.shape[-1]
+    74   1301.1 MiB      0.0 MiB           1       nvira, nvirb = t2.shape[-2:]
+    75   1301.1 MiB      0.0 MiB           1       x2 = t2.reshape(-1,nvira,nvirb)
+    76   1301.1 MiB      0.0 MiB           1       nocc2 = x2.shape[0]
+    77   1301.1 MiB      0.0 MiB           1       nvir2 = nvira * nvirb
+    78   1301.1 MiB      0.0 MiB           1       Ht2 = numpy.ndarray(x2.shape, buffer=out)
+    79   1347.2 MiB     46.1 MiB           1       Ht2[:] = 0
+    80                                         
+    81   1347.2 MiB      0.0 MiB           1       max_memory = max(MEMORYMIN, mycc.max_memory - lib.current_memory()[0])
+    82   1505.3 MiB      0.0 MiB          11       def contract_blk_(eri, i0, i1, j0, j1):
+    83   1505.3 MiB      0.0 MiB          10           ic = i1 - i0
+    84   1505.3 MiB      0.0 MiB          10           jc = j1 - j0
+    85                                                 #:Ht2[:,j0:j1] += numpy.einsum('xef,efab->xab', x2[:,i0:i1], eri)
+    86   1505.3 MiB      0.0 MiB          20           _dgemm('N', 'N', nocc2, jc*nvirb, ic*nvirb,
+    87   1505.3 MiB      0.0 MiB          10                  x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    88   1505.3 MiB      0.0 MiB          10                  Ht2.reshape(-1,nvir2), 1, 1, i0*nvirb, 0, j0*nvirb)
+    89                                         
+    90   1505.3 MiB      0.0 MiB          10           if i0 > j0:
+    91                                                     #:Ht2[:,i0:i1] += numpy.einsum('xef,abef->xab', x2[:,j0:j1], eri)
+    92   1505.2 MiB      0.0 MiB          12               _dgemm('N', 'T', nocc2, ic*nvirb, jc*nvirb,
+    93   1505.2 MiB      0.0 MiB           6                      x2.reshape(-1,nvir2), eri.reshape(-1,jc*nvirb),
+    94   1505.2 MiB      0.0 MiB           6                      Ht2.reshape(-1,nvir2), 1, 1, j0*nvirb, 0, i0*nvirb)
+    95                                         
+    96                                         #TODO: check if vvL can be entirely loaded into memory_profiler
+    97   1347.2 MiB      0.0 MiB           1       nvir_pair = nvirb * (nvirb+1) // 2
+    98   1347.2 MiB      0.0 MiB           1       dmax = numpy.sqrt(max_memory*.7e6/8/nvirb**2/2)
+    99   1347.2 MiB      0.0 MiB           1       dmax = int(min((nvira+3)//4, max(ccsd.BLKMIN, dmax)))
+   100   1347.2 MiB      0.0 MiB           1       vvblk = (max_memory*1e6/8 - dmax**2*(nvirb**2*1.5+naux))/naux
+   101   1347.2 MiB      0.0 MiB           1       vvblk = int(min((nvira+3)//4, max(ccsd.BLKMIN, vvblk/naux)))
+   102   1347.2 MiB      0.0 MiB           1       eribuf = numpy.empty((dmax,dmax,nvir_pair))
+   103   1347.2 MiB      0.0 MiB           1       loadbuf = numpy.empty((dmax,dmax,nvirb,nvirb))
+   104   1347.2 MiB      0.0 MiB           1       tril2sq = lib.square_mat_in_trilu_indices(nvira)
+   105                                         
+   106   1505.3 MiB      0.0 MiB           5       for i0, i1 in lib.prange(0, nvira, dmax):
+   107   1490.7 MiB      0.0 MiB           4           off0 = i0*(i0+1)//2
+   108   1490.7 MiB      0.0 MiB           4           off1 = i1*(i1+1)//2
+   109   1505.2 MiB     27.8 MiB           4           vvL0 = _cp(vvL[off0:off1])
+   110   1505.3 MiB      0.0 MiB          14           for j0, j1 in lib.prange(0, i1, dmax):
+   111   1505.2 MiB      4.3 MiB          10               ijL = vvL0[tril2sq[i0:i1,j0:j1] - off0].reshape(-1,naux)
+   112   1505.2 MiB      0.0 MiB          10               eri = numpy.ndarray(((i1-i0)*(j1-j0),nvir_pair), buffer=eribuf)
+   113   1505.3 MiB      0.0 MiB        2280               for p0, p1 in lib.prange(0, nvir_pair, vvblk):
+   114   1505.3 MiB      0.0 MiB        2270                   vvL1 = _cp(VVL[p0:p1])
+   115   1505.3 MiB     42.4 MiB        2270                   eri[:,p0:p1] = lib.ddot(ijL, vvL1.T)
+   116   1505.3 MiB      0.1 MiB        2270                   vvL1 = None
+   117                                         
+   118   1505.3 MiB      0.0 MiB          10               tmp = numpy.ndarray((i1-i0,nvirb,j1-j0,nvirb), buffer=loadbuf)
+   119   1505.3 MiB     83.4 MiB          20               _ccsd.libcc.CCload_eri(tmp.ctypes.data_as(ctypes.c_void_p),
+   120   1505.3 MiB      0.0 MiB          10                                      eri.ctypes.data_as(ctypes.c_void_p),
+   121   1505.3 MiB      0.0 MiB          10                                      (ctypes.c_int*4)(i0, i1, j0, j1),
+   122   1505.3 MiB      0.0 MiB          10                                      ctypes.c_int(nvirb))
+   123   1505.3 MiB      0.0 MiB          10               contract_blk_(tmp, i0, i1, j0, j1)
+   124   1505.3 MiB      0.0 MiB          10               del ijL,eri,tmp
+   125   1505.3 MiB      0.0 MiB          10               time0 = log.timer_debug1('vvvv [%d:%d,%d:%d]'%(i0,i1,j0,j1), *time0)
+   126   1505.3 MiB      0.0 MiB           1       return Ht2.reshape(t2.shape)
+
+
+RCCSD not converged
+E(RCCSD) = -457.5355527720696  E_corr = -1.301772709380335
+Filename: example.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    45    601.9 MiB    601.9 MiB           1       @profile
+    46                                             def run_ccsd(mf):
+    47    602.1 MiB      0.2 MiB           1           mycc = cc.CCSD(mf)
+    48    602.1 MiB      0.0 MiB           1           mycc.max_memory = 4000  # limit CCSD memory
+    49    602.1 MiB      0.0 MiB           1           mycc.max_cycle = 6
+    50    602.1 MiB      0.0 MiB           1           mycc.incore_complete = False
+    51                                                 # delete t2 and intermediates after use
+    52    853.3 MiB    251.2 MiB           1           mycc.kernel()
+    53    764.1 MiB    -89.2 MiB           1           if hasattr(mycc, 't2'): del mycc.t2
+    54    764.1 MiB      0.0 MiB           1           if hasattr(mycc, 'eris'): 
+    55                                                     for attr in ['oooo','ovoo','ovov','ovvo','oovv','vvL','ovvv']:
+    56                                                         if hasattr(mycc, 'eris') and hasattr(mycc.eris, attr):
+    57                                                             setattr(mycc.eris, attr, None)
+    58    764.1 MiB      0.0 MiB           1           return mycc
+
+
+CCSD done, t1 copied, mycc deleted
+Filename: example.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    66    764.1 MiB    764.1 MiB           1       @profile
+    67                                             def init_lowlevel(mympcc):
+    68   1173.7 MiB    409.7 MiB           1           _, _, Y = mympcc.lowlevel.init_amps()
+    69   1173.7 MiB      0.0 MiB           1           return Y
+
+
+    Iter. T2 correction finished in 1/100 steps at 2.83e-07 accuracy.
+    CC2 correlation energy: -1.2618771524643426
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/mpcc/dfrmpcc_lowlevel.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   114   1173.7 MiB   1173.7 MiB           1       @profile
+   115                                             def update_amps(self, t1, t2_act, Y):
+   116                                                 """
+   117                                                 Following Table XXX in Future Paper
+   118                                                 """
+   119                                                 # Setp 1 
+   120   1178.5 MiB      4.8 MiB           1           Xoo, Xvo, X = self.get_X(t1)
+   121                                                 
+   122                                                 # Step 2
+   123   1224.4 MiB     45.9 MiB           1           Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+   124                                                 
+   125                                                 # Step 3
+   126   1237.8 MiB     13.4 MiB           1           Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+   127                                                 
+   128                                                 # NOTE remove this once t2 is correctly fatorized
+   129                                                 #t2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
+   130                                                 #t2 += t2/self._eris.D
+   131                                         
+   132                                                 # Step 4 
+   133   1237.8 MiB      0.0 MiB           1           Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1, Y)
+   134                                                 
+   135                                                 # NOTE discuss the grouping of actions, 5-7/8 seems to be fit for one step
+   136                                                 # Step 5 
+   137   1237.8 MiB      0.0 MiB           1           Foo, Fvv = self.update_F(Foo, Fvv, Fov, t1)
+   138                                                 
+   139                                                 # Step 6 & 7
+   140   1238.1 MiB      0.3 MiB           1           D, Uoo, Uvv = self.get_D(Foo, Fvv)
+   141                                                 # NOTE Can we transform D insead of J, that way we don't have to transform Y back!
+   142                                                 # Step 8
+   143   1238.1 MiB      0.0 MiB           1           Jvo = self.update_J(Jvo, Uoo, Uvv)
+   144                                         
+   145                                                 # Step 9 
+   146   1637.6 MiB    399.5 MiB           1           Y = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
+   147                                                 # Step 10 & 11
+   148   1637.6 MiB      0.0 MiB           1           Δt2s_o, Δt2s_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2_act, Y, Ω)
+   149                                                
+   150   1637.6 MiB      0.0 MiB           1           res = Ω.T / self._eris.eia
+   151   1637.6 MiB      0.0 MiB           1           t1 -= res
+   152                                         
+   153                                                 # NOTE Checking energy convergence, remove energy computation later!
+   154   1806.9 MiB    169.2 MiB           1           t2 = self.get_t2(Y, t2_act, Δt2s_o, Δt2s_v)
+   155   1806.9 MiB      0.0 MiB           1           e_corr = self.get_energy(t1, t2) 
+   156   1806.9 MiB      0.0 MiB           1           print(f'    CC2 correlation energy: {e_corr}')
+   157                                         
+   158                                         
+   159   1806.9 MiB      0.0 MiB           1           return np.linalg.norm(res), t1, Δt2s_o, Δt2s_v, Y
+
+
+It 1; residual 4.576864e-02
+    Iter. T2 correction finished in 1/100 steps at 3.04e-08 accuracy.
+    CC2 correlation energy: -1.2554469674696307
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/mpcc/dfrmpcc_lowlevel.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   114   1635.5 MiB   1635.5 MiB           1       @profile
+   115                                             def update_amps(self, t1, t2_act, Y):
+   116                                                 """
+   117                                                 Following Table XXX in Future Paper
+   118                                                 """
+   119                                                 # Setp 1 
+   120   1658.4 MiB     22.8 MiB           1           Xoo, Xvo, X = self.get_X(t1)
+   121                                                 
+   122                                                 # Step 2
+   123   1704.2 MiB     45.9 MiB           1           Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+   124                                                 
+   125                                                 # Step 3
+   126   1717.6 MiB     13.4 MiB           1           Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+   127                                                 
+   128                                                 # NOTE remove this once t2 is correctly fatorized
+   129                                                 #t2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
+   130                                                 #t2 += t2/self._eris.D
+   131                                         
+   132                                                 # Step 4 
+   133   1717.6 MiB      0.0 MiB           1           Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1, Y)
+   134                                                 
+   135                                                 # NOTE discuss the grouping of actions, 5-7/8 seems to be fit for one step
+   136                                                 # Step 5 
+   137   1717.6 MiB      0.0 MiB           1           Foo, Fvv = self.update_F(Foo, Fvv, Fov, t1)
+   138                                                 
+   139                                                 # Step 6 & 7
+   140   1717.6 MiB      0.0 MiB           1           D, Uoo, Uvv = self.get_D(Foo, Fvv)
+   141                                                 # NOTE Can we transform D insead of J, that way we don't have to transform Y back!
+   142                                                 # Step 8
+   143   1717.6 MiB      0.0 MiB           1           Jvo = self.update_J(Jvo, Uoo, Uvv)
+   144                                         
+   145                                                 # Step 9 
+   146   2117.1 MiB    399.5 MiB           1           Y = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
+   147                                                 # Step 10 & 11
+   148   2117.2 MiB      0.0 MiB           1           Δt2s_o, Δt2s_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2_act, Y, Ω)
+   149                                                
+   150   2117.2 MiB      0.0 MiB           1           res = Ω.T / self._eris.eia
+   151   2117.2 MiB      0.0 MiB           1           t1 -= res
+   152                                         
+   153                                                 # NOTE Checking energy convergence, remove energy computation later!
+   154   2206.4 MiB     89.2 MiB           1           t2 = self.get_t2(Y, t2_act, Δt2s_o, Δt2s_v)
+   155   2206.4 MiB      0.0 MiB           1           e_corr = self.get_energy(t1, t2) 
+   156   2206.4 MiB      0.0 MiB           1           print(f'    CC2 correlation energy: {e_corr}')
+   157                                         
+   158                                         
+   159   2206.4 MiB      0.0 MiB           1           return np.linalg.norm(res), t1, Δt2s_o, Δt2s_v, Y
+
+
+It 2; residual 9.556813e-03
+    Iter. T2 correction finished in 1/100 steps at 1.53e-08 accuracy.
+    CC2 correlation energy: -1.2541733406962712
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/mpcc/dfrmpcc_lowlevel.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   114   1635.5 MiB   1635.5 MiB           1       @profile
+   115                                             def update_amps(self, t1, t2_act, Y):
+   116                                                 """
+   117                                                 Following Table XXX in Future Paper
+   118                                                 """
+   119                                                 # Setp 1 
+   120   1658.4 MiB     22.8 MiB           1           Xoo, Xvo, X = self.get_X(t1)
+   121                                                 
+   122                                                 # Step 2
+   123   1704.2 MiB     45.9 MiB           1           Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+   124                                                 
+   125                                                 # Step 3
+   126   1717.6 MiB     13.4 MiB           1           Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+   127                                                 
+   128                                                 # NOTE remove this once t2 is correctly fatorized
+   129                                                 #t2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
+   130                                                 #t2 += t2/self._eris.D
+   131                                         
+   132                                                 # Step 4 
+   133   1717.6 MiB      0.0 MiB           1           Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1, Y)
+   134                                                 
+   135                                                 # NOTE discuss the grouping of actions, 5-7/8 seems to be fit for one step
+   136                                                 # Step 5 
+   137   1717.6 MiB      0.0 MiB           1           Foo, Fvv = self.update_F(Foo, Fvv, Fov, t1)
+   138                                                 
+   139                                                 # Step 6 & 7
+   140   1717.6 MiB      0.0 MiB           1           D, Uoo, Uvv = self.get_D(Foo, Fvv)
+   141                                                 # NOTE Can we transform D insead of J, that way we don't have to transform Y back!
+   142                                                 # Step 8
+   143   1717.6 MiB      0.0 MiB           1           Jvo = self.update_J(Jvo, Uoo, Uvv)
+   144                                         
+   145                                                 # Step 9 
+   146   2117.2 MiB    399.5 MiB           1           Y = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
+   147                                                 # Step 10 & 11
+   148   2117.2 MiB      0.0 MiB           1           Δt2s_o, Δt2s_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2_act, Y, Ω)
+   149                                                
+   150   2117.2 MiB      0.0 MiB           1           res = Ω.T / self._eris.eia
+   151   2117.2 MiB      0.0 MiB           1           t1 -= res
+   152                                         
+   153                                                 # NOTE Checking energy convergence, remove energy computation later!
+   154   2206.4 MiB     89.2 MiB           1           t2 = self.get_t2(Y, t2_act, Δt2s_o, Δt2s_v)
+   155   2206.4 MiB      0.0 MiB           1           e_corr = self.get_energy(t1, t2) 
+   156   2206.4 MiB      0.0 MiB           1           print(f'    CC2 correlation energy: {e_corr}')
+   157                                         
+   158                                         
+   159   2206.4 MiB      0.0 MiB           1           return np.linalg.norm(res), t1, Δt2s_o, Δt2s_v, Y
+
+
+It 3; residual 2.737436e-03
+    Iter. T2 correction finished in 1/100 steps at 3.17e-09 accuracy.
+    CC2 correlation energy: -1.253777162245724
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/mpcc/dfrmpcc_lowlevel.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   114   1635.6 MiB   1635.6 MiB           1       @profile
+   115                                             def update_amps(self, t1, t2_act, Y):
+   116                                                 """
+   117                                                 Following Table XXX in Future Paper
+   118                                                 """
+   119                                                 # Setp 1 
+   120   1658.4 MiB     22.8 MiB           1           Xoo, Xvo, X = self.get_X(t1)
+   121                                                 
+   122                                                 # Step 2
+   123   1704.2 MiB     45.9 MiB           1           Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+   124                                                 
+   125                                                 # Step 3
+   126   1717.6 MiB     13.4 MiB           1           Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+   127                                                 
+   128                                                 # NOTE remove this once t2 is correctly fatorized
+   129                                                 #t2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
+   130                                                 #t2 += t2/self._eris.D
+   131                                         
+   132                                                 # Step 4 
+   133   1717.6 MiB      0.0 MiB           1           Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1, Y)
+   134                                                 
+   135                                                 # NOTE discuss the grouping of actions, 5-7/8 seems to be fit for one step
+   136                                                 # Step 5 
+   137   1717.6 MiB      0.0 MiB           1           Foo, Fvv = self.update_F(Foo, Fvv, Fov, t1)
+   138                                                 
+   139                                                 # Step 6 & 7
+   140   1717.6 MiB      0.0 MiB           1           D, Uoo, Uvv = self.get_D(Foo, Fvv)
+   141                                                 # NOTE Can we transform D insead of J, that way we don't have to transform Y back!
+   142                                                 # Step 8
+   143   1717.6 MiB      0.0 MiB           1           Jvo = self.update_J(Jvo, Uoo, Uvv)
+   144                                         
+   145                                                 # Step 9 
+   146   2117.2 MiB    399.5 MiB           1           Y = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
+   147                                                 # Step 10 & 11
+   148   2117.2 MiB      0.0 MiB           1           Δt2s_o, Δt2s_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2_act, Y, Ω)
+   149                                                
+   150   2117.2 MiB      0.0 MiB           1           res = Ω.T / self._eris.eia
+   151   2117.2 MiB      0.0 MiB           1           t1 -= res
+   152                                         
+   153                                                 # NOTE Checking energy convergence, remove energy computation later!
+   154   2206.4 MiB     89.2 MiB           1           t2 = self.get_t2(Y, t2_act, Δt2s_o, Δt2s_v)
+   155   2206.4 MiB      0.0 MiB           1           e_corr = self.get_energy(t1, t2) 
+   156   2206.4 MiB      0.0 MiB           1           print(f'    CC2 correlation energy: {e_corr}')
+   157                                         
+   158                                         
+   159   2206.4 MiB      0.0 MiB           1           return np.linalg.norm(res), t1, Δt2s_o, Δt2s_v, Y
+
+
+It 4; residual 3.690498e-04
+    Iter. T2 correction finished in 1/100 steps at 6.24e-10 accuracy.
+    CC2 correlation energy: -1.2537829683823545
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/mpcc/dfrmpcc_lowlevel.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   114   1635.6 MiB   1635.6 MiB           1       @profile
+   115                                             def update_amps(self, t1, t2_act, Y):
+   116                                                 """
+   117                                                 Following Table XXX in Future Paper
+   118                                                 """
+   119                                                 # Setp 1 
+   120   1658.4 MiB     22.8 MiB           1           Xoo, Xvo, X = self.get_X(t1)
+   121                                                 
+   122                                                 # Step 2
+   123   1704.2 MiB     45.9 MiB           1           Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+   124                                                 
+   125                                                 # Step 3
+   126   1717.6 MiB     13.4 MiB           1           Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+   127                                                 
+   128                                                 # NOTE remove this once t2 is correctly fatorized
+   129                                                 #t2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
+   130                                                 #t2 += t2/self._eris.D
+   131                                         
+   132                                                 # Step 4 
+   133   1717.6 MiB      0.0 MiB           1           Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1, Y)
+   134                                                 
+   135                                                 # NOTE discuss the grouping of actions, 5-7/8 seems to be fit for one step
+   136                                                 # Step 5 
+   137   1717.6 MiB      0.0 MiB           1           Foo, Fvv = self.update_F(Foo, Fvv, Fov, t1)
+   138                                                 
+   139                                                 # Step 6 & 7
+   140   1717.6 MiB      0.0 MiB           1           D, Uoo, Uvv = self.get_D(Foo, Fvv)
+   141                                                 # NOTE Can we transform D insead of J, that way we don't have to transform Y back!
+   142                                                 # Step 8
+   143   1717.6 MiB      0.0 MiB           1           Jvo = self.update_J(Jvo, Uoo, Uvv)
+   144                                         
+   145                                                 # Step 9 
+   146   2117.2 MiB    399.5 MiB           1           Y = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
+   147                                                 # Step 10 & 11
+   148   2117.2 MiB      0.0 MiB           1           Δt2s_o, Δt2s_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2_act, Y, Ω)
+   149                                                
+   150   2117.2 MiB      0.0 MiB           1           res = Ω.T / self._eris.eia
+   151   2117.2 MiB      0.0 MiB           1           t1 -= res
+   152                                         
+   153                                                 # NOTE Checking energy convergence, remove energy computation later!
+   154   2206.4 MiB     89.2 MiB           1           t2 = self.get_t2(Y, t2_act, Δt2s_o, Δt2s_v)
+   155   2206.4 MiB      0.0 MiB           1           e_corr = self.get_energy(t1, t2) 
+   156   2206.4 MiB      0.0 MiB           1           print(f'    CC2 correlation energy: {e_corr}')
+   157                                         
+   158                                         
+   159   2206.4 MiB      0.0 MiB           1           return np.linalg.norm(res), t1, Δt2s_o, Δt2s_v, Y
+
+
+It 5; residual 1.240917e-04
+    Iter. T2 correction finished in 1/100 steps at 1.22e-10 accuracy.
+    CC2 correlation energy: -1.2537829947031889
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/mpcc/dfrmpcc_lowlevel.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   114   1635.6 MiB   1635.6 MiB           1       @profile
+   115                                             def update_amps(self, t1, t2_act, Y):
+   116                                                 """
+   117                                                 Following Table XXX in Future Paper
+   118                                                 """
+   119                                                 # Setp 1 
+   120   1658.4 MiB     22.8 MiB           1           Xoo, Xvo, X = self.get_X(t1)
+   121                                                 
+   122                                                 # Step 2
+   123   1704.2 MiB     45.9 MiB           1           Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+   124                                                 
+   125                                                 # Step 3
+   126   1717.6 MiB     13.4 MiB           1           Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+   127                                                 
+   128                                                 # NOTE remove this once t2 is correctly fatorized
+   129                                                 #t2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
+   130                                                 #t2 += t2/self._eris.D
+   131                                         
+   132                                                 # Step 4 
+   133   1717.6 MiB      0.0 MiB           1           Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1, Y)
+   134                                                 
+   135                                                 # NOTE discuss the grouping of actions, 5-7/8 seems to be fit for one step
+   136                                                 # Step 5 
+   137   1717.6 MiB      0.0 MiB           1           Foo, Fvv = self.update_F(Foo, Fvv, Fov, t1)
+   138                                                 
+   139                                                 # Step 6 & 7
+   140   1717.6 MiB      0.0 MiB           1           D, Uoo, Uvv = self.get_D(Foo, Fvv)
+   141                                                 # NOTE Can we transform D insead of J, that way we don't have to transform Y back!
+   142                                                 # Step 8
+   143   1717.6 MiB      0.0 MiB           1           Jvo = self.update_J(Jvo, Uoo, Uvv)
+   144                                         
+   145                                                 # Step 9 
+   146   2117.2 MiB    399.5 MiB           1           Y = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
+   147                                                 # Step 10 & 11
+   148   2117.2 MiB      0.0 MiB           1           Δt2s_o, Δt2s_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2_act, Y, Ω)
+   149                                                
+   150   2117.2 MiB      0.0 MiB           1           res = Ω.T / self._eris.eia
+   151   2117.2 MiB      0.0 MiB           1           t1 -= res
+   152                                         
+   153                                                 # NOTE Checking energy convergence, remove energy computation later!
+   154   2206.4 MiB     89.2 MiB           1           t2 = self.get_t2(Y, t2_act, Δt2s_o, Δt2s_v)
+   155   2206.4 MiB      0.0 MiB           1           e_corr = self.get_energy(t1, t2) 
+   156   2206.4 MiB      0.0 MiB           1           print(f'    CC2 correlation energy: {e_corr}')
+   157                                         
+   158                                         
+   159   2206.4 MiB      0.0 MiB           1           return np.linalg.norm(res), t1, Δt2s_o, Δt2s_v, Y
+
+
+It 6; residual 1.499668e-05
+    Iter. T2 correction finished in 1/100 steps at 8.43e-11 accuracy.
+    CC2 correlation energy: -1.253782693495002
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/mpcc/dfrmpcc_lowlevel.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   114   1635.6 MiB   1635.6 MiB           1       @profile
+   115                                             def update_amps(self, t1, t2_act, Y):
+   116                                                 """
+   117                                                 Following Table XXX in Future Paper
+   118                                                 """
+   119                                                 # Setp 1 
+   120   1658.4 MiB     22.8 MiB           1           Xoo, Xvo, X = self.get_X(t1)
+   121                                                 
+   122                                                 # Step 2
+   123   1704.2 MiB     45.9 MiB           1           Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+   124                                                 
+   125                                                 # Step 3
+   126   1717.6 MiB     13.4 MiB           1           Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+   127                                                 
+   128                                                 # NOTE remove this once t2 is correctly fatorized
+   129                                                 #t2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
+   130                                                 #t2 += t2/self._eris.D
+   131                                         
+   132                                                 # Step 4 
+   133   1717.6 MiB      0.0 MiB           1           Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1, Y)
+   134                                                 
+   135                                                 # NOTE discuss the grouping of actions, 5-7/8 seems to be fit for one step
+   136                                                 # Step 5 
+   137   1717.6 MiB      0.0 MiB           1           Foo, Fvv = self.update_F(Foo, Fvv, Fov, t1)
+   138                                                 
+   139                                                 # Step 6 & 7
+   140   1717.6 MiB      0.0 MiB           1           D, Uoo, Uvv = self.get_D(Foo, Fvv)
+   141                                                 # NOTE Can we transform D insead of J, that way we don't have to transform Y back!
+   142                                                 # Step 8
+   143   1717.6 MiB      0.0 MiB           1           Jvo = self.update_J(Jvo, Uoo, Uvv)
+   144                                         
+   145                                                 # Step 9 
+   146   2117.2 MiB    399.5 MiB           1           Y = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
+   147                                                 # Step 10 & 11
+   148   2117.2 MiB      0.0 MiB           1           Δt2s_o, Δt2s_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2_act, Y, Ω)
+   149                                                
+   150   2117.2 MiB      0.0 MiB           1           res = Ω.T / self._eris.eia
+   151   2117.2 MiB      0.0 MiB           1           t1 -= res
+   152                                         
+   153                                                 # NOTE Checking energy convergence, remove energy computation later!
+   154   2206.4 MiB     89.2 MiB           1           t2 = self.get_t2(Y, t2_act, Δt2s_o, Δt2s_v)
+   155   2206.4 MiB      0.0 MiB           1           e_corr = self.get_energy(t1, t2) 
+   156   2206.4 MiB      0.0 MiB           1           print(f'    CC2 correlation energy: {e_corr}')
+   157                                         
+   158                                         
+   159   2206.4 MiB      0.0 MiB           1           return np.linalg.norm(res), t1, Δt2s_o, Δt2s_v, Y
+
+
+It 7; residual 2.942116e-06
+    Iter. T2 correction finished in 1/100 steps at 7.86e-11 accuracy.
+    CC2 correlation energy: -1.253782708065319
+Filename: /home/talha/Documents/RR_MPCC/pyscf_mpcc/pyscf/mpcc/dfrmpcc_lowlevel.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+   114   1635.6 MiB   1635.6 MiB           1       @profile
+   115                                             def update_amps(self, t1, t2_act, Y):
+   116                                                 """
+   117                                                 Following Table XXX in Future Paper
+   118                                                 """
+   119                                                 # Setp 1 
+   120   1658.4 MiB     22.8 MiB           1           Xoo, Xvo, X = self.get_X(t1)
+   121                                                 
+   122                                                 # Step 2
+   123   1704.3 MiB     45.9 MiB           1           Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+   124                                                 
+   125                                                 # Step 3
+   126   1717.6 MiB     13.4 MiB           1           Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+   127                                                 
+   128                                                 # NOTE remove this once t2 is correctly fatorized
+   129                                                 #t2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1)
+   130                                                 #t2 += t2/self._eris.D
+   131                                         
+   132                                                 # Step 4 
+   133   1717.6 MiB      0.0 MiB           1           Ω = self.get_Ω(X, Xvo, Foo, Fvv, Fov, t1, Y)
+   134                                                 
+   135                                                 # NOTE discuss the grouping of actions, 5-7/8 seems to be fit for one step
+   136                                                 # Step 5 
+   137   1717.6 MiB      0.0 MiB           1           Foo, Fvv = self.update_F(Foo, Fvv, Fov, t1)
+   138                                                 
+   139                                                 # Step 6 & 7
+   140   1717.6 MiB      0.0 MiB           1           D, Uoo, Uvv = self.get_D(Foo, Fvv)
+   141                                                 # NOTE Can we transform D insead of J, that way we don't have to transform Y back!
+   142                                                 # Step 8
+   143   1717.6 MiB      0.0 MiB           1           Jvo = self.update_J(Jvo, Uoo, Uvv)
+   144                                         
+   145                                                 # Step 9 
+   146   2117.2 MiB    399.5 MiB           1           Y = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
+   147                                                 # Step 10 & 11
+   148   2117.2 MiB      0.0 MiB           1           Δt2s_o, Δt2s_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2_act, Y, Ω)
+   149                                                
+   150   2117.2 MiB      0.0 MiB           1           res = Ω.T / self._eris.eia
+   151   2117.2 MiB      0.0 MiB           1           t1 -= res
+   152                                         
+   153                                                 # NOTE Checking energy convergence, remove energy computation later!
+   154   2206.4 MiB     89.2 MiB           1           t2 = self.get_t2(Y, t2_act, Δt2s_o, Δt2s_v)
+   155   2206.4 MiB      0.0 MiB           1           e_corr = self.get_energy(t1, t2) 
+   156   2206.4 MiB      0.0 MiB           1           print(f'    CC2 correlation energy: {e_corr}')
+   157                                         
+   158                                         
+   159   2206.4 MiB      0.0 MiB           1           return np.linalg.norm(res), t1, Δt2s_o, Δt2s_v, Y
+
+
+It 8; residual 8.819077e-07
+Filename: example.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+    74   1173.7 MiB   1173.7 MiB           1       @profile
+    75                                             def run_lowlevel(mympcc, t1_init, Y):
+    76   1742.9 MiB    569.1 MiB           1           t1, t2, Y_out = mympcc.lowlevel.kernel(t1_init, [0], Y)
+    77   1742.9 MiB      0.0 MiB           1           return t1,t2, Y_out
+
+
+Low-level kernel done, memory optimized

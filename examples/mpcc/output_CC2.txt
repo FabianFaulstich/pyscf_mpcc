@@ -1,0 +1,184 @@
+
+
+=== Running calculation for TIP4P-10 ===
+converged SCF energy = -760.415343901209
+MPCC fragments: [[[0], [0]]]
+Initializing ...
+RCCSD not converged
+E(RCCSD) = -762.5919724606722  E_corr = -2.176628559462744
+Done! Elapsed time: 1105.051230430603 sec
+Starting Low-Level Solver
+Memory before low-level solver: 6270.75 MB
+[MEM] Before X: 6270.8 MB
+[MEM] After X: 6376.8 MB
+[MEM] Before J: 6376.8 MB
+[MEM] after J: 6505.2 MB
+[MEM] Before F: 6505.2 MB
+[MEM] After F: 6527.3 MB
+[MEM] Before Omega: 6527.3 MB
+[MEM] After Omega: 6527.3 MB
+[MEM] Before update F: 6527.3 MB
+[MEM] After update F: 6527.3 MB
+[MEM] Before D: 6527.3 MB
+[MEM] After D: 6527.6 MB
+[MEM] Before update J: 6527.6 MB
+[MEM] After update J: 6527.6 MB
+[MEM] Before update Y: 6527.6 MB
+[MEM] After update Y: 10226.9 MB
+    Iter. T2 correction finished in 1/100 steps at 3.13e-07 accuracy.
+    CC2 correlation energy: -2.1135768279934206
+It 1; residual 6.151668e-02
+[MEM] Before X: 8120.8 MB
+[MEM] After X: 8226.9 MB
+[MEM] Before J: 8226.9 MB
+[MEM] after J: 8355.2 MB
+[MEM] Before F: 8355.2 MB
+[MEM] After F: 8377.3 MB
+[MEM] Before Omega: 8377.3 MB
+[MEM] After Omega: 8377.3 MB
+[MEM] Before update F: 8377.3 MB
+[MEM] After update F: 8377.3 MB
+[MEM] Before D: 8377.3 MB
+[MEM] After D: 8377.3 MB
+[MEM] Before update J: 8377.3 MB
+[MEM] After update J: 8377.3 MB
+[MEM] Before update Y: 8377.3 MB
+[MEM] After update Y: 12076.6 MB
+    Iter. T2 correction finished in 1/100 steps at 3.41e-08 accuracy.
+    CC2 correlation energy: -2.1021737209795592
+It 2; residual 1.301851e-02
+[MEM] Before X: 8120.8 MB
+[MEM] After X: 8226.9 MB
+[MEM] Before J: 8226.9 MB
+[MEM] after J: 8355.2 MB
+[MEM] Before F: 8355.2 MB
+[MEM] After F: 8377.3 MB
+[MEM] Before Omega: 8377.3 MB
+[MEM] After Omega: 8377.3 MB
+[MEM] Before update F: 8377.3 MB
+[MEM] After update F: 8377.3 MB
+[MEM] Before D: 8377.3 MB
+[MEM] After D: 8377.3 MB
+[MEM] Before update J: 8377.3 MB
+[MEM] After update J: 8377.3 MB
+[MEM] Before update Y: 8377.3 MB
+[MEM] After update Y: 12076.7 MB
+    Iter. T2 correction finished in 1/100 steps at 1.70e-08 accuracy.
+    CC2 correlation energy: -2.099895949821727
+It 3; residual 3.796198e-03
+[MEM] Before X: 8120.8 MB
+[MEM] After X: 8226.9 MB
+[MEM] Before J: 8226.9 MB
+[MEM] after J: 8355.2 MB
+[MEM] Before F: 8355.2 MB
+[MEM] After F: 8377.3 MB
+[MEM] Before Omega: 8377.3 MB
+[MEM] After Omega: 8377.3 MB
+[MEM] Before update F: 8377.3 MB
+[MEM] After update F: 8377.3 MB
+[MEM] Before D: 8377.3 MB
+[MEM] After D: 8377.3 MB
+[MEM] Before update J: 8377.3 MB
+[MEM] After update J: 8377.3 MB
+[MEM] Before update Y: 8377.3 MB
+[MEM] After update Y: 12076.7 MB
+    Iter. T2 correction finished in 1/100 steps at 3.78e-09 accuracy.
+    CC2 correlation energy: -2.0991700219149476
+It 4; residual 5.281475e-04
+[MEM] Before X: 8120.8 MB
+[MEM] After X: 8226.9 MB
+[MEM] Before J: 8226.9 MB
+[MEM] after J: 8355.2 MB
+[MEM] Before F: 8355.2 MB
+[MEM] After F: 8377.3 MB
+[MEM] Before Omega: 8377.3 MB
+[MEM] After Omega: 8377.3 MB
+[MEM] Before update F: 8377.3 MB
+[MEM] After update F: 8377.3 MB
+[MEM] Before D: 8377.3 MB
+[MEM] After D: 8377.3 MB
+[MEM] Before update J: 8377.3 MB
+[MEM] After update J: 8377.3 MB
+[MEM] Before update Y: 8377.3 MB
+[MEM] After update Y: 12076.7 MB
+    Iter. T2 correction finished in 1/100 steps at 7.19e-10 accuracy.
+    CC2 correlation energy: -2.0991814029775533
+It 5; residual 1.794119e-04
+[MEM] Before X: 8120.8 MB
+[MEM] After X: 8226.9 MB
+[MEM] Before J: 8226.9 MB
+[MEM] after J: 8355.2 MB
+[MEM] Before F: 8355.2 MB
+[MEM] After F: 8377.3 MB
+[MEM] Before Omega: 8377.3 MB
+[MEM] After Omega: 8377.3 MB
+[MEM] Before update F: 8377.3 MB
+[MEM] After update F: 8377.3 MB
+[MEM] Before D: 8377.3 MB
+[MEM] After D: 8377.3 MB
+[MEM] Before update J: 8377.3 MB
+[MEM] After update J: 8377.3 MB
+[MEM] Before update Y: 8377.3 MB
+[MEM] After update Y: 12076.7 MB
+    Iter. T2 correction finished in 1/100 steps at 1.03e-10 accuracy.
+    CC2 correlation energy: -2.099181247740364
+It 6; residual 2.029698e-05
+[MEM] Before X: 8120.8 MB
+[MEM] After X: 8226.9 MB
+[MEM] Before J: 8226.9 MB
+[MEM] after J: 8355.2 MB
+[MEM] Before F: 8355.2 MB
+[MEM] After F: 8377.3 MB
+[MEM] Before Omega: 8377.3 MB
+[MEM] After Omega: 8377.3 MB
+[MEM] Before update F: 8377.3 MB
+[MEM] After update F: 8377.3 MB
+[MEM] Before D: 8377.3 MB
+[MEM] After D: 8377.3 MB
+[MEM] Before update J: 8377.3 MB
+[MEM] After update J: 8377.3 MB
+[MEM] Before update Y: 8377.3 MB
+[MEM] After update Y: 12076.7 MB
+    Iter. T2 correction finished in 1/100 steps at 5.47e-11 accuracy.
+    CC2 correlation energy: -2.099180712492606
+It 7; residual 3.431064e-06
+[MEM] Before X: 8120.8 MB
+[MEM] After X: 8226.9 MB
+[MEM] Before J: 8226.9 MB
+[MEM] after J: 8355.2 MB
+[MEM] Before F: 8355.2 MB
+[MEM] After F: 8377.3 MB
+[MEM] Before Omega: 8377.3 MB
+[MEM] After Omega: 8377.3 MB
+[MEM] Before update F: 8377.3 MB
+[MEM] After update F: 8377.3 MB
+[MEM] Before D: 8377.3 MB
+[MEM] After D: 8377.3 MB
+[MEM] Before update J: 8377.3 MB
+[MEM] After update J: 8377.3 MB
+[MEM] Before update Y: 8377.3 MB
+[MEM] After update Y: 12076.7 MB
+    Iter. T2 correction finished in 1/100 steps at 5.55e-11 accuracy.
+    CC2 correlation energy: -2.0991807280941974
+It 8; residual 1.095660e-06
+[MEM] Before X: 8120.8 MB
+[MEM] After X: 8226.9 MB
+[MEM] Before J: 8226.9 MB
+[MEM] after J: 8355.2 MB
+[MEM] Before F: 8355.2 MB
+[MEM] After F: 8377.3 MB
+[MEM] Before Omega: 8377.3 MB
+[MEM] After Omega: 8377.3 MB
+[MEM] Before update F: 8377.3 MB
+[MEM] After update F: 8377.3 MB
+[MEM] Before D: 8377.3 MB
+[MEM] After D: 8377.3 MB
+[MEM] Before update J: 8377.3 MB
+[MEM] After update J: 8377.3 MB
+[MEM] Before update Y: 8377.3 MB
+[MEM] After update Y: 12076.7 MB
+    Iter. T2 correction finished in 1/100 steps at 5.48e-11 accuracy.
+    CC2 correlation energy: -2.099180733294522
+It 9; residual 3.362065e-07
+Finished Low-Level solver!
+Memory after low-level solver: 6959.6953125 MB
