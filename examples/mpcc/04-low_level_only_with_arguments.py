@@ -33,18 +33,35 @@ if __name__ == "__main__":
     Fvv_folder_Lov_Lvv = os.path.join(base_folder,f"Fvv_{scan}")
 
     os.makedirs(base_folder, exist_ok=True)
-    os.makedirs(f"energy_folder_{scan}", exist_ok=True)
-    os.makedirs(f"Y_amp_folder_{scan}", exist_ok= True)
-    os.makedirs(f"Ω_folder_{scan}", exist_ok = True)
-    os.makedirs(f"Foo_folder_{scan}", exist_ok=True)
-    os.makedirs(f"Fov_folder_{scan}", exist_ok= True)
-    os.makedirs(f"Fvv_folder_{scan}", exist_ok = True)
+    os.makedirs(energy_folder_Lov_Lvv, exist_ok=True)
+    os.makedirs(Y_amp_folder_Lov_Lvv, exist_ok= True)
+    os.makedirs(Ω_folder_Lov_Lvv, exist_ok = True)
+    os.makedirs(Foo_folder_Lov_Lvv, exist_ok=True)
+    os.makedirs(Fov_folder_Lov_Lvv, exist_ok= True)
+    os.makedirs(Fvv_folder_Lov_Lvv, exist_ok = True)
+   
+    rank_Loo = 1 if "fix_Loo_1" in scan else 0.5
+    print(f"value of Loo rank: {rank_Loo}")
+
+    rank_Lov = 1.5 if basis == "cc-pvdz" else 2 
+    rank_Lvv = 2.5
+    scan_str = str(scan).replace("_fix_Loo_1", "")
+    
+    
+    if scan in ("Lov", "Lov_fix_Loo_1"):
+        rank_Lov = rank_value
+        rank_Lvv = 2.5
+    elif scan in ("Lvv", "Lvv_fix_Loo_1"):
+        rank_Lvv = rank_value
+    elif scan in ("Lov_Lvv","Lov_Lvv_fix_Loo_1"):
+        rank_Lov = rank_value
+        rank_Lvv = rank_value
 
     if rank_reduced_option:
-        suffix = f"CPD_{scan}_rank{rank_value}X"
+        suffix = f"CPD_{scan_str}_rank{rank_value}X"
     else:
         suffix = "DF"
-
+    
     mf = scf.RHF(mol).density_fit().run()
     mf.mol.max_memory = 20000   
     c_lo = mf.mo_coeff
@@ -53,7 +70,7 @@ if __name__ == "__main__":
     conv_info = {'ll_con_tol': 1e-6, 'll_max_its': 80}
     rank_control = {
             'rank_reduced': rank_reduced_option,
-            'rank_opts': {'Loo': 1, 'Lov': 2, 'Lvv': rank_value}
+            'rank_opts': {'Loo': rank_Loo, 'Lov': rank_Lov, 'Lvv': rank_Lvv}
         }
     kwargs = frag_info | conv_info | rank_control
     
@@ -95,16 +112,16 @@ if __name__ == "__main__":
     iter_energies, n_iter = parse_iteration_energies(output,energy_pattern)
 
     # Save MPCC data
-    np.save(os.path.join(f"Foo_folder_{scan}", f"CC2_Foo_{suffix}.npy"), Foo)
-    np.save(os.path.join(f"Fov_folder_{scan}", f"CC2_Fov_{suffix}.npy"), Fov)
-    np.save(os.path.join(f"Fvv_folder_{scan}", f"CC2_Fvv_{suffix}.npy"), Fvv)
+    np.save(os.path.join(Foo_folder_Lov_Lvv, f"CC2_Foo_{suffix}.npy"), Foo)
+    np.save(os.path.join(Fov_folder_Lov_Lvv, f"CC2_Fov_{suffix}.npy"), Fov)
+    np.save(os.path.join(Fvv_folder_Lov_Lvv, f"CC2_Fvv_{suffix}.npy"), Fvv)
 
-    np.save(os.path.join(f"Y_amp_folder_{scan}", f"CC2_Y_{suffix}.npy"), Y)
+    np.save(os.path.join(Y_amp_folder_Lov_Lvv, f"CC2_Y_{suffix}.npy"), Y)
    
-    np.save(os.path.join(f"Ω_folder_{scan}", f"CC2_Ω_{suffix}.npy"), Ω)
+    np.save(os.path.join(Ω_folder_Lov_Lvv, f"CC2_Ω_{suffix}.npy"), Ω)
 
 
-    np.save(os.path.join(f"energy_folder_{scan}", f"CC2_energy{suffix}.npy"), e_corr)
+    np.save(os.path.join(energy_folder_Lov_Lvv, f"CC2_energy{suffix}.npy"), e_corr)
     
 
     np.savetxt(os.path.join(energy_folder_Lov_Lvv,f"CC2_iter_energies_{suffix}.txt"),np.array(iter_energies))

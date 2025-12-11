@@ -9,7 +9,7 @@ def get_parser():
     parser.add_argument("rank_reduced", type=str)
     parser.add_argument("--rank", type=float, default=None)
     parser.add_argument("--results", type = str, default = None)
-    parser.add_argument("--scan",type=str,required=True, choices=["Lvv","Lov","Lov_Lvv","Lov_Lvv_fix_Loo_1"],help="which tensor to scan:Lov etc")
+    parser.add_argument("--scan",type=str,required=True, choices=["Lvv","Lov","Lov_Lvv","Lov_fix_Loo_1","Lvv_fix_Loo_1","Lov_Lvv_fix_Loo_1"],help="which tensor to scan:Lov etc")
     return parser
 
 def parse_arg():

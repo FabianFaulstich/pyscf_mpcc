@@ -9,11 +9,11 @@ from pathlib import Path
 parser = argparse.ArgumentParser(description="Plot CC2 Y_amplitudes for a molecule and basis")
 parser.add_argument("basis", type=str, help="Basis set, e.g., cc-pvdz")
 parser.add_argument("molecule", type=str, help="Molecule name, e.g., H2O")
-parser.add_argument("--scan",type=str,required=True, choices=["Lvv","Lov","Lov_Lvv"],help="which tensor to scan:Lov etc")
+parser.add_argument("--scan",type=str,required=True, choices=["Lvv","Lov","Lov_Lvv","Lov_fix_Loo_1","Lvv_fix_Loo_1","Lov_Lvv_fix_Loo_1"],help="which tensor to scan:Lov etc")
 parser.add_argument("--results", type=str, default=None, help="path to result folder")
 parser.add_argument("--relative", action="store_true",
                     help="Plot relative L2 error")
-parser.add_argument("--tensor",type=str,required=True, choices=["Y","Foo","Fov","Fvv"],help="which tensor to scan:Y etc")
+parser.add_argument("--tensor",type=str,required=True, choices=["Y","Ω","Foo","Fov","Fvv"],help="which tensor to scan:Y etc")
 
 args = parser.parse_args()
 
@@ -63,6 +63,33 @@ if args.results:
 else:
     results = Path(__file__).parent / "output_data"
 
+if scan == "Lvv":
+    if basis == "cc-pvdz":
+        fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{ov}} = 1.5X$"
+    else: 
+         fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{ov}} = 2X$"
+    scan_rank = r"$R_{\mathrm{vv}}$"
+
+elif scan == "Lov":
+    fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{vv}} = 2.5X$"
+    scan_rank = r"$R_{\mathrm{ov}}$"
+elif scan == "Lov_fix_Loo_1":
+    fixed_rank_text = r"$R_{\mathrm{oo}} = X,\; R_{\mathrm{vv}} = 2.5X$"
+    scan_rank = r"$R_{\mathrm{ov}}$"
+
+elif scan == "Lvv_fix_Loo_1":
+    if basis == "cc-pvdz":
+        fixed_rank_text = r"$R_{\mathrm{ov}} = 1.5X,\; R_{\mathrm{oo}} = 1X$"
+    else:
+        fixed_rank_text = r"$R_{\mathrm{ov}} = 2X,\; R_{\mathrm{oo}} = 1X$" 
+    scan_rank = r"$R_{\mathrm{vv}}$"
+
+elif scan == "Lov_Lvv_fix_Loo_1":
+    fixed_rank_text = r"$R_{\mathrm{oo}} = 1X$"
+    scan_rank = r"CP rank"
+else:
+    fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X$"
+    scan_rank = r"CP rank"
 
 
 ##############################
@@ -72,6 +99,7 @@ if tensor == "Y":
     Y_folder = os.path.join(results, basis, mol_name, f"Y_amp_{scan}")
 else:
     Y_folder = os.path.join(results, basis, mol_name, f"{tensor}_{scan}")
+scan_str = str(scan).replace("_fix_Loo_1", "")
 
 # Load all Y files
 Y_files = sorted([
@@ -101,7 +129,7 @@ for i, f in enumerate(Y_files):
     # clean label
     label = (
         f.replace(f"CC2_{tensor}_", "")
-         .replace(f"CPD_{scan}_rank", "")
+         .replace(f"CPD_{scan_str}_rank", "")
          .replace(".npy", "")
          .replace("1X", "X")
          .replace(".0X", "X")
@@ -119,13 +147,14 @@ plt.xscale("log")
 plt.yscale("log")
 plt.xlabel(f"{tensor} Value")
 plt.ylabel("Count")
-plt.title(f"Histogram of Flattened {tensor}\n"
-          f" {title_name}, {Basis}, "
-          r"$R_{\mathrm{oo}} = X$")
-
+title_text = (f"Histogram of Flattened {tensor}\n"
+          f" {title_name}, {Basis}, ")
+if fixed_rank_text != "":
+    title_text += "," + fixed_rank_text
+plt.title(title_text)
 
 plt.grid(True,which="both", linestyle="--", alpha=0.4)
-plt.legend(title="CP Rank")
+plt.legend(title=f"{scan_rank}")
 plt.tight_layout()
 
 # Save histogram
@@ -166,7 +195,7 @@ ranks, errors = zip(*sorted(zip(ranks,errors)))
 plt.figure(figsize=(10, 7))
 plt.plot(ranks, errors, marker="o", linewidth=2)
 
-plt.xlabel("CP rank")
+plt.xlabel(f"{scan_rank}")
 ticks = [1, 1.5, 2, 2.5, 3, 3.5]
 labels = [f"{t:g}X" for t in ticks]
 
@@ -179,11 +208,16 @@ if args.relative:
 plt.ylabel(ylabel)
 #plt.yscale("log")
 
-plt.title(
+title_text = (
     rf"{tensor} $L_2$ Percent Error vs Rank"
     "\n"
     rf"{title_name}, {Basis}"
 )
+if fixed_rank_text != "":
+    title_text += ", " + fixed_rank_text
+
+plt.title(title_text)
+
 
 plt.grid(True, linestyle="--", alpha=0.6)
 plt.tight_layout()

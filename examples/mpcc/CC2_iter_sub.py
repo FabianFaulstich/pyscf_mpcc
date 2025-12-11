@@ -21,7 +21,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--scan", type=str, required=True,
-    choices=["Lvv", "Lov", "Lov_Lvv"],
+    choices=["Lvv", "Lov", "Lov_Lvv","Lov_fix_Loo_1","Lvv_fix_Loo_1","Lov_Lvv_fix_Loo_1"],
     help="Which tensor to scan"
 )
 parser.add_argument(
@@ -58,7 +58,7 @@ def mol_to_latex(mol):
         n = int(m.group(1))
         return r"$\mathrm{H_2O}$" if n == 1 else rf"$\mathrm{{(H_2O)_{{{n}}}}}$"
 
-    m = re.match(r"C(\d+)H(\d+)$", mol)
+    m = re.match(r"c(\d+)h(\d+)$", mol)
     if m:
         return rf"$\mathrm{{C_{{{m.group(1)}}}H_{{{m.group(2)}}}}}$"
 
@@ -75,6 +75,7 @@ plt.rcParams.update({
     "ytick.labelsize": 12,
     "legend.fontsize": 10,
 })
+scan_str = str(scan).replace("_fix_Loo_1", "")
 
 markers = ["o", "s", "D", "^", "v", "P", "X"]
 
@@ -86,6 +87,33 @@ fig, axs = plt.subplots(2, 2, figsize=(13, 9), sharex=True)
 for i, basis in enumerate(bases):
     for j, mol in enumerate(molecules):
         ax = axs[i, j]
+        if scan == "Lvv":
+            if basis == "cc-pvdz":
+                fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{ov}} = 1.5X$"
+            else: 
+                fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{ov}} = 2X$"
+            scan_rank = r"$R_{\mathrm{vv}}$"
+
+        elif scan == "Lov":
+            fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{vv}} = 2.5X$"
+            scan_rank = r"$R_{\mathrm{ov}}$"
+        elif scan == "Lov_fix_Loo_1":
+            fixed_rank_text = r"$R_{\mathrm{oo}} = X,\; R_{\mathrm{vv}} = 2.5X$"
+            scan_rank = r"$R_{\mathrm{ov}}$"
+            
+        elif scan == "Lvv_fix_Loo_1":
+            if basis == "cc-pvdz":
+                fixed_rank_text = r"$R_{\mathrm{ov}} = 1.5X,\; R_{\mathrm{oo}} = 1X$"
+            else:
+                fixed_rank_text = r"$R_{\mathrm{ov}} = 2X,\; R_{\mathrm{oo}} = 1X$" 
+            scan_rank = r"$R_{\mathrm{vv}}$"
+
+        elif scan == "Lov_Lvv_fix_Loo_1":
+            fixed_rank_text = r"$R_{\mathrm{oo}} = 1X$"
+            scan_rank = r"CP rank"
+        else:
+            fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X$"
+            scan_rank = r"CP rank"
 
         energy_folder = results / basis / mol / f"energies_{scan}"
         if not energy_folder.is_dir():
@@ -103,7 +131,7 @@ for i, basis in enumerate(bases):
 
             label = (
                 f.replace("CC2_iter_energies_", "")
-                 .replace(f"CPD_{scan}_rank", "")
+                 .replace(f"CPD_{scan_str}_rank", "")
                  .replace(".txt", "")
                  .replace(".0X", "X")
             )
@@ -119,8 +147,9 @@ for i, basis in enumerate(bases):
 
         # Titles
         ax.set_title(
-            rf"{mol_to_latex(mol)}, {basis_to_label[basis]}"
-        )
+    rf"{mol_to_latex(mol)}, {basis_to_label[basis]}" + "\n" + fixed_rank_text
+)
+
 
         ax.grid(True, linestyle="--", alpha=0.6)
 
@@ -132,11 +161,9 @@ for i, basis in enumerate(bases):
 # --------------------------------------------------
 # Legend & super title
 # --------------------------------------------------
-axs[0, 1].legend(title="CP rank", loc="best")
+axs[0, 1].legend(title=f"{scan_rank}", loc="best")
 
-fig.suptitle(
-    r"CC2 Energy Convergence vs Iteration" + "\n"
-    r"$R_{\mathrm{oo}} = 0.5X$",
+fig.suptitle("CC2 Energy Convergence vs Iteration" + "\n",
     fontsize=18
 )
 

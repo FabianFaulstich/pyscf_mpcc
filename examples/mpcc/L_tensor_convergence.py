@@ -36,7 +36,7 @@ if __name__ == "__main__":
     "TIP4P-8": 8,
     "TIP4P-10": 10
             }
-    #water = mol_to_water[mol_name]
+    water = mol_to_water[mol_name]
 
     if args.results:
         results = Path(os.path.expanduser(args.results)).resolve()
@@ -83,8 +83,8 @@ if __name__ == "__main__":
             pad = mpcc_tools.init_from_pool_generalized(factor_matrix.shape[0], rank_new - old_rank)
             return np.hstack([factor_matrix, pad])
 
-    max_iter = 100
-    tol = 1e-3
+    max_iter = 200
+    tol = 1e-4
     cOption = 1
     kOption = 0
     
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     }
     # === CPD on Loo ===
     r_oo = int(naux/2)
-    weights, factors, _ = mpcc_tools.cp_als(Loo, r_oo, max_iter, tol, init=1,cOption=cOption, kOption=kOption)
+    weights, factors, _ = mpcc_tools.cp_als(Loo, r_oo, max_iter, tol, init=3,cOption=cOption, kOption=kOption)
     A, O, _ = factors
     Loo_hat = mpcc_tools.reconstruct_cp_tensor(weights, factors)
     rel_error = (np.linalg.norm(Loo - Loo_hat) / np.linalg.norm(Loo))*100
@@ -107,14 +107,14 @@ if __name__ == "__main__":
         A_adj = adjust_factor(A, r_vv)
         O_adj = adjust_factor(O, r_vv)
         init_factors = [A_adj, O_adj, mpcc_tools.init_from_pool_generalized(Lov.shape[2], r_vv)]
-        weights2, factors2, _ = mpcc_tools.cp_als(Lov, r_vv, max_iter, tol, init=1,cOption=cOption, kOption=kOption)
+        weights2, factors2, _ = mpcc_tools.cp_als(Lov, r_vv, max_iter, tol, init=init_factors,cOption=cOption, kOption=kOption)
         Lov_hat2 = mpcc_tools.reconstruct_cp_tensor(weights2, factors2)
         rel_err_fact = (np.linalg.norm(Lov - Lov_hat2) / np.linalg.norm(Lov))*100
 
         print(f" Lov rank {r_vv}: [init=factors]: {rel_err_fact:.3e}")
    ###### Lvv #######
 
-        weights3, factors3, _ = mpcc_tools.cp_als(Lvv, r_vv, max_iter=max_iter, tol=tol, init=1,cOption=cOption, kOption=kOption)
+        weights3, factors3, _ = mpcc_tools.cp_als(Lvv, r_vv, max_iter=max_iter, tol=tol, init=3,cOption=cOption, kOption=kOption)
         Lvv_hat = mpcc_tools.reconstruct_cp_tensor(weights3, factors3)
         rel_err_rand = (np.linalg.norm(Lvv - Lvv_hat) / np.linalg.norm(Lvv))*100
         

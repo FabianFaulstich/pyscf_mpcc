@@ -6,7 +6,7 @@
 # ===========================================
 
 if [ "$#" -ne 3 ]; then
-    echo "Usage: $0 <species.xyz> <basis> {Lvv|Lov|Lov_Lvv|Lov_Lvv_fix_Loo_1}"
+    echo "Usage: $0 <species.xyz> <basis> {Lvv|Lov|Lov_Lvv|Lov_fix_Loo_1|Lvv_fix_Loo_1|Lov_Lvv_fix_Loo_1}"
     exit 1
 fi
 

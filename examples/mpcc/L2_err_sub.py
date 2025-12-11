@@ -13,9 +13,11 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument(
     "--scan", type=str, required=True,
-    choices=["Lvv", "Lov", "Lov_Lvv"],
+    choices=["Lvv", "Lov", "Lov_Lvv","Lov_fix_Loo_1","Lvv_fix_Loo_1","Lov_Lvv_fix_Loo_1"],
     help="Which tensor to scan"
 )
+parser.add_argument("--tensor",type=str,required=True, choices=["Y", "Ω"], help="tensor Y or Omega")
+
 parser.add_argument(
     "--results", type=str, default=None,
     help="Path to results folder"
@@ -28,6 +30,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 scan = args.scan
+tensor = args.tensor
 relative = args.relative
 
 molecules = ["TIP4P-6", "c6h14"]
@@ -63,7 +66,7 @@ plt.rcParams.update({
     "ytick.labelsize": 12,
 })
 
-fig, axs = plt.subplots(2, 2, figsize=(12, 9), sharex=True, sharey=False)
+fig, axs = plt.subplots(2, 2, figsize=(12, 9), sharex=True, sharey=True)
 
 # --------------------------------------------------
 # Main loops
@@ -71,18 +74,49 @@ fig, axs = plt.subplots(2, 2, figsize=(12, 9), sharex=True, sharey=False)
 for i, basis in enumerate(bases):
     for j, mol in enumerate(molecules): 
         ax = axs[i, j]
-        Y_folder = results / basis / mol / f"Ω_{scan}"
+        if scan == "Lvv":
+            if basis == "cc-pvdz":
+                fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{ov}} = 1.5X$"
+            else: 
+                fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{ov}} = 2X$"
+            scan_rank = r"$R_{\mathrm{vv}}$"
+
+        elif scan == "Lov":
+            fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{vv}} = 2.5X$"
+            scan_rank = r"$R_{\mathrm{ov}}$"
+        elif scan == "Lov_fix_Loo_1":
+            fixed_rank_text = r"$R_{\mathrm{oo}} = X,\; R_{\mathrm{vv}} = 2.5X$"
+            scan_rank = r"$R_{\mathrm{ov}}$"
+
+        elif scan == "Lvv_fix_Loo_1":
+            if basis == "cc-pvdz":
+                fixed_rank_text = r"$R_{\mathrm{ov}} = 1.5X,\; R_{\mathrm{oo}} = 1X$"
+            else:
+                fixed_rank_text = r"$R_{\mathrm{ov}} = 2X,\; R_{\mathrm{oo}} = 1X$" 
+            scan_rank = r"$R_{\mathrm{vv}}$"
+
+        elif scan == "Lov_Lvv_fix_Loo_1":
+            fixed_rank_text = r"$R_{\mathrm{oo}} = 1X$"
+            scan_rank = r"CP rank"
+        else:
+            fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X$"
+            scan_rank = r"CP rank"
+
+        if tensor == "Y":
+            Y_folder = results / basis / mol / f"Y_amp_{scan}"
+        else:
+            Y_folder = results / basis / mol / f"{tensor}_{scan}"
 
         if not Y_folder.is_dir():
             ax.set_visible(False)
             continue
 
         # --- Load DF reference ---
-        Y_DF = np.load(Y_folder / "CC2_Ω_DF.npy")
+        Y_DF = np.load(Y_folder / f"CC2_{tensor}_DF.npy")
 
         cpd_files = sorted([
             f for f in os.listdir(Y_folder)
-            if f.startswith("CC2_Ω_CPD") and f.endswith(".npy")
+            if f.startswith(f"CC2_{tensor}_CPD") and f.endswith(".npy")
         ])
 
         ranks = []
@@ -110,17 +144,17 @@ for i, basis in enumerate(bases):
         ax.plot(ranks, errors, marker="o", linewidth=2)
 
 # --- Apply per-row scaling ---
-        if i == 0:
+        if tensor == "Y":
             ax.set_yscale("linear")
-            #ax.set_yticks([1e-6,1e-5,1e-4,1e-3, 1e-2, 1e-1,1e-0,1e+1]) 
-        else:  # cc-pvtz
+            #ax.set_yticks([0.6,0.8,1,1.2,1.4,1.6,1.8,2]) 
+        else:
             ax.set_yscale("linear")
-            #ax.set_yticks([0,1,2,3,4,5,6,7,8,9,10])
+            #ax.set_yticks([0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]) 
 
         ax.grid(True, linestyle="--", alpha=0.6)
 
         ax.set_title(
-            rf"{mol_to_latex(mol)}, {basis_label[basis]}"
+            rf"{mol_to_latex(mol)}, {basis_label[basis]}" + "\n" + fixed_rank_text
         )
 
 # --------------------------------------------------
@@ -130,7 +164,7 @@ for ax in axs[-1, :]:
     ticks = [1, 1.5, 2, 2.5, 3, 3.5]
     ax.set_xticks(ticks)
     ax.set_xticklabels([f"{t:g}X" for t in ticks])
-    ax.set_xlabel("CP rank")
+    ax.set_xlabel(f"{scan_rank}")
 
 ylabel = "Relative Percent Error" if relative else "Absolute Percent Error"
 for ax in axs[:, 0]:
@@ -140,13 +174,13 @@ for ax in axs[:, 0]:
 # Global title
 # --------------------------------------------------
 fig.suptitle(
-    r"$L_2$ Error of CC2 Ω vs CP Rank",
+    rf"$L_2$ Error of CC2 {tensor} vs {scan_rank}",
     fontsize=18,
 )
 
 plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-out_file = results / f"L2_Ω_error_2x2_{scan}.png"
+out_file = results / f"L2_{tensor}_error_2x2_{scan}.png"
 plt.savefig(out_file, dpi=300)
 plt.show()
 

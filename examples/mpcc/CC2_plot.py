@@ -7,7 +7,7 @@ from pathlib import Path
 parser = argparse.ArgumentParser(description="Plot CC2 iteration energies for a molecule and basis")
 parser.add_argument("basis", type=str, help="Basis set, e.g., cc-pvdz")
 parser.add_argument("molecule", type=str, help="Molecule name, e.g., H2O")
-parser.add_argument("--scan",type=str,required=True, choices=["Lvv","Lov","Lov_Lvv"],help="which tensor to scan:Lov etc")
+parser.add_argument("--scan",type=str,required=True, choices=["Lvv","Lov","Lov_Lvv","Lov_fix_Loo_1","Lvv_fix_Loo_1","Lov_Lvv_fix_Loo_1"],help="which tensor to scan:Lov etc")
 parser.add_argument("--results", type=str, default=None, help="path to result folder")
 args = parser.parse_args()
 
@@ -56,7 +56,7 @@ if args.results:
 else:
     results = Path(__file__).parent / "output_data"
 
-energy_folder = os.path.join(results, basis, mol_name, f"energies_{scan}_fix_Loo_1")
+energy_folder = os.path.join(results, basis, mol_name, f"energies_{scan}")
 
 # LaTeX-friendly font sizes
 plt.rcParams.update({
@@ -78,6 +78,7 @@ energy_files = sorted([
 ])
 
 plt.figure(figsize=(10, 7))
+scan_str = str(scan).replace("_fix_Loo_1", "")
 
 for i, f in enumerate(energy_files):
     file_path = os.path.join(energy_folder, f)
@@ -86,7 +87,7 @@ for i, f in enumerate(energy_files):
 
     label = (
         f.replace("CC2_iter_energies_", "")
-         .replace(f"CPD_{scan}_rank","") 
+         .replace(f"CPD_{scan_str}_rank","") 
          .replace(".txt","")
          .replace("1X", "X")
          .replace(".0X", "X")
@@ -101,21 +102,38 @@ for i, f in enumerate(energy_files):
         linewidth=2,
         label=label
     )
-if scan == "Lvv":     
-    fixed_rank_text = r"$R_{\mathrm{ov}} = 1.5X$"
+if scan == "Lvv":
+    if basis == "cc-pvdz":
+        fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{ov}} = 1.5X$"
+    else: 
+         fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{ov}} = 2X$"
     scan_rank = r"$R_{\mathrm{vv}}$"
-elif scan == "Lov":    
-    fixed_rank_text = r"$R_{\mathrm{vv}} = 2.5X$"
+
+elif scan == "Lov":
+    fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{vv}} = 2.5X$"
     scan_rank = r"$R_{\mathrm{ov}}$"
+elif scan == "Lov_fix_Loo_1":
+    fixed_rank_text = r"$R_{\mathrm{oo}} = X,\; R_{\mathrm{vv}} = 2.5X$"
+    scan_rank = r"$R_{\mathrm{ov}}$"
+
+elif scan == "Lvv_fix_Loo_1":
+    if basis == "cc-pvdz":
+        fixed_rank_text = r"$R_{\mathrm{ov}} = 1.5X,\; R_{\mathrm{oo}} = 1X$"
+    else:
+        fixed_rank_text = r"$R_{\mathrm{ov}} = 2X,\; R_{\mathrm{oo}} = 1X$" 
+    scan_rank = r"$R_{\mathrm{vv}}$"
+
+elif scan == "Lov_Lvv_fix_Loo_1":
+    fixed_rank_text = r"$R_{\mathrm{oo}} = 1X$"
+    scan_rank = r"CP rank"
 else:
-    fixed_rank_text = ""
-    scan_rank = f"CP rank"
+    fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X$"
+    scan_rank = r"CP rank"
 # --------- LABELS ---------
 plt.xlabel("Iteration")
 plt.ylabel("Energy, Ha")
 title_text = ("CC2 Energy Convergence\n" 
-              f" {title_name}, {Basis}, "
-            r"$R_{\mathrm{oo}} = X$")
+              f" {title_name}, {Basis}, ") 
 if fixed_rank_text != "":
     title_text += ", " + fixed_rank_text
 

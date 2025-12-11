@@ -12,9 +12,15 @@ parser = argparse.ArgumentParser(
     description="Histogram of CC2 Y amplitudes at fixed CP rank across water clusters"
 )
 parser.add_argument("basis", type=str, help="Basis set, e.g. cc-pvdz")
+parser.add_argument("--tensor",type=str,required=True, choices=["Y", "Ω"], help="tensor Y or Omega")
+parser.add_argument(
+    "--molecule", type=str, required=True,
+    choices=["water_clusters", "carbon_chains"],
+    help="Which systems to pick e.g water_clusters"
+)
 parser.add_argument(
     "--scan", type=str, required=True,
-    choices=["Lvv", "Lov", "Lov_Lvv"],
+    choices=["Lvv", "Lov", "Lov_Lvv","Lov_fix_Loo_1","Lvv_fix_Loo_1","Lov_Lvv_fix_Loo_1"],
     help="Which tensor to scan"
 )
 parser.add_argument(
@@ -29,6 +35,8 @@ parser.add_argument(
 args = parser.parse_args()
 
 basis = args.basis
+molecule = args.molecule
+tensor = args.tensor
 scan = args.scan
 target_rank = args.rank
 
@@ -54,8 +62,10 @@ else:
 # --------------------------------------------------
 # Molecule list: TIP4P-2 ... TIP4P-10
 # --------------------------------------------------
-#molecules = [f"TIP4P-{i}" for i in range(1, 11)]
-molecules = ["c2h6", "c4h10", "c6h14","c8h18","c10h22"] 
+if molecule == "water_clusters":
+    molecules = [f"TIP4P-{i}" for i in range(1, 11)]
+else:
+    molecules = ["c2h6", "c4h10", "c6h14","c8h18","c10h22"] 
 # --------------------------------------------------
 # Molecule → LaTeX
 # --------------------------------------------------
@@ -97,6 +107,35 @@ plt.rcParams.update({
     "legend.fontsize": 11,
 })
 
+L_rank =  r"$R_{{oo}}= X$" if "_fix_Loo_1" in scan else  r"$R_{{oo}}=0.5X$"
+if scan == "Lvv":
+    if basis == "cc-pvdz":
+        fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{ov}} = 1.5X$"
+    else: 
+         fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{ov}} = 2X$"
+    scan_rank = r"$R_{\mathrm{vv}}$"
+
+elif scan == "Lov":
+    fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{vv}} = 2.5X$"
+    scan_rank = r"$R_{\mathrm{ov}}$"
+elif scan == "Lov_fix_Loo_1":
+    fixed_rank_text = r"$R_{\mathrm{oo}} = X,\; R_{\mathrm{vv}} = 2.5X$"
+    scan_rank = r"$R_{\mathrm{ov}}$"
+
+elif scan == "Lvv_fix_Loo_1":
+    if basis == "cc-pvdz":
+        fixed_rank_text = r"$R_{\mathrm{ov}} = 1.5X,\; R_{\mathrm{oo}} = 1X$"
+    else:
+        fixed_rank_text = r"$R_{\mathrm{ov}} = 2X,\; R_{\mathrm{oo}} = 1X$" 
+    scan_rank = r"$R_{\mathrm{vv}}$"
+
+elif scan == "Lov_Lvv_fix_Loo_1":
+    fixed_rank_text = r"$R_{\mathrm{oo}} = 1X$"
+    scan_rank = r"CP rank"
+else:
+    fixed_rank_text = ""
+    scan_rank = r"CP rank"
+
 plt.figure(figsize=(10, 7))
 
 # --------------------------------------------------
@@ -108,35 +147,45 @@ bins = np.logspace(-16, -1.2, 120)
 # Main loop: fixed rank, varying molecule size
 # --------------------------------------------------
 for mol_name in molecules:
+    if tensor == "Y":
+        Y_folder = results / basis / mol_name / f"Y_amp_{scan}"
+    else:
+        Y_folder = results / basis / mol_name / f"{tensor}_{scan}"
 
-    Y_folder = results / basis / mol_name / f"Y_amp_{scan}"
     if not Y_folder.is_dir():
         print(f"[skip] {mol_name}: folder not found")
         continue
 
     # Pick CPD or DF file with the desired rank
-    Y_files = [
+    Y_df_files = [
         f for f in os.listdir(Y_folder)
-        if f.endswith(".npy")
-        and target_rank in f
-        and (f.startswith("CC2_Y_CPD") or f.startswith("CC2_Y_DF"))
+        if f.startswith(f"CC2_{tensor}_DF") and f.endswith(".npy")
     ]
 
-    if len(Y_files) == 0:
-        print(f"[skip] {mol_name}: no rank {target_rank} file")
+    Y_cpd_files = [
+        f for f in os.listdir(Y_folder)
+        if f.startswith(f"CC2_{tensor}_CPD")
+        and target_rank in f
+        and f.endswith(".npy")
+    ]
+
+    if len(Y_df_files) == 0 or len(Y_cpd_files) == 0:
+        print(f"[skip] {mol_name}: missing DF or CPD data")
+        continue    
+    Y_df = np.load(Y_folder / Y_df_files[0])
+    Y_cpd = np.load(Y_folder / Y_cpd_files[0])
+    if Y_df.shape != Y_cpd.shape:
+        print(f"[skip] {mol_name}: shape mismatch DF {Y_df.shape} vs CPD {Y_cpd.shape}")
         continue
 
-    # Assume one file per molecule per rank
-    file_path = Y_folder / Y_files[0]
-    Y = np.load(file_path)
-
-    Y_abs = np.abs(Y.ravel())
+    # --- Difference ---
+    Y_diff = Y_df - Y_cpd
+    Y_abs = np.abs(Y_diff.ravel())
     Y_abs = Y_abs[Y_abs > 0]
 
     if Y_abs.size == 0:
-        print(f"[skip] {mol_name}: empty tensor")
+        print(f"[skip] {mol_name}: empty difference")
         continue
-
     plt.hist(
         Y_abs,
         bins=bins,
@@ -155,22 +204,22 @@ plt.yscale("log")
 plt.xlim(1e-7, 1e-1)
 plt.xticks([1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1])
 
-plt.xlabel("Y Value")
+plt.xlabel(f"Approx. {tensor} Value")
 plt.ylabel("Frequency")
 
 plt.title(
-    "Histogram of CC2 Y-amplitude at Fixed Rank\n"
-    rf"{Basis}, CP rank={target_rank}, $R_{{oo}}=0.5X$"
+    f"Histogram of CC2 {tensor} at Fixed Rank\n"
+    rf"{Basis}, CP rank={target_rank}, {L_rank}"
 )
 
 plt.grid(True, which="both", linestyle="--", alpha=0.4)
-plt.legend(title="Carbon Chains", ncol=2)
+plt.legend(title=f"{molecule}", ncol=2)
 plt.tight_layout()
 
 # --------------------------------------------------
 # Save figure
 # --------------------------------------------------
-outfile = results / basis / f"Histogram_carbon_Y_rank_{target_rank}_{scan}_{basis}.png"
+outfile = results / basis / f"Histogram_{molecule}_{tensor}_rank_{target_rank}_{scan}_{basis}.png"
 plt.savefig(outfile, dpi=300)
 print(f"\nSaved figure: {outfile}")
 
