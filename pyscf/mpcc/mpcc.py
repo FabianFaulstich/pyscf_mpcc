@@ -1,16 +1,21 @@
 from pyscf import lib
-import numpy
+import numpy as np
 
 class MPCC(lib.StreamObject):
 
-    def __init__(self, mf, lowlevel, screened, highlevel, eri, mo_coeff=None, **kwargs):
+    def __init__(self, mf, lowlevel, screened, highlevel, eri, **kwargs):
         self.mol = mf.mol
         self._scf = mf
-        self.mo_coeff = mo_coeff if mo_coeff is not None else mf.mo_coeff
+
+        if 'lo_coeff' in kwargs:
+            self.lo_coeff = kwargs['lo_coeff'] 
+        else:
+            # FIXME Have a default localization here 
+            raise ValueError(f'No local orbitals provided!')
 
         # ✅ Pass rank_reduced flag to ERIs
         #rank_opts = kwargs.get("rank_opts", None)
-        self.eris = eri.ERIs(mf,self.mo_coeff,rank_reduced=kwargs.get("rank_reduced", False), rank_opts = kwargs.get("rank_opts",None))
+        self.eris = eri.ERIs(mf,self.lo_coeff,rank_reduced=kwargs.get("rank_reduced", False), rank_opts = kwargs.get("rank_opts",None))
 
         self.frags = kwargs.get('frag')
         if self.frags is None:
@@ -22,48 +27,33 @@ class MPCC(lib.StreamObject):
         self.screened = screened.screened(mf, self.eris, self.frags[0], **kwargs)
         self.highlevel = highlevel.MPCC_HL(mf, self.eris, self.frags[0], **kwargs)
        
-        # Setting MPCC attributes 
-        # use "_" for variable protection 
 
     def kernel(self, verbose = None, **kwargs):
-
-        #if localization:
-        #    try:
-        #        c_lo = kwargs['c_lo']
-        #    except:
-        #        print('Localization orbital transformation and fragments not provided. \nDefaulting to AVAS!')
-        #        breakpoint() 
-
-#       self.eris.make_eri()
 
         log = lib.logger.new_logger(self, verbose)
 
         count = 0
-        e_mpcc_prev = -numpy.inf
-        e_diff = numpy.inf
+        e_mpcc_prev = -np.inf
+        e_diff = np.inf
         tol = kwargs.get('tol', 1e-6)
         count_tol = kwargs.get('count_tol', 100)
 
-        t1, t2, Y = self.lowlevel.init_amps()
-        #t1, t2 = self.lowlevel.init_amps()
+        t1, t2 = self.lowlevel.init_amps()
 
         #start an iteration loop here:
         while e_diff > tol and count < count_tol:
             count += 1
             
             print(f'MPCC macro iteration: {count}')
-            #get the active fragments
-            #frags = self.lowlevel.get_active_fragments()
-            #frags = [frag]  #for now we will use only one fragment, but later we can use multiple fragments
-            #if no fragments are found, break the loop
-            #if not frags:
-            #    print('No active fragments found. Exiting loop.')
-            #    break
 
-            if (count > 1):
-                print(f'Starting low-level MPCC iteration...')
-                t1, t2, Y = self.lowlevel.kernel(t1, t2_act, Y) 
-                #t1, t2 = self.lowlevel.kernel(t1, t2) 
+#           if (count > 1):
+#              t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
+
+            t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
+#           if (count > 1):
+#               print(f'Starting low-level MPCC iteration. Low-level kernel type {self.lowlevel.kernel_type}')
+#               t1, t2 = self.lowlevel.kernel(t1, t2_act, **kwargs) 
+#               t1, t2 = self.lowlevel.kernel(t1, t2, **kwargs) 
 
             t1_act = []
             t2_act = []
@@ -96,8 +86,8 @@ class MPCC(lib.StreamObject):
                act_hole = frag[0]
                act_particle = frag[1]
                 
-               t1[numpy.ix_(act_hole, act_particle)] = t1_act[frag_i]
-               t2[numpy.ix_(act_hole, act_hole, act_particle, act_particle)] = t2_act[frag_i]
+               t1[np.ix_(act_hole, act_particle)] = t1_act[frag_i]
+               t2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = t2_act[frag_i]
 
                frag_i += 1
 

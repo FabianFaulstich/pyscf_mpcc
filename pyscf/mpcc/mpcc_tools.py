@@ -1,7 +1,4 @@
 import numpy as np
-
-import numpy as np
-#from cpd import cp_als, init_from_pool_generalized, reconstruct_cp_tensor
 import opt_einsum as oe
 from numpy.linalg import svd, norm
 
@@ -64,6 +61,37 @@ def cp_d1(X,factors, ran=100, lOption=1):
 
         print(f"[init=factors]: {rel_err_fact:.3e}")
     return X_hat2,factors2, weights2
+
+def get_ao_labels(mol):
+   
+    period = {
+    'H': 1, 'He': 1,
+    'Li': 2, 'Be': 2, 'B': 2, 'C': 2, 'N': 2, 'O': 2, 'F': 2, 'Ne': 2,
+    'Na': 3, 'Mg': 3, 'Al': 3, 'Si': 3, 'P': 3, 'S': 3, 'Cl': 3, 'Ar': 3,
+    }
+
+    elems = list(dict.fromkeys(mol.elements))
+
+    ao_list = []
+
+    for elem in elems:
+        p = period.get(elem)
+
+        if p is None:
+            raise ValueError(f"Element '{elem}' not found in period table mapping.")
+
+        if p == 1:
+            ao_list.append(f"{elem} 1s")
+
+        elif p == 2:
+            ao_list.append(f"{elem} 2s")
+            ao_list.append(f"{elem} 2p")
+
+        elif p == 3:
+            ao_list.append(f"{elem} 3s")
+            ao_list.append(f"{elem} 3p")
+    
+    return ao_list
 
 
 def MFPC(n, diag_fn, col_fn, max_rank=22, tol=None):

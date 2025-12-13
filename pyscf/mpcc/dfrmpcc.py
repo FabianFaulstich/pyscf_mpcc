@@ -3,8 +3,8 @@ from pyscf.mpcc import mpcc, dfrmpcc_lowlevel, screened_rcc, dfrmpcc_highlevel, 
 
 
 class RMPCC(mpcc.MPCC):
-    def __init__(self, mf, mo_coeff=None, **kwargs):
+    def __init__(self, mf, **kwargs):
 
-        mpcc.MPCC.__init__(self, mf, dfrmpcc_lowlevel, screened_rcc, dfrmpcc_highlevel, df_eri, mo_coeff, **kwargs)
+        mpcc.MPCC.__init__(self, mf, dfrmpcc_lowlevel, screened_rcc, dfrmpcc_highlevel, df_eri, **kwargs)
 
     # NOTE need to define a kernel

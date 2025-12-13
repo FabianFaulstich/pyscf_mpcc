@@ -71,6 +71,7 @@ class MPCC_LL:
         while err > self.ll_con_tol and count < self.ll_max_its:
 
             res, e_corr, t1_new, t2_new = self.updated_amps(t1, t2)
+#           res, e_corr, t1_new, t2_new = self.update_amps_RPA(t1, t2)
             if self.diis:
                 t1_new, t2_new = self.run_diis(t1_new, t2_new, adiis)
             else:
@@ -121,10 +122,45 @@ class MPCC_LL:
         res2 = res2 / self._eris.D
         res = np.linalg.norm(res1) + np.linalg.norm(res2)
 
-        t1 += res1
-        t2 += res2
+        t1 -= res1
+        t2 -= res2
 
         return res, ΔE, t1, t2
+
+
+    def update_amps_RPA(self, t1, t2):
+
+        # Contractions
+        X, Xoo, Xvo = self.get_X(t1)
+
+        Xvo_t2 = self.get_Xvo_t2(t2)
+        Joo, Jvo, Jvv = self.get_J_RPA(Xoo, Xvo, Xvo_t2, t1)
+        
+        Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+
+        Foo, Fvv = self.add_t2_to_fock(Fvv, Foo, Xvo_t2)    
+
+        Ω = self.get_Ω_slow_RPA(X, Xvo, Xvo_t2, Foo, Fvv, Fov, t1, t2)
+
+        res2 = self.update_t2_RPA(t2, Jvo, Foo, Fvv, Fov, t1, Joo, Jvv, Xvo_t2)
+    
+        ΔE = self.get_energy(t1, t2)
+
+        for frag in self.frags:
+            act_hole = frag[0]
+            act_particle = frag[1]
+            Ω[np.ix_(act_particle, act_hole)] = 0.0
+            res2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
+
+        res1 = Ω.T / self._eris.eia
+        res2 = res2 / self._eris.D
+        res = np.linalg.norm(res1) + np.linalg.norm(res2)
+
+        t1 -= res1
+        t2 -= res2
+
+        return res, ΔE, t1, t2
+
     
     @dataclass
     class _IMDS_T1:
@@ -191,6 +227,95 @@ class MPCC_LL:
         #Jvv = self._eris.Lvv - lib.einsum("Lkb,ka->Lab", self._eris.Lov, t1) #we don't need this here  
 
         return Joo, Jvo
+
+
+    def add_t2_to_fock(self, Fvv, Foo, Xvo_t2):    
+
+        Foo += lib.einsum("Lie,Lej->ij", self._eris.Lov,Xvo_t2)
+        Fvv -= lib.einsum("Lmb,Lam->ab",self._eris.Lov,Xvo_t2)
+
+        return Foo, Fvv
+
+
+    def get_Xvo_t2(self, t2):
+
+        t2_antisym = 2.0*t2 - t2.transpose(0, 1, 3, 2)
+
+        Xvo_t2 = lib.einsum("Lkc,ikac ->Lai", self._eris.Lov, t2_antisym)
+
+        return Xvo_t2
+
+
+    def get_J_RPA(self, Xoo, Xvo, Xvo_t2, t1):
+
+        Joo = Xoo + self._eris.Loo
+        Jvo = (
+            Xvo +  self._eris.Lvo - lib.einsum("Lji,ja->Lai", Joo, t1)
+        )
+
+        Jvv = self._eris.Lvv - lib.einsum("Lkb,ka->Lab", self._eris.Lov, t1) #we don't need this here  
+
+        return Joo, Jvo, Jvv
+
+
+
+    def get_Ω_slow_RPA(self, X, Xvo, Xvo_t2, Foo, Fvv, Fov, t1, t2):
+
+        Foo_tmp = Foo.copy()
+        Fvv_tmp = Fvv.copy() 
+
+        Foo_tmp += lib.einsum("ic,jc->ij",Fov,t1)*0.5
+        Fvv_tmp -= lib.einsum("lb,la->ab",Fov,t1)*0.5 
+
+        Ω = self._eris.fov.T.copy()
+
+        Ω -= lib.einsum("Laj,Lji->ai", Xvo, self._eris.Loo)
+        Ω -= lib.einsum("Laj,Lji->ai", Xvo_t2, self._eris.Loo) #new
+        Ω += lib.einsum("Lai,L->ai", self._eris.Lvo, X)
+
+
+        Ω += lib.einsum("Lae,Lei->ai", self._eris.Lvv, Xvo_t2) #new
+
+
+        Ω += lib.einsum("ib,ab -> ai", t1, Fvv_tmp)
+        Ω -= lib.einsum("ka,ki -> ai", t1, Foo_tmp)
+
+        t2_antisym = 2.0*t2 - np.transpose(t2, (0, 1, 3, 2))
+        Ω += lib.einsum("ijab,jb->ai", t2_antisym, Fov)
+
+        del Foo_tmp, Fvv_tmp
+        
+        return Ω 
+
+
+
+    def update_t2_RPA(self, t2, Jvo, Foo, Fvv, Fov, t1, Joo, Jvv, Xvo_t2):
+
+#       Imbje = self.t2_transform_quadratic(t2)  
+
+        Foo_tmp = Foo.copy()
+        Fvv_tmp = Fvv.copy() 
+
+        Foo_tmp += lib.einsum("ic,jc->ij",Fov,t1)
+        Fvv_tmp -= lib.einsum("lb,la->ab",Fov,t1)
+        
+        tmp  = lib.einsum("bc,ijac->ijab", Fvv_tmp, t2)
+        tmp -= lib.einsum("mi,mjab->ijab", Foo_tmp, t2)
+
+## N3V3
+#       W_jebm = lib.einsum("Lmj, Lbe -> mbje", Joo, Jvv) - Imbje 
+        W_jebm = lib.einsum("Lmj, Lbe -> mbje", Joo, Jvv) 
+        tmp -= lib.einsum("mbje, imae -> ijab", W_jebm, t2)
+
+        res2 = tmp + tmp.transpose(1,0,3,2)
+        res2 += lib.einsum("Lai,Lbj->ijab", Jvo, Jvo)
+        res2 += lib.einsum("Lai,Lbj->ijab", Xvo_t2, Jvo)
+        res2 += lib.einsum("Lai,Lbj->ijab", Jvo, Xvo_t2)
+
+        return res2
+
+
+
     
     def get_J_all(self, Xoo, Xvo, t1):
 

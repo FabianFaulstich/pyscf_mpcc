@@ -1,0 +1,10 @@
+if(RunCMake_TEST MATCHES "-CMP0052")
+  cmake_minimum_required(VERSION 3.0) # old enough to not set CMP0052
+else()
+  cmake_minimum_required(VERSION 3.10)
+endif()
+project(${RunCMake_TEST} NONE)
+if(NOT TEST_FILE)
+  set(TEST_FILE ${RunCMake_TEST}.cmake)
+endif()
+include(${TEST_FILE})
