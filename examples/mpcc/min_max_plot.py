@@ -163,21 +163,7 @@ plt.grid(True, linestyle="--", alpha=0.6)
 # -------------------------------------------------------------
 # LEGEND 1 (Ranks)
 # -------------------------------------------------------------
-rank_legend = plt.legend(loc='upper left', bbox_to_anchor=(1.05, 1),
-                         title=f"{scan_rank}")
-plt.gca().add_artist(rank_legend)
-
-# -------------------------------------------------------------
-# LEGEND 2 (Molecules)
-# -------------------------------------------------------------
-from matplotlib.lines import Line2D
-
-mol_handles = [Line2D([0], [0], marker='o', linestyle='',
-                      markersize=10, color='black') for _ in molecules]
-
-plt.legend(mol_handles, molecules,
-           loc='lower left', bbox_to_anchor=(0, 0),
-           title="Molecules")
+plt.legend(loc='upper left', bbox_to_anchor=(1.05, 1), title= f"{scan_rank}")
 
 plt.tight_layout()
 

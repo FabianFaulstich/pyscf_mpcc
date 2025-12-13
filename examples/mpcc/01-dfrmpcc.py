@@ -99,7 +99,7 @@ if __name__ == "__main__":
     conv_info = {'ll_con_tol': 1e-6, 'll_max_its': 80}
 
     rank_control = {
-    'rank_reduced': True,
+    'rank_reduced': False,
     'rank_opts': {
         'Loo': 0.5,   # rank = 0.5 * naux
         'Lov': 1.5,   # rank = 1.5 * naux
