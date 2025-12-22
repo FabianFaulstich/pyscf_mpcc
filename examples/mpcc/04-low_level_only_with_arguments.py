@@ -1,11 +1,12 @@
 import gc
 import sys
+from pyscf.mpcc.df_eri import ERIs
 from pathlib import Path
 import os
 os.environ['PYSCF_TMPDIR'] = '/home/talha/pyscf_tmp'
 import glob
 import numpy as np
-from pyscf import gto, scf, cc, mp, mpcc
+from pyscf import gto, scf, cc, mp, mpcc,lib
 import time
 from helper_fun import build_molecule, capture_output,parse_iteration_energies
 from arg_parse import parse_arg
@@ -80,13 +81,21 @@ if __name__ == "__main__":
     # Initializing the input for low-level solver
     st = time.time()
     mycc = cc.CCSD(mf)
-    mycc.max_cycle = 6
+    mycc.max_cycle = 50
     mycc.kernel()
-    
+   
+    #eris_obj = ERIs(mf)
+    #Lov = eris_obj.Lov
+    #dD = eris_obj.dD
+    #print(f"size of dD:{dD.shape}")
     t1_init = mycc.t1.copy()
-    mycc.t2 = None
+    #t2_init = mycc.t2.copy()
     del mycc
     gc.collect()
+    #print(f"shape of t2:{t2_init.shape}")
+    #Y = lib.einsum("ijab,Ljb->Lia", t2_init, Lov)
+    #Y = Y.transpose(0,2,1)[:, None, :, :] * dD.transpose(2, 1, 0)[None, :, :, :]
+    #print(f"shape of Y:{Y.shape}") 
     _, _, Y = mympcc.lowlevel.init_amps()
     print(f'Done! Elapsed time: {time.time() - st} sec')
 
@@ -98,7 +107,7 @@ if __name__ == "__main__":
     print('Starting Low-Level Solver')
     output, result = capture_output(mympcc.lowlevel.kernel,t1_init, [0], Y)
     t1,t2,Y = result
-    
+ 
     e_corr = mympcc.lowlevel.get_energy(t1, t2) 
     print('Finished Low-Level solver!')
     
@@ -130,6 +139,6 @@ if __name__ == "__main__":
 
     print("\nSaved:")
     print(f"  Y amplitudes → {Y_amp_folder_Lov_Lvv}/CC2_Y_{suffix}.npy")
-    print(f"  Ω → {Ω_folder_Lov_Lvv}/CC2_Ω_{suffix}.npy")
+    #print(f"  Ω → {Ω_folder_Lov_Lvv}/CC2_Ω_{suffix}.npy")
     print(f"  Energy and iter_energy       → {energy_folder_Lov_Lvv}/CC2_energy_{suffix}.npy")
     print("\nDone.\n")

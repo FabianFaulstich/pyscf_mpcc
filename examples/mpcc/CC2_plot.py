@@ -41,7 +41,7 @@ def mol_to_latex(mol_name):
     # --------------------------------------------------
     # Hydrocarbons: C2H6, C10H22
     # --------------------------------------------------
-    m = re.match(r"C(\d+)H(\d+)$", mol_name)
+    m = re.match(r"c(\d+)h(\d+)$", mol_name)
     if m:
         return rf"$\mathrm{{C_{{{m.group(1)}}}H_{{{m.group(2)}}}}}$"
 

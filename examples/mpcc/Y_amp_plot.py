@@ -48,7 +48,7 @@ def mol_to_latex(mol_name):
     # --------------------------------------------------
     # Hydrocarbons: C2H6, C10H22
     # --------------------------------------------------
-    m = re.match(r"C(\d+)H(\d+)$", mol_name)
+    m = re.match(r"c(\d+)h(\d+)$", mol_name)
     if m:
         return rf"$\mathrm{{C_{{{m.group(1)}}}H_{{{m.group(2)}}}}}$"
 
@@ -207,6 +207,8 @@ if args.relative:
 
 plt.ylabel(ylabel)
 #plt.yscale("log")
+#plt.yticks([0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1])
+plt.yticks([0.6,0.8,1,1.2,1.4,1.6,1.8,2])
 
 title_text = (
     rf"{tensor} $L_2$ Percent Error vs Rank"

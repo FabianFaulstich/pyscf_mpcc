@@ -28,10 +28,10 @@ Basis = basis_to_mol[basis]
 # User-defined settings
 # ----------------------------
 if molecule == "water_clusters":
-    molecules = ["TIP4P-1","TIP4P-2", "TIP4P-4",
-                 "TIP4P-6", "TIP4P-8", "TIP4P-10"]
+    molecules = ["TIP4P-1","TIP4P-2", "TIP4P-3","TIP4P-4",
+                 "TIP4P-5","TIP4P-6", "TIP4P-8", "TIP4P-10"]
 else:
-    molecules = ["c2h6", "c4h10", "c6h14","c8h18","c10h22"]
+    molecules = ["ch4","c2h6","c3h8", "c4h10", "c5h12","c6h14","c8h18","c10h22"]
 
 ranks = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5]
 results = f"/home/talha/Documents/RR_MPCC/All_output_data/{basis}"
@@ -39,9 +39,9 @@ results = f"/home/talha/Documents/RR_MPCC/All_output_data/{basis}"
 rank_to_diffs = {r: [] for r in ranks}
 
 non_H_atoms = {
-    "TIP4P-1": 1, "TIP4P-2": 2, "TIP4P-4": 4,
-    "TIP4P-6": 6, "TIP4P-8": 8, "TIP4P-10": 10,
-    "c2h6": 2, "c4h10": 4, "c6h14": 6,
+    "TIP4P-1": 1, "TIP4P-2": 2, "TIP4P-3": 3,"TIP4P-4": 4,
+    "TIP4P-5": 5,"TIP4P-6": 6, "TIP4P-8": 8, "TIP4P-10": 10,
+    "ch4":1,"c2h6": 2,"c3h8":3, "c4h10": 4,"c5h12":5, "c6h14": 6,
     "c8h18": 8, "c10h22": 10
 }
 scan_str = str(scan).replace("_fix_Loo_1", "")
@@ -146,9 +146,9 @@ else:
 # -------------------------------------------------------------
 # Plot formatting
 # -------------------------------------------------------------
-plt.ylim(1e-3, 1e0)
+plt.ylim(1e-2, 10**(-0.5))
 plt.yscale('log')
-plt.yticks([1e-3, 1e-2, 1e-1, 1e0])
+plt.yticks([ 1e-2, 1e-1, 10**(-0.5)])
 plt.xlabel("Iteration")
 plt.ylabel("Error, mH/atom")
 
@@ -158,7 +158,7 @@ title_text += f", {Basis}"
 title_text += f", {fixed_rank_text}"
 plt.title(title_text)
 
-plt.grid(True, linestyle="--", alpha=0.6)
+plt.grid(True,which = "both", linestyle="--", alpha=0.6)
 
 # -------------------------------------------------------------
 # LEGEND 1 (Ranks)
@@ -167,7 +167,7 @@ plt.legend(loc='upper left', bbox_to_anchor=(1.05, 1), title= f"{scan_rank}")
 
 plt.tight_layout()
 
-out_file = os.path.join(results, f"CC2_stats_{molecule}_{scan}.png")
+out_file = os.path.join(results, f"CC2_stats_{molecule}_{scan}_{basis}.png")
 plt.savefig(out_file, dpi=300, bbox_inches='tight')
 plt.show()
 

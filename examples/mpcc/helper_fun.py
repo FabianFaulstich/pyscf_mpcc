@@ -103,8 +103,20 @@ def build_molecule(species, basis):
         mol.basis = basis
         mol.build()
         return mol, "TIP4P-1"
-
-    # You can add more predefined molecules if you want
+    
+    if name in ["ch4", "methane"]:
+        mol = gto.Mole()
+        mol.atom = [
+            [6, (-0.6695, 0.0, 0.0)],
+            [6, (0.6695, 0.0, 0.0)],
+            [1, (-1.2335, 0.9238, 0.0)],
+            [1, (-1.2335, -0.9238, 0.0)],
+            [1, (1.2335, 0.9238, 0.0)],
+            [1, (1.2335, -0.9238, 0.0)],
+        ]
+        mol.basis = basis
+        mol.build()
+        return mol, "ch4"
 
     # ---------------------------------------------------
     raise ValueError(f"Unknown species or invalid path: {species}")

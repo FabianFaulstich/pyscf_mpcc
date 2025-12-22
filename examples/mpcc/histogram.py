@@ -65,7 +65,7 @@ else:
 if molecule == "water_clusters":
     molecules = [f"TIP4P-{i}" for i in range(1, 11)]
 else:
-    molecules = ["c2h6", "c4h10", "c6h14","c8h18","c10h22"] 
+    molecules = ["c2h6", "c3h8","c4h10", "c5h12","c6h14","c8h18","c10h22"] 
 # --------------------------------------------------
 # Molecule → LaTeX
 # --------------------------------------------------
@@ -87,7 +87,7 @@ def mol_to_latex(mol_name):
     # --------------------------------------------------
     # Hydrocarbons: C2H6, C10H22
     # --------------------------------------------------
-    m = re.match(r"C(\d+)H(\d+)$", mol_name)
+    m = re.match(r"c(\d+)h(\d+)$", mol_name)
     if m:
         return rf"$\mathrm{{C_{{{m.group(1)}}}H_{{{m.group(2)}}}}}$"
 
@@ -201,15 +201,15 @@ for mol_name in molecules:
 # --------------------------------------------------
 plt.xscale("log")
 plt.yscale("log")
-plt.xlim(1e-7, 1e-1)
-plt.xticks([1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1])
+plt.xlim(1e-9, 1e-4)
+plt.xticks([1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4])
 
 plt.xlabel(f"Approx. {tensor} Value")
 plt.ylabel("Frequency")
 
 plt.title(
     f"Histogram of CC2 {tensor} at Fixed Rank\n"
-    rf"{Basis}, CP rank={target_rank}, {L_rank}"
+    rf"{Basis}, {scan_rank}={target_rank}, " + fixed_rank_text
 )
 
 plt.grid(True, which="both", linestyle="--", alpha=0.4)
