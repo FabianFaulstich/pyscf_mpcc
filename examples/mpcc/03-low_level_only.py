@@ -42,7 +42,14 @@ if __name__ == "__main__":
     conv_info = {'ll_con_tol': 1e-6, 'll_max_its': 80}
     kwargs = frag_info|conv_info  #union operation
 
-    mympcc = mpcc.RMPCC(mf, 'True', c_lo, **kwargs)
+    kwargs = {'frag'            : [[[0], [0]]],
+                'll_con_tol'    : 1e-6, 
+                'll_max_its'    : 80,
+                'll_kernel_type': 'unfactorized',
+                'lo_coeff'      : c_lo
+            }
+
+    mympcc = mpcc.RMPCC(mf, 'True', **kwargs)
   
     print('Initializing ...')
     # Initializing the input for low-level solver
@@ -50,13 +57,13 @@ if __name__ == "__main__":
     mycc = cc.CCSD(mf)
     mycc.max_cycle = 6
     mycc.kernel()
-    _, _, Y = mympcc.lowlevel.init_amps()
+    _, t2 = mympcc.lowlevel.init_amps()
     print(f'Done! Elapsed time: {time.time() - st} sec')
 
 
     # Running low-level solver
     print('Starting Low-Level Solver')
-    t1, t2, Y = mympcc.lowlevel.kernel(mycc.t1, [0], Y)
+    t1, t2 = mympcc.lowlevel.kernel(mycc.t1, t2)
     print('Finished Low-Level solver!')
 
 
