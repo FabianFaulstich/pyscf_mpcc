@@ -54,11 +54,11 @@ if __name__ == "__main__":
     act_part = (
         np.where(avas_obj.vir_weights > avas_obj.threshold)[0])
 
-    kwargs = {'frag': [[act_hole, act_part]],
-                'll_con_tol': 1e-6, 
-                'll_max_its': 80,
-                'll_kernel_type' : 'unfactorized',
-                'lo_coeff' : c_lo
+    kwargs = {'frag'            : [[act_hole, act_part]],
+                'll_con_tol'    : 1e-6, 
+                'll_max_its'    : 80,
+                'll_kernel_type': 'unfactorized',
+                'lo_coeff'      : c_lo
             }
 
     mympcc = mpcc.MPCC(mf, **kwargs)
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     # Initializaing
     t1, t2 = mympcc.lowlevel.init_amps()
 
-    num_its = 2
+    num_its = 1
     for i in range(num_its):
         # run low-level solver
         t1, t2 = mympcc.lowlevel.kernel(t1, t2)
