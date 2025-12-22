@@ -82,11 +82,11 @@ if __name__ == "__main__":
 
     frag = [[act_hole, act_part]]
 
-    kwargs = {'frag': [[act_hole, act_part]],
-                'll_con_tol': 1e-6, 
-                'll_max_its': 80,
-                'll_kernel_type' : 'unfactorized',
-                'lo_coeff' : c_lo
+    kwargs = {'frag'            : [[act_hole, act_part]],
+                'll_con_tol'    : 1e-6, 
+                'll_max_its'    : 80,
+                'll_kernel_type': 'factorized',
+                'lo_coeff'      : c_lo
             }
 
     rank_control = {

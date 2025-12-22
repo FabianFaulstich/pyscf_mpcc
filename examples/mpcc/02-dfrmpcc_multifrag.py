@@ -70,14 +70,18 @@ if __name__ == "__main__":
     mymp = DFMP2(mf).run()
 #   mycc = cc.CCSD(mf).density_fit().run()
 
-    frag_info = {'frag': [[act_hole_0, act_part_0],[act_hole_1, act_part_1]]}
 
-    conv_info = {'ll_con_tol': 1e-6, 'll_max_its': 80}
 
     kwargs = frag_info|conv_info  #union operation
 
+    kwargs = {  'll_con_tol'    : 1e-6, 
+                'll_max_its'    : 80,
+                'll_kernel_type': 'unfactorized',
+                'lo_coeff'      : c_lo
+            }
+
     # No computation
-    mympcc = mpcc.RMPCC(mf, 'True', c_lo, **kwargs)
+    mympcc = mpcc.RMPCC(mf, 'True', **kwargs)
 
     # NOTE setting the following variables explicitly to the default value
     # This can also be passed through mpcc.MPCC(mf, 'arg'= value)

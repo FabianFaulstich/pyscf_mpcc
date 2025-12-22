@@ -92,6 +92,11 @@ class MPCC_LL:
         count = 0
         adiis = lib.diis.DIIS()
 
+        for frag in self.frags:
+            act_hole = frag[0]
+            act_particle = frag[1]
+            t2_act = t2[np.ix_(act_hole, act_hole, act_particle, act_particle)]
+
         e_corr = None
         while res > self.ll_con_tol and count < self.ll_max_its:
 
@@ -289,7 +294,7 @@ class MPCC_LL:
 
     def update_J(self, Jvo, Uoo, Uvv):
 
-        Jvo = lib.einsum("ab, ij, Lai -> Lbj", Uvv, Uoo, Jvo)
+        Jvo = np.einsum("ab, ij, Lai -> Lbj", Uvv, Uoo, Jvo)
 
         return Jvo
 
@@ -308,7 +313,7 @@ class MPCC_LL:
             print(f"4th-order relative Frobenius error: {fro_rel:.3e}")
             print(f"4th-order max abs entry error:     {max_abs:.3e}")
 
-        Y = lib.einsum("LRbj, ab, ij -> LRai", Yt, Uvv, Uoo)
+        Y = np.einsum("LRbj, ab, ij -> LRai", Yt, Uvv, Uoo)
         return Y, Yt
 
     def include_t2_active(self, Foo, Fvv, Fov, t2_act, Y, Ω, tol = 1e-6, count_tol = 100):
