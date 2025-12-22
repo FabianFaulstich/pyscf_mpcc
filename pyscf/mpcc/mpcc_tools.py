@@ -32,7 +32,7 @@ def get_ao_labels(mol):
     return ao_list
 
 
-def MFPC(n, diag_fn, col_fn, max_rank=22, tol=None):
+def MFPC(n, diag_fn, col_fn, max_rank=None, tol=None):
     """
     Matrix-free Pivoted Cholesky.
     """

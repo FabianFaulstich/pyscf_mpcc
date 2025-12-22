@@ -62,7 +62,7 @@ if __name__ == "__main__":
     kwargs = {'frag': [[act_hole, act_part]],
                 'll_con_tol': 1e-6, 
                 'll_max_its': 80,
-                'll_kernel_type' : 'unfactorized',
+                'll_kernel_type' : 'factorized',
                 'lo_coeff' : c_lo
             }
 
