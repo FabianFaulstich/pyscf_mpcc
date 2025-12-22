@@ -4,7 +4,7 @@ from numpy.linalg import svd, norm
 
 def cp_d(X,rank=25):
     max_iter = 100
-    tol = 1e-3
+    tol = 1e-4
     cOption = 1
     kOption = 0
     
@@ -17,8 +17,8 @@ def cp_d(X,rank=25):
     for r in rank_list:
         weights, factors, _ = cp_als(X, r, max_iter, tol, init=3,cOption=cOption, kOption=kOption)
         X_hat = reconstruct_cp_tensor(weights, factors)
-        rel_error = (np.linalg.norm(X - X_hat) / np.linalg.norm(X))*100
-        print(f"[init=3] X rank {r}: error = {rel_error:.3e}")
+        #rel_error = (np.linalg.norm(X - X_hat) / np.linalg.norm(X))*100
+        #print(f"[init=3] X rank {r}: error = {rel_error:.3e}")
     return X_hat, factors, weights
 
 def cp_d1(X,factors, ran=100, lOption=1):
@@ -34,7 +34,7 @@ def cp_d1(X,factors, ran=100, lOption=1):
             return np.hstack([factor_matrix, pad])
 
     max_iter = 100
-    tol = 1e-3
+    tol = 1e-4
     cOption = 1
     kOption = 0
     
@@ -57,9 +57,9 @@ def cp_d1(X,factors, ran=100, lOption=1):
 
         weights2, factors2, _ = cp_als(X, r, max_iter, tol, init=init_factors,cOption=cOption, kOption=kOption)
         X_hat2 = reconstruct_cp_tensor(weights2, factors2)
-        rel_err_fact = (np.linalg.norm(X - X_hat2) / np.linalg.norm(X))*100
+        #rel_err_fact = (np.linalg.norm(X - X_hat2) / np.linalg.norm(X))*100
 
-        print(f"[init=factors]: {rel_err_fact:.3e}")
+        #print(f"[init=factors]: {rel_err_fact:.3e}")
     return X_hat2,factors2, weights2
 
 def get_ao_labels(mol):
@@ -291,6 +291,7 @@ def cp_als(X, rank, max_iter, tol, init, cOption,kOption):
             delta = prev_rel_resd - rel_residual
             if delta < tol:
                 print(f"Converged(CPD) in {iteration+1} iterations.") 
+                print(f"Error: {rel_residual}")
                 break
             prev_rel_resd = rel_residual
         elif cOption == 2:
