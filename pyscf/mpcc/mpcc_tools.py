@@ -75,8 +75,9 @@ def MFPC(n, diag_fn, col_fn, max_rank=None, tol=None):
 
     return L[:, :r], p, r
 
-def piv_chol_tensor(eia, check = False):
-        
+def piv_chol_tensor(eia, tol = None, rank = None, check = False):
+       
+        print(f'    Performing pivoted Choleski with target rank: {rank} and/or convergence tollerance: {tol}')
         ni, na = eia.shape
         w = eia.reshape(-1)
         def diag_fn():
@@ -85,7 +86,7 @@ def piv_chol_tensor(eia, check = False):
         def col_fn(k):
             return 1.0 / (w + w[k])
 
-        L, p, r = MFPC(ni * na, diag_fn, col_fn)
+        L, p, r = MFPC(ni * na, diag_fn, col_fn, max_rank = rank, tol = tol)
         
         Lp = np.zeros_like(L)            
         Lp[p, :] = L
@@ -103,5 +104,6 @@ def piv_chol_tensor(eia, check = False):
             print(f"4th-order relative Frobenius error: {fro_rel:.3e}")
             print(f"4th-order max abs entry error:     {max_abs:.3e}")
 
+        print(f'    done!')
         return Lp.reshape(ni, na, -1) 
 

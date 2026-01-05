@@ -6,6 +6,9 @@ from dataclasses import dataclass
 
 from pyscf.mpcc import mpcc_tools
 
+
+import time 
+
 class MPCC_LL:
     def __init__(self, mf, eris, frags, **kwargs):
         self.mf = mf
@@ -71,6 +74,7 @@ class MPCC_LL:
 
     def kernel(self, t1, t2_act ,**kwargs):
 
+        print('Starting low-level MPCC iteration...')
         try:
             func = self._kernels[self.kernel_type]
         except KeyError:
@@ -176,7 +180,7 @@ class MPCC_LL:
 
 
 
-    def _factorized_kernel(self, t1=None, t2=None):
+    def _factorized_kernel(self, t1=None, t2=None, **kwargs):
 
         res = np.inf
         count = 0
@@ -190,7 +194,7 @@ class MPCC_LL:
         e_corr = None
         while res > self.ll_con_tol and count < self.ll_max_its:
 
-            res, t1_it, Δt2s_o, Δt2s_v, Y = self.update_amps_factorized(t1, t2_act, self._Y)
+            res, t1_it, Δt2s_o, Δt2s_v, Y = self.update_amps_factorized(t1, t2_act, self._Y, **kwargs)
             if self.diis:
                 t1_it  = self.run_diis(t1_it, adiis)
 
@@ -208,7 +212,7 @@ class MPCC_LL:
 
         return t1, t2
 
-    def update_amps_factorized(self, t1, t2_act, Y):
+    def update_amps_factorized(self, t1, t2_act, Y, **kwargs):
         """
         Following Table XXX in Future Paper
         """
@@ -229,14 +233,16 @@ class MPCC_LL:
         Foo, Fvv = self.update_F(Foo, Fvv, Fov, t1)
 
         # Step 6 & 7
-        D, Uoo, Uvv = self.get_D(Foo, Fvv)
+        D, Uoo, Uvv = self.get_D(Foo, Fvv, **kwargs)
 
         # NOTE Can we transform D insead of J, that way we don't have to transform Y back!
+        
+
         # Step 8
         Jvo = self.update_J(Jvo, Uoo, Uvv)
 
-        # Step 9 
-        Y, Yt = self.update_Y(Joo, Jvo, D, Uvv, Uoo, Y)
+        # Step 9
+        Y, Yt = self.update_Y_backup(Joo, Jvo, D, Uvv, Uoo, Y)
 
         # Step 10 & 11
         Δt2s_o, Δt2s_v, Ω = self.include_t2_active(Foo, Fvv, Fov, t2_act, Y, Ω)
@@ -526,7 +532,7 @@ class MPCC_LL:
  
         return Foo, Fvv
 
-    def get_D(self, Foo, Fvv):
+    def get_D(self, Foo, Fvv, **kwargs):
 
         Foo = 0.5 * (Foo + Foo.T)
         Fvv = 0.5 * (Fvv + Fvv.T)
@@ -537,8 +543,18 @@ class MPCC_LL:
         e_oo, Uoo = np.linalg.eigh(Foo)
         e_vv, Uvv = np.linalg.eigh(Fvv)
         eia = lib.direct_sum("-i+a->ia", e_oo, e_vv)
+      
+        if 'chol_tol' in kwargs:
+            chol_tol = kwargs['chol_tol']
+        else:
+            chol_tol = None
        
-        D = mpcc_tools.piv_chol_tensor(eia)
+        if 'chol_rank' in kwargs:
+            chol_rank = kwargs['chol_rank']
+        else:
+            chol_rank = None
+        
+        D = mpcc_tools.piv_chol_tensor(eia, tol = chol_tol, rank = chol_rank)
 
         return D, Uoo, Uvv
 
@@ -548,9 +564,16 @@ class MPCC_LL:
 
         return Jvo
 
-    def update_Y(self, Joo, Jvo, D, Uvv, Uoo, Y):
+    def update_Y(self, Jvo, D, Uvv, Uoo):
 
+        dt = np.einsum('jbr, ij, ab', D, Uoo, Uvv)
+        return Jvo[:, None, :, :] *D.transpose(2, 1, 0)[None, :, :, :]
+
+    def update_Y_backup(self, Joo, Jvo, D, Uvv, Uoo, Y):
+
+        st = time.time()
         Yt = Jvo[:, None, :, :] *D.transpose(2, 1, 0)[None, :, :, :]
+        print(f'HP elapsed time: {time.time() - st}')
 
         # NOTE REMOVE THE CHECK IF WE ARE HAPPY!!!
         if False:
@@ -563,11 +586,14 @@ class MPCC_LL:
             print(f"4th-order relative Frobenius error: {fro_rel:.3e}")
             print(f"4th-order max abs entry error:     {max_abs:.3e}")
 
-        Y = np.einsum("LRbj, ab, ij -> LRai", Yt, Uvv, Uoo)
+        st = time.time()
+        Y = np.einsum("LRbj, ab, ij -> LRai", Yt, Uvv, Uoo, optimize = True)
+        print(f'EINSUM elapsed time: {time.time() - st}')
         return Y, Yt
 
-    def include_t2_active(self, Foo, Fvv, Fov, t2_act, Y, Ω, tol = 1e-6, count_tol = 100):
-        
+    def include_t2_active(self, Foo, Fvv, Fov, t2_act, Y, Ω, tol = 1e-6, count_tol = 1000):
+       
+        print(f'Computing active t2-correction ...')   
         Δt2s_o = [] 
         Δt2s_v = [] 
 
@@ -623,6 +649,8 @@ class MPCC_LL:
                 Δt2_v -= Δt2_v_it 
 
                 count += 1
+
+                print(f'    It: {count},  acc occ: {acc_o},  acc vir: {acc_v} ')
             
             print(f'    Iter. T2 correction finished in {count}/{count_tol} steps at {acc:.2e} accuracy.')
 
