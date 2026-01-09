@@ -5,7 +5,7 @@ import numpy as np
 from dataclasses import dataclass
 
 from pyscf.mpcc import mpcc_tools
-
+from functools import partial
 
 import time 
 
@@ -285,46 +285,58 @@ class MPCC_LL:
     
     def run_diis_full(self, t1, t2, adiis):
 
-        vec = self.amplitudes_to_vector_full(t1, t2)
-        t1, t2 = self.vector_to_amplitudes_full(adiis.update(vec))
+        def amplitudes_to_vector_full(t1, t2, out=None):
+            nov = self.nocc * self.nvir
+            size = nov + nov * (nov + 1) // 2
+            vector = np.ndarray(size, t1.dtype, buffer=out)
+            vector[:nov] = t1.ravel()
+            lib.pack_tril(t2.transpose(0, 2, 1, 3).reshape(nov, nov), out=vector[nov:])
+            return vector
+
+        def vector_to_amplitudes_full(vector):
+            nov = self.nocc * self.nvir
+            t1 = vector[:nov].copy().reshape((self.nocc, self.nvir))
+            # filltriu=lib.SYMMETRIC because t2[iajb] == t2[jbia]
+            t2 = lib.unpack_tril(vector[nov:], filltriu=lib.SYMMETRIC)
+            t2 = t2.reshape(self.nocc, self.nvir, self.nocc, self.nvir).transpose(
+                0, 2, 1, 3
+            )
+            return t1, np.asarray(t2, order="C")
+
+        vec = amplitudes_to_vector_full(t1, t2)
+        t1, t2 = vector_to_amplitudes_full(adiis.update(vec))
 
         return t1, t2
 
-    def amplitudes_to_vector_full(self, t1, t2, out=None):
-        nov = self.nocc * self.nvir
-        size = nov + nov * (nov + 1) // 2
-        vector = np.ndarray(size, t1.dtype, buffer=out)
-        vector[:nov] = t1.ravel()
-        lib.pack_tril(t2.transpose(0, 2, 1, 3).reshape(nov, nov), out=vector[nov:])
-        return vector
-
-    def vector_to_amplitudes_full(self, vector):
-        nov = self.nocc * self.nvir
-        t1 = vector[:nov].copy().reshape((self.nocc, self.nvir))
-        # filltriu=lib.SYMMETRIC because t2[iajb] == t2[jbia]
-        t2 = lib.unpack_tril(vector[nov:], filltriu=lib.SYMMETRIC)
-        t2 = t2.reshape(self.nocc, self.nvir, self.nocc, self.nvir).transpose(
-            0, 2, 1, 3
-        )
-        return t1, np.asarray(t2, order="C")
-
     def run_diis(self, t1, adiis):
 
-        vec = self.amplitudes_to_vector(t1)
-        t1 = self.vector_to_amplitudes(adiis.update(vec))
+        def amplitudes_to_vector(t1):
+            nov = t1.shape[0] * t1.shape[1]
+            vector = t1.ravel()
+            return vector
+
+        def vector_to_amplitudes(vector):
+            nov = self.nocc * self.nvir
+            t1 = vector[:nov].copy().reshape((self.nocc, self.nvir))
+            return t1
+
+        vec = amplitudes_to_vector(t1)
+        t1 = vector_to_amplitudes(adiis.update(vec))
 
         return t1
 
-    def amplitudes_to_vector(self, t1):
-        nov = self.nocc * self.nvir
-        vector = t1.ravel()
-        return vector
+    def run_diis_Δt2(self, t2_in, adiis):
 
-    def vector_to_amplitudes(self, vector):
-        nov = self.nocc * self.nvir
-        t1 = vector[:nov].copy().reshape((self.nocc, self.nvir))
-        return t1
+        def amplitudes_to_vector(t2):
+            return t2.ravel()
 
+        def vector_to_amplitudes_shapes(vector, shapes):
+            return vector.reshape(shapes)
+
+        vec2amp = partial(vector_to_amplitudes_shapes, shapes = t2_in.shape)
+        vec = amplitudes_to_vector(t2_in)
+
+        return vec2amp(adiis.update(vec))
 
     def get_X(self, t1):
 
@@ -632,7 +644,16 @@ class MPCC_LL:
             Δt2_v_it = np.copy(Δt2_v)
 
             count = 0 
-            acc = np.inf
+            acc = np.inf 
+
+            adiis = lib.diis.DIIS()
+
+            adiis.min_space = 2
+            adiis.space = 10
+            
+            diis_start = 15
+            damp = 0.9
+
             while (acc > tol and count< count_tol):
                 Δt2_o_it -= np.einsum('jk,ikab -> ijab',Foo[np.ix_(act_hole, act_hole)], Δt2_o)
                 Δt2_o_it -= np.einsum('ik,kjab -> ijab',Foo[np.ix_(inact_hole, inact_hole)], Δt2_o)
@@ -642,11 +663,22 @@ class MPCC_LL:
                 Δt2_v_it += np.einsum('ac,ijcb -> ijab', Fvv[np.ix_(inact_particle, inact_particle)], Δt2_v)
                 Δt2_v_it = Δt2_v_it / eia_v
 
-                acc_o = np.linalg.norm(Δt2_o_it - Δt2_o)
-                acc_v = np.linalg.norm(Δt2_v_it - Δt2_v)
-                acc = acc_o + acc_v
-                Δt2_o -= Δt2_o_it 
-                Δt2_v -= Δt2_v_it 
+                # Δt2_v_it = self.run_diis_Δt2(Δt2_v_it, adiis)
+                
+                acc_o = np.linalg.norm(Δt2_o_it)
+                acc_v = np.linalg.norm(Δt2_v_it)
+                acc = np.sqrt(acc_o**2 + acc_v**2)
+
+                Δt2_o -= Δt2_o_it
+
+                #Δt2_v_new =  Δt2_v - Δt2_v_it
+                #Δt2_v_new = (1 - damp) * Δt2_v + damp * (Δt2_v - Δt2_v_it) 
+                
+                Δt2_v -= damp * Δt2_v_it 
+
+                if count > diis_start:
+                    #Δt2_v = self.run_diis_Δt2(Δt2_v, adiis)
+                    None
 
                 count += 1
 
