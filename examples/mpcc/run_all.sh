@@ -14,14 +14,14 @@ species=$1
 basis=$2
 scan_mode=$3   # required string
 
-ranks=(1 1.5 2 2.5 3 3.5)
+ranks=(1.5 2 2.5 3 3.5)
 results_dir="$HOME/Documents/RR_MPCC/All_output_data"
 
 echo "=========================================="
 echo " Running DF (rank_reduced = false)"
 echo "=========================================="
 
-python 04-low_level_only_with_arguments.py \
+python 04-single-shot-mpcc.py \
     "$species" \
     "$basis" \
     false \
@@ -35,7 +35,7 @@ echo "=========================================="
 
 for r in "${ranks[@]}"; do
     echo "------ CPD Run: Lov=Lvv = $r ------"
-    python 04-low_level_only_with_arguments.py \
+    python 04-single-shot-mpcc.py \
         "$species" \
         "$basis" \
         true \

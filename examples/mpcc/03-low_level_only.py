@@ -1,3 +1,8 @@
+import os
+#os.environ["OMP_NUM_THREADS"] = "1"
+#os.environ["MKL_NUM_THREADS"] = "1"
+#os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
 from pyscf import gto, scf, cc
 from pyscf import mpcc
 
@@ -57,11 +62,22 @@ if __name__ == "__main__":
     mycc = cc.CCSD(mf)
     mycc.max_cycle = 6
     mycc.kernel()
+    t1 = mycc.t1
+    print(f"value of t1 norm:{np.linalg.norm(t1)}")
     _, t2 = mympcc.lowlevel.init_amps()
     print(f'Done! Elapsed time: {time.time() - st} sec')
+    Xoo, Xvo, X = mympcc.lowlevel.get_X(t1)
+    print(f"value of X:{np.linalg.norm(X)}")
+    print(f"value of Xoo:{np.linalg.norm(Xoo)}")
+    print(f"value of Xvo:{np.linalg.norm(Xvo)}")
+    #Foo, Fvv, Fov = mympcc.lowlevel.get_F(t1, X, Xoo, Xvo)
+        
+    #Ω = mympcc.lowlevel.get_Ω_slow(X, Xvo, Foo, Fvv, Fov, t1, t2)
+    #omega_n = np.linalg.norm(Ω)
+    #print(f"norm of Omega in main loop:{omega_n}")
 
 
     # Running low-level solver
-    print('Starting Low-Level Solver')
-    t1, t2 = mympcc.lowlevel.kernel(mycc.t1, t2)
-    print('Finished Low-Level solver!')
+    #print('Starting Low-Level Solver')
+    #t1, t2 = mympcc.lowlevel.kernel(mycc.t1, t2)
+    #print('Finished Low-Level solver!')

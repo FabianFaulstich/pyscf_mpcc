@@ -1,0 +1,22 @@
+converged SCF energy = -76.0267447373551
+MPCC fragments: [[[0], [0]]]
+Initializing ...
+RCCSD not converged
+E(RCCSD) = -76.24015671692905  E_corr = -0.2134119795739422
+value of t1 norm:0.016622263186476593
+Done! Elapsed time: 0.21542692184448242 sec
+eri Lvv:4.337982689483365
+value of X:0.007738708229465912
+value of Xoo:0.00785694407214937
+value of Xvo:0.017835566423148673
+converged SCF energy = -76.026744737355
+MPCC fragments: [[[0], [0]]]
+Initializing ...
+RCCSD not converged
+E(RCCSD) = -76.24015671692896  E_corr = -0.2134119795739421
+value of t1 norm:0.016622263186473512
+Done! Elapsed time: 0.216094970703125 sec
+eri Lvv:4.337982689483361
+value of X:0.008525246471903523
+value of Xoo:0.008073525870125458
+value of Xvo:0.017835037195622183

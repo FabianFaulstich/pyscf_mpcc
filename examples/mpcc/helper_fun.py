@@ -117,6 +117,26 @@ def build_molecule(species, basis):
         mol.basis = basis
         mol.build()
         return mol, "ch4"
+    if name in ["c3h8", "propane"]:
+        mol = gto.Mole()
+        mol.atom = [
+            [6	,(0	        ,0	    ,0.5891	)],
+            [6	,(0	        ,1.2676	,-0.2605)],
+            [6	,(0	        ,-1.2676,-0.2605)],
+            [1	,(0.8749    ,0	    ,1.243	)],
+            [1	,(-0.8749   ,0	    ,1.243	)],
+            [1	,(0	        ,2.1642	,0.3602	)],
+            [1	,(0	        ,-2.1642,0.3602	)],
+            [1	,(0.8811	,1.3045	,-0.9037)],
+            [1	,(-0.8811	,1.3045	,-0.9037)],
+            [1	,(-0.8811	,-1.3045,-0.9037)],
+            [1	,(0.8811	,-1.3045,-0.9037)]
+    ]
+
+        mol.basis = basis
+        mol.build()
+        return mol, "c3h8"
+
 
     # ---------------------------------------------------
     raise ValueError(f"Unknown species or invalid path: {species}")

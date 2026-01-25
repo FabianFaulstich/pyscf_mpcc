@@ -11,11 +11,15 @@ parser.add_argument("--molecule", type=str, required=True,
 parser.add_argument("--scan", type=str, required=True,
                     choices=["Lov", "Lvv", "Lov_Lvv",
                              "Lov_fix_Loo_1", "Lvv_fix_Loo_1", "Lov_Lvv_fix_Loo_1"])
+parser.add_argument("method", type =str,help= "e.g., CC2")
+parser.add_argument("macro_it", type=int, help= "1 or 2")
 args = parser.parse_args()
 
 basis = args.basis
 molecule = args.molecule
 scan = args.scan
+method = args.method
+macro_it = args.macro_it
 basis_to_mol = {
             "cc-pvdz": "DZ",
             "cc-pvtz": "TZ",
@@ -52,19 +56,21 @@ scan_str = str(scan).replace("_fix_Loo_1", "")
 for mol in molecules:
 
     n_atoms = non_H_atoms[mol]
-    energy_folder = os.path.join(results, mol, f"energies_{scan}")
+    energy_folder = os.path.join(results, mol, f"energies_{method}")
 
     if not os.path.exists(energy_folder):
         print(f"Skipping {mol}: folder not found")
         continue
 
-    df_energy = np.loadtxt(os.path.join(energy_folder, "CC2_iter_energies_DF.txt"))
+    df_energy = np.loadtxt(os.path.join(energy_folder, f"{method}_iter_energies_DF_{macro_it}.txt"))
 
     for r in ranks:
-        cpd_file = os.path.join(energy_folder, f"CC2_iter_energies_CPD_{scan_str}_rank{r}X.txt")
+        cpd_file = os.path.join(energy_folder, f"{method}_iter_energies_CPD_{scan_str}_rank{r}X_{macro_it}.txt")
         iter_energies = np.loadtxt(cpd_file)
+        
+        min_len = min(len(df_energy), len(iter_energies))
+        diff = abs(df_energy[:min_len] - iter_energies[:min_len]) * 1000
 
-        diff = abs(df_energy - iter_energies) * 1000
         diff /= n_atoms
 
         rank_to_diffs[r].append(diff)
@@ -146,13 +152,13 @@ else:
 # -------------------------------------------------------------
 # Plot formatting
 # -------------------------------------------------------------
-plt.ylim(1e-2, 10**(-0.5))
+plt.ylim(1e-2, 1e0)
 plt.yscale('log')
-plt.yticks([ 1e-2, 1e-1, 10**(-0.5)])
+plt.yticks([ 1e-2, 1e-1, 1e0])
 plt.xlabel("Iteration")
 plt.ylabel("Error, mH/atom")
 
-title_text = "CC2 Energy Error\n"
+title_text = f"{method} Energy Error\n"
 title_text += ("Water Clusters" if molecule == "water_clusters" else "Carbon Chains")
 title_text += f", {Basis}"
 title_text += f", {fixed_rank_text}"
@@ -167,7 +173,7 @@ plt.legend(loc='upper left', bbox_to_anchor=(1.05, 1), title= f"{scan_rank}")
 
 plt.tight_layout()
 
-out_file = os.path.join(results, f"CC2_stats_{molecule}_{scan}_{basis}.png")
+out_file = os.path.join(results, f"{method}_stats_{molecule}_{scan}_{basis}_{macro_it}.png")
 plt.savefig(out_file, dpi=300, bbox_inches='tight')
 plt.show()
 

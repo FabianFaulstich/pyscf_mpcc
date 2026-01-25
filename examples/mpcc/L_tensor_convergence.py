@@ -27,7 +27,7 @@ if __name__ == "__main__":
             "aug-cc-pvtz": "aug-cc-pvtz"
             }
     Basis = basis_to_mol[basis]
-
+    """
     mol_to_water = {
     "TIP4P-1": 1,
     "TIP4P-2": 2,
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     "TIP4P-10": 10
             }
     water = mol_to_water[mol_name]
-
+    """
     if args.results:
         results = Path(os.path.expanduser(args.results)).resolve()
     else:
@@ -72,6 +72,7 @@ if __name__ == "__main__":
     print("Lov shape:", Lov.shape)
     print("Lvv shape:", Lvv.shape)
     print("Lvo shape:", Lvo.shape)
+    breakpoint()
     def adjust_factor(factor_matrix, rank_new):
         """Trim or pad factor matrix to new rank."""
         old_rank = factor_matrix.shape[1]

@@ -1,0 +1,569 @@
+==========================================
+ Running DF (rank_reduced = false)
+==========================================
+
+=== Running calculation for TIP4P-2 ===
+value of Loo rank: 1
+converged SCF energy = -152.061324615286
+
+=== Running DF-CCSD reference ===
+E(RCCSD) = -152.4902657324693  E_corr = -0.4289411171830798
+DF-CCSD correlation energy: -0.4289411172
+DF-CCSD total energy: -152.4902657325
+DF-CCSD wall time: 1.67 s
+MPCC fragments: [[array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), array([0, 1, 2, 3])]]
+output:In unfactorized Kernel
+norm of Omega inside Lowlevel:5.545395639896757e-07
+It 1; correlation energy -3.824529e-01; residual 6.537379e-02
+norm of Omega inside Lowlevel:5.173261213680386e-07
+It 2; correlation energy -3.769585e-01; residual 3.587622e-02
+norm of Omega inside Lowlevel:5.10345134055897e-07
+It 3; correlation energy -4.087831e-01; residual 2.253449e-02
+norm of Omega inside Lowlevel:5.069486396601969e-07
+It 4; correlation energy -4.053959e-01; residual 5.445552e-03
+norm of Omega inside Lowlevel:5.087484057849736e-07
+It 5; correlation energy -4.084706e-01; residual 2.934267e-03
+norm of Omega inside Lowlevel:5.10540490146015e-07
+It 6; correlation energy -4.107722e-01; residual 8.593760e-04
+norm of Omega inside Lowlevel:5.112877622317352e-07
+It 7; correlation energy -4.110661e-01; residual 4.167341e-04
+norm of Omega inside Lowlevel:5.119383345717209e-07
+It 8; correlation energy -4.110358e-01; residual 1.718104e-04
+norm of Omega inside Lowlevel:5.121566563877376e-07
+It 9; correlation energy -4.110076e-01; residual 9.866658e-05
+norm of Omega inside Lowlevel:5.123408985689032e-07
+It 10; correlation energy -4.110174e-01; residual 3.714559e-05
+norm of Omega inside Lowlevel:5.124441122732535e-07
+It 11; correlation energy -4.110102e-01; residual 1.975522e-05
+norm of Omega inside Lowlevel:5.125027153851052e-07
+It 12; correlation energy -4.110099e-01; residual 9.063478e-06
+norm of Omega inside Lowlevel:5.125297056335388e-07
+It 13; correlation energy -4.110109e-01; residual 5.325424e-06
+norm of Omega inside Lowlevel:5.125446483680147e-07
+It 14; correlation energy -4.110112e-01; residual 2.998512e-06
+norm of Omega inside Lowlevel:5.125547988299688e-07
+It 15; correlation energy -4.110116e-01; residual 1.632952e-06
+norm of Omega inside Lowlevel:5.125607997681764e-07
+It 16; correlation energy -4.110120e-01; residual 6.672210e-07
+
+norm of Omega in main loop:5.125633104219814e-07
+DFMPCC It: 1; correlation energy: -0.4208732510
+output:In unfactorized Kernel
+norm of Omega inside Lowlevel:0.017905544195495872
+It 1; correlation energy -4.208733e-01; residual 9.170241e-03
+norm of Omega inside Lowlevel:0.01573040362276044
+It 2; correlation energy -4.200574e-01; residual 3.153211e-03
+norm of Omega inside Lowlevel:0.015167661699582136
+It 3; correlation energy -4.201224e-01; residual 1.763957e-03
+norm of Omega inside Lowlevel:0.014908394672062607
+It 4; correlation energy -4.200696e-01; residual 9.045659e-04
+norm of Omega inside Lowlevel:0.014713562841013572
+It 5; correlation energy -4.200519e-01; residual 3.248477e-04
+norm of Omega inside Lowlevel:0.014678085319042057
+It 6; correlation energy -4.200593e-01; residual 1.540506e-04
+norm of Omega inside Lowlevel:0.014663694649720714
+It 7; correlation energy -4.200645e-01; residual 7.122465e-05
+norm of Omega inside Lowlevel:0.014660089952468513
+It 8; correlation energy -4.200658e-01; residual 3.261721e-05
+norm of Omega inside Lowlevel:0.014659075763111516
+It 9; correlation energy -4.200659e-01; residual 1.711998e-05
+norm of Omega inside Lowlevel:0.014658591389550262
+It 10; correlation energy -4.200659e-01; residual 9.470999e-06
+norm of Omega inside Lowlevel:0.014658520442090072
+It 11; correlation energy -4.200656e-01; residual 4.326624e-06
+norm of Omega inside Lowlevel:0.014658398347338328
+It 12; correlation energy -4.200655e-01; residual 2.400479e-06
+norm of Omega inside Lowlevel:0.014658349028803648
+It 13; correlation energy -4.200654e-01; residual 1.334559e-06
+norm of Omega inside Lowlevel:0.014658294394848644
+It 14; correlation energy -4.200654e-01; residual 6.725245e-07
+
+norm of Omega in main loop:0.014658260877259808
+DFMPCC It: 2; correlation energy: -0.4205118513
+  ΔE = 3.614e-04
+
+==========================================
+ Running CPD (rank_reduced = true)
+==========================================
+------ CPD Run: Lov=Lvv = 1.5 ------
+
+=== Running calculation for TIP4P-2 ===
+value of Loo rank: 1
+converged SCF energy = -152.061324615287
+
+=== Running DF-CCSD reference ===
+E(RCCSD) = -152.4902657324696  E_corr = -0.4289411171830804
+DF-CCSD correlation energy: -0.4289411172
+DF-CCSD total energy: -152.4902657325
+DF-CCSD wall time: 1.65 s
+Converged(CPD) in 2 iterations.
+Error: 1.9888517408690586e-08
+Converged(CPD) in 61 iterations.
+Error: 0.0190729815198957
+Converged(CPD) in 50 iterations.
+Error: 0.015500240425265736
+MPCC fragments: [[array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), array([0, 1, 2, 3])]]
+output:In unfactorized Kernel
+norm of Omega inside Lowlevel:5.659198566985557e-07
+It 1; correlation energy -3.704296e-01; residual 7.336685e-02
+norm of Omega inside Lowlevel:5.454376448975589e-07
+It 2; correlation energy -3.701391e-01; residual 4.992119e-02
+norm of Omega inside Lowlevel:5.363094636316699e-07
+It 3; correlation energy -4.088645e-01; residual 4.289981e-02
+norm of Omega inside Lowlevel:5.331678611586335e-07
+It 4; correlation energy -4.037045e-01; residual 8.365995e-03
+norm of Omega inside Lowlevel:5.343650845176399e-07
+It 5; correlation energy -4.063193e-01; residual 4.974426e-03
+norm of Omega inside Lowlevel:5.360622314510176e-07
+It 6; correlation energy -4.099979e-01; residual 1.795455e-03
+norm of Omega inside Lowlevel:5.367416399908486e-07
+It 7; correlation energy -4.108146e-01; residual 6.492800e-04
+norm of Omega inside Lowlevel:5.372925502304052e-07
+It 8; correlation energy -4.109061e-01; residual 3.595453e-04
+norm of Omega inside Lowlevel:5.375292315063516e-07
+It 9; correlation energy -4.108611e-01; residual 1.999218e-04
+norm of Omega inside Lowlevel:5.378909069041156e-07
+It 10; correlation energy -4.108607e-01; residual 8.493755e-05
+norm of Omega inside Lowlevel:5.380182696376895e-07
+It 11; correlation energy -4.108592e-01; residual 5.020114e-05
+norm of Omega inside Lowlevel:5.381031200206992e-07
+It 12; correlation energy -4.108530e-01; residual 3.001383e-05
+norm of Omega inside Lowlevel:5.381588362389918e-07
+It 13; correlation energy -4.108509e-01; residual 1.840830e-05
+norm of Omega inside Lowlevel:5.382106136021814e-07
+It 14; correlation energy -4.108493e-01; residual 1.092292e-05
+norm of Omega inside Lowlevel:5.382506678950495e-07
+It 15; correlation energy -4.108479e-01; residual 4.924558e-06
+norm of Omega inside Lowlevel:5.382698849612412e-07
+It 16; correlation energy -4.108474e-01; residual 3.238897e-06
+norm of Omega inside Lowlevel:5.382808712182665e-07
+It 17; correlation energy -4.108472e-01; residual 1.690024e-06
+norm of Omega inside Lowlevel:5.382899579398472e-07
+It 18; correlation energy -4.108472e-01; residual 1.164700e-06
+norm of Omega inside Lowlevel:5.382957021336268e-07
+It 19; correlation energy -4.108471e-01; residual 7.134714e-07
+
+norm of Omega in main loop:5.382982501926488e-07
+DFMPCC It: 1; correlation energy: -0.4207684146
+output:In unfactorized Kernel
+norm of Omega inside Lowlevel:0.017873923846025656
+It 1; correlation energy -4.207684e-01; residual 9.606919e-03
+norm of Omega inside Lowlevel:0.01569663192896677
+It 2; correlation energy -4.199381e-01; residual 3.358960e-03
+norm of Omega inside Lowlevel:0.015238838964383888
+It 3; correlation energy -4.199896e-01; residual 2.043502e-03
+norm of Omega inside Lowlevel:0.014957553232889704
+It 4; correlation energy -4.199720e-01; residual 1.136090e-03
+norm of Omega inside Lowlevel:0.014761066674553005
+It 5; correlation energy -4.199558e-01; residual 5.886467e-04
+norm of Omega inside Lowlevel:0.014686582983577503
+It 6; correlation energy -4.199705e-01; residual 2.424532e-04
+norm of Omega inside Lowlevel:0.01465885878234697
+It 7; correlation energy -4.199724e-01; residual 1.414872e-04
+norm of Omega inside Lowlevel:0.014644296599185603
+It 8; correlation energy -4.199751e-01; residual 6.270680e-05
+norm of Omega inside Lowlevel:0.014640230672970645
+It 9; correlation energy -4.199747e-01; residual 3.748835e-05
+norm of Omega inside Lowlevel:0.014638920953216582
+It 10; correlation energy -4.199749e-01; residual 2.036916e-05
+norm of Omega inside Lowlevel:0.014637932021007983
+It 11; correlation energy -4.199745e-01; residual 1.146773e-05
+norm of Omega inside Lowlevel:0.014637650937659511
+It 12; correlation energy -4.199744e-01; residual 5.969578e-06
+norm of Omega inside Lowlevel:0.014637454142880396
+It 13; correlation energy -4.199744e-01; residual 3.681401e-06
+norm of Omega inside Lowlevel:0.014637408914016492
+It 14; correlation energy -4.199743e-01; residual 1.955238e-06
+norm of Omega inside Lowlevel:0.014637340871204121
+It 15; correlation energy -4.199743e-01; residual 1.171529e-06
+norm of Omega inside Lowlevel:0.01463731256280757
+It 16; correlation energy -4.199743e-01; residual 5.858503e-07
+
+norm of Omega in main loop:0.014637297791710708
+DFMPCC It: 2; correlation energy: -0.4205133958
+  ΔE = 2.550e-04
+------ CPD Run: Lov=Lvv = 2 ------
+
+=== Running calculation for TIP4P-2 ===
+value of Loo rank: 1
+converged SCF energy = -152.061324615286
+
+=== Running DF-CCSD reference ===
+E(RCCSD) = -152.4902657324695  E_corr = -0.4289411171830809
+DF-CCSD correlation energy: -0.4289411172
+DF-CCSD total energy: -152.4902657325
+DF-CCSD wall time: 1.64 s
+Converged(CPD) in 2 iterations.
+Error: 1.9888517408690577e-08
+Converged(CPD) in 61 iterations.
+Error: 0.017562456283632708
+Converged(CPD) in 37 iterations.
+Error: 0.0052371358961257755
+MPCC fragments: [[array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), array([0, 1, 2, 3])]]
+output:In unfactorized Kernel
+norm of Omega inside Lowlevel:6.309595178769636e-07
+It 1; correlation energy -3.537793e-01; residual 7.150215e-02
+norm of Omega inside Lowlevel:6.145603060177011e-07
+It 2; correlation energy -3.606051e-01; residual 5.296477e-02
+norm of Omega inside Lowlevel:6.084714046158747e-07
+It 3; correlation energy -4.022693e-01; residual 4.922106e-02
+norm of Omega inside Lowlevel:5.997405877445735e-07
+It 4; correlation energy -3.970570e-01; residual 1.014687e-02
+norm of Omega inside Lowlevel:6.003236722004694e-07
+It 5; correlation energy -3.999668e-01; residual 6.121935e-03
+norm of Omega inside Lowlevel:6.017437520318544e-07
+It 6; correlation energy -4.042523e-01; residual 2.365374e-03
+norm of Omega inside Lowlevel:6.024350703509925e-07
+It 7; correlation energy -4.054040e-01; residual 6.593232e-04
+norm of Omega inside Lowlevel:6.028751466856697e-07
+It 8; correlation energy -4.055006e-01; residual 3.502255e-04
+norm of Omega inside Lowlevel:6.031045374515798e-07
+It 9; correlation energy -4.054579e-01; residual 1.732350e-04
+norm of Omega inside Lowlevel:6.03408587553083e-07
+It 10; correlation energy -4.054402e-01; residual 8.816898e-05
+norm of Omega inside Lowlevel:6.035272246412298e-07
+It 11; correlation energy -4.054412e-01; residual 4.390854e-05
+norm of Omega inside Lowlevel:6.035863095162238e-07
+It 12; correlation energy -4.054358e-01; residual 2.533814e-05
+norm of Omega inside Lowlevel:6.036235028076297e-07
+It 13; correlation energy -4.054321e-01; residual 1.332512e-05
+norm of Omega inside Lowlevel:6.036524793310771e-07
+It 14; correlation energy -4.054305e-01; residual 7.920748e-06
+norm of Omega inside Lowlevel:6.03679864155882e-07
+It 15; correlation energy -4.054287e-01; residual 3.656854e-06
+norm of Omega inside Lowlevel:6.036899682833317e-07
+It 16; correlation energy -4.054281e-01; residual 2.066997e-06
+norm of Omega inside Lowlevel:6.036954911104115e-07
+It 17; correlation energy -4.054278e-01; residual 9.613570e-07
+
+norm of Omega in main loop:6.036988216454135e-07
+DFMPCC It: 1; correlation energy: -0.4211579114
+output:In unfactorized Kernel
+norm of Omega inside Lowlevel:0.01783967426634
+It 1; correlation energy -4.211579e-01; residual 1.123062e-02
+norm of Omega inside Lowlevel:0.015965988385758866
+It 2; correlation energy -4.198433e-01; residual 4.000587e-03
+norm of Omega inside Lowlevel:0.015334816047092458
+It 3; correlation energy -4.198188e-01; residual 2.694600e-03
+norm of Omega inside Lowlevel:0.014981318584337466
+It 4; correlation energy -4.197981e-01; residual 1.427593e-03
+norm of Omega inside Lowlevel:0.01474640185029801
+It 5; correlation energy -4.197446e-01; residual 8.206601e-04
+norm of Omega inside Lowlevel:0.014668037618816653
+It 6; correlation energy -4.197543e-01; residual 3.027896e-04
+norm of Omega inside Lowlevel:0.014640868956005162
+It 7; correlation energy -4.197589e-01; residual 1.842994e-04
+norm of Omega inside Lowlevel:0.014626142843467324
+It 8; correlation energy -4.197619e-01; residual 8.255475e-05
+norm of Omega inside Lowlevel:0.01462203500118217
+It 9; correlation energy -4.197603e-01; residual 5.085324e-05
+norm of Omega inside Lowlevel:0.014619494823989073
+It 10; correlation energy -4.197614e-01; residual 2.119349e-05
+norm of Omega inside Lowlevel:0.014618072527461917
+It 11; correlation energy -4.197615e-01; residual 1.285340e-05
+norm of Omega inside Lowlevel:0.014617988459305118
+It 12; correlation energy -4.197613e-01; residual 8.279590e-06
+norm of Omega inside Lowlevel:0.014617746212246995
+It 13; correlation energy -4.197614e-01; residual 5.010112e-06
+norm of Omega inside Lowlevel:0.014617656080838379
+It 14; correlation energy -4.197613e-01; residual 2.830325e-06
+norm of Omega inside Lowlevel:0.014617688732586853
+It 15; correlation energy -4.197613e-01; residual 1.590101e-06
+norm of Omega inside Lowlevel:0.014617732188184865
+It 16; correlation energy -4.197613e-01; residual 1.092610e-06
+norm of Omega inside Lowlevel:0.014617749116962264
+It 17; correlation energy -4.197613e-01; residual 6.513595e-07
+
+norm of Omega in main loop:0.014617780625363728
+DFMPCC It: 2; correlation energy: -0.4205493222
+  ΔE = 6.086e-04
+------ CPD Run: Lov=Lvv = 2.5 ------
+
+=== Running calculation for TIP4P-2 ===
+value of Loo rank: 1
+converged SCF energy = -152.061324615286
+
+=== Running DF-CCSD reference ===
+E(RCCSD) = -152.4902657324695  E_corr = -0.4289411171830804
+DF-CCSD correlation energy: -0.4289411172
+DF-CCSD total energy: -152.4902657325
+DF-CCSD wall time: 1.67 s
+Converged(CPD) in 2 iterations.
+Error: 0.0
+Converged(CPD) in 57 iterations.
+Error: 0.0178308672270694
+Converged(CPD) in 71 iterations.
+Error: 0.004397839012923089
+MPCC fragments: [[array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), array([0, 1, 2, 3])]]
+output:In unfactorized Kernel
+norm of Omega inside Lowlevel:5.962487716183938e-07
+It 1; correlation energy -3.735225e-01; residual 6.704985e-02
+norm of Omega inside Lowlevel:5.771661975144453e-07
+It 2; correlation energy -3.722781e-01; residual 3.727531e-02
+norm of Omega inside Lowlevel:5.634092823440321e-07
+It 3; correlation energy -4.052173e-01; residual 2.505581e-02
+norm of Omega inside Lowlevel:5.605279649093171e-07
+It 4; correlation energy -4.020452e-01; residual 6.276409e-03
+norm of Omega inside Lowlevel:5.614728143903328e-07
+It 5; correlation energy -4.051146e-01; residual 3.667751e-03
+norm of Omega inside Lowlevel:5.626084467867161e-07
+It 6; correlation energy -4.077662e-01; residual 1.128044e-03
+norm of Omega inside Lowlevel:5.630490291054845e-07
+It 7; correlation energy -4.082445e-01; residual 4.382052e-04
+norm of Omega inside Lowlevel:5.63401597801023e-07
+It 8; correlation energy -4.082638e-01; residual 1.904234e-04
+norm of Omega inside Lowlevel:5.634941569282142e-07
+It 9; correlation energy -4.082318e-01; residual 1.118581e-04
+norm of Omega inside Lowlevel:5.635881033908202e-07
+It 10; correlation energy -4.082433e-01; residual 3.824940e-05
+norm of Omega inside Lowlevel:5.636220013976186e-07
+It 11; correlation energy -4.082371e-01; residual 2.107377e-05
+norm of Omega inside Lowlevel:5.636432382232603e-07
+It 12; correlation energy -4.082351e-01; residual 1.155313e-05
+norm of Omega inside Lowlevel:5.636537705378798e-07
+It 13; correlation energy -4.082356e-01; residual 7.431633e-06
+norm of Omega inside Lowlevel:5.636607279417611e-07
+It 14; correlation energy -4.082354e-01; residual 3.409927e-06
+norm of Omega inside Lowlevel:5.636648563349058e-07
+It 15; correlation energy -4.082354e-01; residual 1.573265e-06
+norm of Omega inside Lowlevel:5.636681910161607e-07
+It 16; correlation energy -4.082355e-01; residual 8.136851e-07
+
+norm of Omega in main loop:5.636693871260018e-07
+DFMPCC It: 1; correlation energy: -0.4210654847
+output:In unfactorized Kernel
+norm of Omega inside Lowlevel:0.017872793985102536
+It 1; correlation energy -4.210655e-01; residual 1.088347e-02
+norm of Omega inside Lowlevel:0.015796342507853698
+It 2; correlation energy -4.199320e-01; residual 3.402417e-03
+norm of Omega inside Lowlevel:0.015229373764371487
+It 3; correlation energy -4.200213e-01; residual 2.118121e-03
+norm of Omega inside Lowlevel:0.01488051695073988
+It 4; correlation energy -4.199771e-01; residual 9.238541e-04
+norm of Omega inside Lowlevel:0.014719642007422243
+It 5; correlation energy -4.199458e-01; residual 4.548246e-04
+norm of Omega inside Lowlevel:0.01465918007501642
+It 6; correlation energy -4.199548e-01; residual 1.597314e-04
+norm of Omega inside Lowlevel:0.014646856796748535
+It 7; correlation energy -4.199566e-01; residual 8.651394e-05
+norm of Omega inside Lowlevel:0.01464221373573813
+It 8; correlation energy -4.199572e-01; residual 3.928782e-05
+norm of Omega inside Lowlevel:0.014640815676197851
+It 9; correlation energy -4.199563e-01; residual 2.084171e-05
+norm of Omega inside Lowlevel:0.01464055280137822
+It 10; correlation energy -4.199564e-01; residual 1.032877e-05
+norm of Omega inside Lowlevel:0.014640210130959713
+It 11; correlation energy -4.199560e-01; residual 5.498997e-06
+norm of Omega inside Lowlevel:0.01464020620708661
+It 12; correlation energy -4.199558e-01; residual 2.899517e-06
+norm of Omega inside Lowlevel:0.014640115059976658
+It 13; correlation energy -4.199557e-01; residual 1.571040e-06
+norm of Omega inside Lowlevel:0.014640101114550887
+It 14; correlation energy -4.199556e-01; residual 8.398245e-07
+
+norm of Omega in main loop:0.014640073112678753
+DFMPCC It: 2; correlation energy: -0.4205272126
+  ΔE = 5.383e-04
+------ CPD Run: Lov=Lvv = 3 ------
+
+=== Running calculation for TIP4P-2 ===
+value of Loo rank: 1
+converged SCF energy = -152.061324615286
+
+=== Running DF-CCSD reference ===
+E(RCCSD) = -152.4902657324695  E_corr = -0.4289411171830806
+DF-CCSD correlation energy: -0.4289411172
+DF-CCSD total energy: -152.4902657325
+DF-CCSD wall time: 1.64 s
+Converged(CPD) in 2 iterations.
+Error: 1.4063305527431805e-08
+Converged(CPD) in 61 iterations.
+Error: 0.017316384287090144
+MPCC fragments: [[array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), array([0, 1, 2, 3])]]
+output:In unfactorized Kernel
+norm of Omega inside Lowlevel:5.822712712727585e-07
+It 1; correlation energy -3.728734e-01; residual 6.282513e-02
+norm of Omega inside Lowlevel:5.536691289791748e-07
+It 2; correlation energy -3.738941e-01; residual 3.384009e-02
+norm of Omega inside Lowlevel:5.487043151566348e-07
+It 3; correlation energy -4.053890e-01; residual 2.027970e-02
+norm of Omega inside Lowlevel:5.47456440989944e-07
+It 4; correlation energy -4.028708e-01; residual 5.627939e-03
+norm of Omega inside Lowlevel:5.490415366163474e-07
+It 5; correlation energy -4.068940e-01; residual 2.878844e-03
+norm of Omega inside Lowlevel:5.500697778097345e-07
+It 6; correlation energy -4.090487e-01; residual 8.433874e-04
+norm of Omega inside Lowlevel:5.503693607820169e-07
+It 7; correlation energy -4.093204e-01; residual 4.060909e-04
+norm of Omega inside Lowlevel:5.505841730593406e-07
+It 8; correlation energy -4.092917e-01; residual 1.593242e-04
+norm of Omega inside Lowlevel:5.506488198712788e-07
+It 9; correlation energy -4.092708e-01; residual 9.036006e-05
+norm of Omega inside Lowlevel:5.507043256351622e-07
+It 10; correlation energy -4.092810e-01; residual 3.361737e-05
+norm of Omega inside Lowlevel:5.507369361120886e-07
+It 11; correlation energy -4.092738e-01; residual 1.761400e-05
+norm of Omega inside Lowlevel:5.507577320810552e-07
+It 12; correlation energy -4.092734e-01; residual 8.021054e-06
+norm of Omega inside Lowlevel:5.507679108070249e-07
+It 13; correlation energy -4.092741e-01; residual 4.735990e-06
+norm of Omega inside Lowlevel:5.507739765036546e-07
+It 14; correlation energy -4.092741e-01; residual 2.373497e-06
+norm of Omega inside Lowlevel:5.507780820875088e-07
+It 15; correlation energy -4.092743e-01; residual 1.280223e-06
+norm of Omega inside Lowlevel:5.507813166878265e-07
+It 16; correlation energy -4.092745e-01; residual 5.377949e-07
+
+norm of Omega in main loop:5.507823963319727e-07
+DFMPCC It: 1; correlation energy: -0.4209651717
+output:In unfactorized Kernel
+norm of Omega inside Lowlevel:0.01785175790399162
+It 1; correlation energy -4.209652e-01; residual 9.926407e-03
+norm of Omega inside Lowlevel:0.015728915694735522
+It 2; correlation energy -4.199808e-01; residual 3.228166e-03
+norm of Omega inside Lowlevel:0.015083153494949276
+It 3; correlation energy -4.200216e-01; residual 1.736724e-03
+norm of Omega inside Lowlevel:0.01484143945869523
+It 4; correlation energy -4.199860e-01; residual 9.002854e-04
+norm of Omega inside Lowlevel:0.014673979813373128
+It 5; correlation energy -4.199732e-01; residual 3.505544e-04
+norm of Omega inside Lowlevel:0.014635038566458695
+It 6; correlation energy -4.199811e-01; residual 1.636990e-04
+norm of Omega inside Lowlevel:0.014624256247779084
+It 7; correlation energy -4.199835e-01; residual 7.282916e-05
+norm of Omega inside Lowlevel:0.014621665943601314
+It 8; correlation energy -4.199838e-01; residual 3.447217e-05
+norm of Omega inside Lowlevel:0.01462104874175411
+It 9; correlation energy -4.199835e-01; residual 1.698994e-05
+norm of Omega inside Lowlevel:0.01462079921735716
+It 10; correlation energy -4.199833e-01; residual 1.009529e-05
+norm of Omega inside Lowlevel:0.014620660022777005
+It 11; correlation energy -4.199830e-01; residual 4.515272e-06
+norm of Omega inside Lowlevel:0.014620572791357743
+It 12; correlation energy -4.199829e-01; residual 2.106565e-06
+norm of Omega inside Lowlevel:0.01462048218608438
+It 13; correlation energy -4.199828e-01; residual 1.137070e-06
+norm of Omega inside Lowlevel:0.014620433336986585
+It 14; correlation energy -4.199828e-01; residual 5.700360e-07
+
+norm of Omega in main loop:0.014620403167240795
+DFMPCC It: 2; correlation energy: -0.4205272999
+  ΔE = 4.379e-04
+------ CPD Run: Lov=Lvv = 3.5 ------
+
+=== Running calculation for TIP4P-2 ===
+value of Loo rank: 1
+converged SCF energy = -152.061324615286
+
+=== Running DF-CCSD reference ===
+E(RCCSD) = -152.4902657324695  E_corr = -0.4289411171830806
+DF-CCSD correlation energy: -0.4289411172
+DF-CCSD total energy: -152.4902657325
+DF-CCSD wall time: 1.70 s
+Converged(CPD) in 2 iterations.
+Error: 0.0
+Converged(CPD) in 61 iterations.
+Error: 0.01799201351204
+MPCC fragments: [[array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), array([0, 1, 2, 3])]]
+output:In unfactorized Kernel
+norm of Omega inside Lowlevel:6.240036240046969e-07
+It 1; correlation energy -3.704552e-01; residual 6.427508e-02
+norm of Omega inside Lowlevel:6.010833229414495e-07
+It 2; correlation energy -3.714932e-01; residual 3.861260e-02
+norm of Omega inside Lowlevel:5.926035254797798e-07
+It 3; correlation energy -4.049236e-01; residual 2.695119e-02
+norm of Omega inside Lowlevel:5.831639784267049e-07
+It 4; correlation energy -4.013299e-01; residual 6.226829e-03
+norm of Omega inside Lowlevel:5.83743486770198e-07
+It 5; correlation energy -4.044541e-01; residual 3.746968e-03
+norm of Omega inside Lowlevel:5.845949214336007e-07
+It 6; correlation energy -4.070460e-01; residual 1.176010e-03
+norm of Omega inside Lowlevel:5.849431471501231e-07
+It 7; correlation energy -4.075122e-01; residual 4.552944e-04
+norm of Omega inside Lowlevel:5.852654870388513e-07
+It 8; correlation energy -4.075359e-01; residual 2.285506e-04
+norm of Omega inside Lowlevel:5.853836312417324e-07
+It 9; correlation energy -4.074956e-01; residual 1.271129e-04
+norm of Omega inside Lowlevel:5.855479116788572e-07
+It 10; correlation energy -4.075042e-01; residual 4.156750e-05
+norm of Omega inside Lowlevel:5.856135242080076e-07
+It 11; correlation energy -4.074997e-01; residual 2.351886e-05
+norm of Omega inside Lowlevel:5.856600879623387e-07
+It 12; correlation energy -4.074969e-01; residual 1.296025e-05
+norm of Omega inside Lowlevel:5.856856274527498e-07
+It 13; correlation energy -4.074970e-01; residual 8.318296e-06
+norm of Omega inside Lowlevel:5.85708288476276e-07
+It 14; correlation energy -4.074965e-01; residual 4.055866e-06
+norm of Omega inside Lowlevel:5.857219426022252e-07
+It 15; correlation energy -4.074962e-01; residual 1.826441e-06
+norm of Omega inside Lowlevel:5.857323593494434e-07
+It 16; correlation energy -4.074960e-01; residual 1.142273e-06
+norm of Omega inside Lowlevel:5.85736712284745e-07
+It 17; correlation energy -4.074960e-01; residual 6.279117e-07
+
+norm of Omega in main loop:5.857416339508195e-07
+DFMPCC It: 1; correlation energy: -0.4211125818
+output:In unfactorized Kernel
+norm of Omega inside Lowlevel:0.01787370322845641
+It 1; correlation energy -4.211126e-01; residual 1.048310e-02
+norm of Omega inside Lowlevel:0.01577290265379839
+It 2; correlation energy -4.199461e-01; residual 3.617694e-03
+norm of Omega inside Lowlevel:0.015223022228139182
+It 3; correlation energy -4.199921e-01; residual 2.101121e-03
+norm of Omega inside Lowlevel:0.014907609633862106
+It 4; correlation energy -4.199403e-01; residual 1.056824e-03
+norm of Omega inside Lowlevel:0.01473223952119243
+It 5; correlation energy -4.199123e-01; residual 5.191207e-04
+norm of Omega inside Lowlevel:0.014666173807287897
+It 6; correlation energy -4.199174e-01; residual 1.911488e-04
+norm of Omega inside Lowlevel:0.014650373562159117
+It 7; correlation energy -4.199210e-01; residual 1.064864e-04
+norm of Omega inside Lowlevel:0.014644200133201985
+It 8; correlation energy -4.199221e-01; residual 5.079255e-05
+norm of Omega inside Lowlevel:0.014642392293523411
+It 9; correlation energy -4.199216e-01; residual 2.992608e-05
+norm of Omega inside Lowlevel:0.014641721430600085
+It 10; correlation energy -4.199220e-01; residual 1.506420e-05
+norm of Omega inside Lowlevel:0.014641099315475647
+It 11; correlation energy -4.199216e-01; residual 7.759240e-06
+norm of Omega inside Lowlevel:0.01464106598275482
+It 12; correlation energy -4.199215e-01; residual 4.083297e-06
+norm of Omega inside Lowlevel:0.014640959971631924
+It 13; correlation energy -4.199214e-01; residual 2.606710e-06
+norm of Omega inside Lowlevel:0.014640920259056682
+It 14; correlation energy -4.199213e-01; residual 1.455834e-06
+norm of Omega inside Lowlevel:0.014640895431228852
+It 15; correlation energy -4.199213e-01; residual 8.513763e-07
+
+norm of Omega in main loop:0.014640886765751624
+DFMPCC It: 2; correlation energy: -0.4205419427
+  ΔE = 5.706e-04
+==========================================
+ ALL RUNS COMPLETED 
+==========================================
+norm of omega DF:0.014658260877259808
+norm of omega CP:0.014637297791710708
+Absolute error CC2_Ω_CPD_Lvv_rank1.5X_2.npy:0.014062379915638005
+Percent absolute error:1.4062379915638004
+Relative error CC2_Ω_CPD_Lvv_rank1.5X_2.npy:0.959348454321329
+Percent relative error CC2_Ω_CPD_Lvv_rank1.5X_2.npy: 95.9348454321329
+norm of omega CP:0.014617780625363728
+Absolute error CC2_Ω_CPD_Lvv_rank2.0X_2.npy:0.020861614343286133
+Percent absolute error:2.0861614343286132
+Relative error CC2_Ω_CPD_Lvv_rank2.0X_2.npy:1.4231984624894989
+Percent relative error CC2_Ω_CPD_Lvv_rank2.0X_2.npy: 142.3198462489499
+norm of omega CP:0.014640073112678753
+Absolute error CC2_Ω_CPD_Lvv_rank2.5X_2.npy:0.020602927664730555
+Percent absolute error:2.0602927664730557
+Relative error CC2_Ω_CPD_Lvv_rank2.5X_2.npy:1.4055506200393149
+Percent relative error CC2_Ω_CPD_Lvv_rank2.5X_2.npy: 140.55506200393148
+norm of omega CP:0.014620403167240795
+Absolute error CC2_Ω_CPD_Lvv_rank3.0X_2.npy:0.015353655133296075
+Percent absolute error:1.5353655133296074
+Relative error CC2_Ω_CPD_Lvv_rank3.0X_2.npy:1.047440433886333
+Percent relative error CC2_Ω_CPD_Lvv_rank3.0X_2.npy: 104.7440433886333
+norm of omega CP:0.014640886765751624
+Absolute error CC2_Ω_CPD_Lvv_rank3.5X_2.npy:0.019009772268288865
+Percent absolute error:1.9009772268288865
+Relative error CC2_Ω_CPD_Lvv_rank3.5X_2.npy:1.2968640978262165
+Percent relative error CC2_Ω_CPD_Lvv_rank3.5X_2.npy: 129.68640978262164
