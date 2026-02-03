@@ -79,40 +79,62 @@ ccsd_energy = float(np.atleast_1d(ccsd_energy)[-1])
 plt.rcParams.update({
     "font.family": "serif",
     "mathtext.fontset": "cm",
-    "font.size": 18,
-    "axes.labelsize": 20,
-    "axes.titlesize": 22,
-    "xtick.labelsize": 18,
-    "ytick.labelsize": 18,
+    "font.size": 22,
+    "axes.labelsize": 14,
+    "axes.titlesize": 16,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
     "legend.fontsize": 14,
 })
 
 # Color-blind friendly markers
-markers = ["o", "s", "D", "^", "v", "P", "X"]
+markers = [ "s", "D", "^", "v", "P", "X"]
 
 # --------- LOAD FILES ---------
-energy_files = sorted([
+all_files = sorted([
     f for f in os.listdir(energy_folder)
-    if f.startswith(f"{method}_iter_energy") and "rank1.0X" not in f])
+    if f.startswith(f"{method}_iter_energies")
+    and "rank1.0X" not in f
+])
+
+cp_files = [f for f in all_files if "DF" not in f]
+df_files = [f for f in all_files if "DF" in f]
     
 
-plt.figure(figsize=(10, 7))
+plt.figure(figsize=(6.5, 6))
 scan_str = str(scan).replace("_fix_Loo_1", "")
+#plt.axhline(y=ccsd_energy,linewidth=2,color="blue",alpha=0.9,label="DF-CCSD")
 
-for i, f in enumerate(energy_files):
+for f in df_files:
+    file_path = os.path.join(energy_folder, f)
+    iter_energies = np.loadtxt(file_path)[1:]
+    iterations = np.arange(1, len(iter_energies) + 1)
+
+    plt.plot(
+        iterations,
+        iter_energies,
+        linewidth=2,
+        linestyle="-",
+        color = "black",
+        marker="o",
+        markersize=8,
+        label="DF"
+    )
+
+for i, f in enumerate(cp_files):
     file_path = os.path.join(energy_folder, f)
     iter_energies = np.loadtxt(file_path)
     iter_energies = iter_energies[1:]
     iterations = np.arange(1, len(iter_energies) + 1)
 
     label = (
-        f.replace(f"{method}_iter_energy_", "")
+        f.replace(f"{method}_iter_energies_", "")
          #.replace("CC2_iter_energies_", "")  
-         .replace(f"CPD_{scan_str}_rank","") 
+         .replace(f"CPD_{scan_str}_rank",r"$R_{vv}=$") 
+         .replace(".0X", r"X")
          .replace("X", r"$X$")
          .replace(".txt","")
          .replace("_2", "")
-         .replace(".0X", r"$X$")
          )
 
 
@@ -120,10 +142,11 @@ for i, f in enumerate(energy_files):
         iterations,
         iter_energies,
         marker=markers[i % len(markers)],
-        markersize=12,
+        markersize=8,
         linewidth=2,
         label=label
     )
+
 if scan == "Lvv":
     if basis == "cc-pvdz":
         fixed_rank_text = r"$R_{{oo}} = 0.5X,\; R_{{ov}} = 1.5X$"
@@ -152,37 +175,39 @@ else:
     fixed_rank_text = r"$R_{{oo}} = 0.5X$"
     scan_rank = r"CP rank"
 # --------- LABELS ---------
-#plt.axhline(y=ccsd_energy,linewidth=2.5,alpha=0.9,label="DF-CCSD")
+#plt.axhline(y=ccsd_energy,linewidth=2,alpha=0.9,label="CCSD")
 plt.xlabel(r"Iteration")
 plt.ylabel(r"Energy, Ha")
+#plt.ylim(-0.9465, -0.9458)
+plt.ylim(-1.2103, -1.2086)
 ax = plt.gca()
 ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 title_text = (rf"{method} Energy Convergence""\n" 
-              rf" {title_name}, {Basis} ") 
+              rf" {title_name}, {Basis}/{Basis}-RI ") 
 #if fixed_rank_text != "":
     #title_text += ", " + fixed_rank_text
-
+plt.ticklabel_format(axis='y', style='plain', useOffset=False)
 plt.title(title_text)
 plt.grid(True, linestyle="--", alpha=0.6)
-plt.legend(
-    loc='upper left',
-    bbox_to_anchor=(1.05, 1),
-    title= scan_rank)
+#plt.legend(loc='upper center',bbox_to_anchor=(0.5, -0.15),ncol=3,labelspacing=0.1,handletextpad=0.5, columnspacing=1.0,title=scan_rank)
+
+#plt.legend(loc='upper left',bbox_to_anchor=(1.05, 1),title= scan_rank)
+plt.legend(loc='best',labelspacing=0.1,handletextpad=0.5)
 plt.tight_layout()
-plt.savefig(os.path.join(energy_folder, f"{method}_iteration_plot_{basis}_{mol_name}_{scan}_minus_1st_iter_new.png"),dpi=300)
+plt.savefig(os.path.join(energy_folder, f"{method}_iteration_plot_{basis}_{mol_name}_{scan}_minus_1st_iter.png"),dpi=300)
 plt.show()
 ##################
 ##################
 #"""
-plt.figure(figsize=(10, 7))
+plt.figure(figsize=(6.5, 6))
 
-file = os.path.join(energy_folder, f"{method}_iter_energy_DF_2.txt")
+file = os.path.join(energy_folder, f"{method}_iter_energies_DF_2.txt")
 df_energy = np.loadtxt(file)
 df_energy = df_energy[1:]
 
-energy_files.remove(f"{method}_iter_energy_DF_2.txt")
+#energy_files.remove(f"{method}_iter_energies_DF.txt")
 
-for i, f in enumerate(energy_files):
+for i, f in enumerate(cp_files):
     file_path = os.path.join(energy_folder, f)
     iter_energies = np.loadtxt(file_path)
     iter_energies = iter_energies[1:]
@@ -194,19 +219,19 @@ for i, f in enumerate(energy_files):
     iterations = np.arange(1, len(iter_energies) + 1)
 
     label = (
-        f.replace(f"{method}_iter_energy_", "")
+        f.replace(f"{method}_iter_energies_", "")
          #.replace("CC2_iter_energies_", "")  
          .replace(f"CPD_{scan_str}_rank","") 
+         .replace(".0X", r"X")
          .replace("X", r"$X$")
          .replace(".txt","")
          .replace("_2", "")
-         .replace(".0X", r"$X$")
          )
     plt.plot(
             iterations[:n],
         diff,
         marker=markers[i % len(markers)],
-        markersize=12,
+        markersize=8,
         linewidth=2,
         label=label
     )
@@ -220,22 +245,15 @@ ax = plt.gca()
 #ax.yaxis.get_major_formatter().set_scientific(False)
 ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 title_text = (rf"{method} Error per Iteration""\n" 
-              fr" {title_name}, {Basis} ") 
+              fr" {title_name}, {Basis}/{Basis}-RI ") 
 #if fixed_rank_text != "":
     #title_text += ", " + fixed_rank_text
 
 plt.title(title_text)
 plt.grid(True, which = "both", linestyle="--", alpha=0.6)
-plt.legend(
-    loc='upper left',
-    bbox_to_anchor=(1.05, 1),
-    title= scan_rank)
-
+#plt.legend(loc='upper left',bbox_to_anchor=(1.05, 1),title= scan_rank)
+#plt.legend(loc='best',title= scan_rank)
 plt.tight_layout()
-plt.savefig(
-    os.path.join(energy_folder, f"{method}_energy_diff_iter_plot_{basis}_{mol_name}_{scan}_minus_1st_iter_new.png"),
-    dpi=300,
-    bbox_inches='tight'
-)
+plt.savefig(os.path.join(energy_folder, f"{method}_energy_diff_iter_plot_{basis}_{mol_name}_{scan}_minus_1st_iter.png"),dpi=300,bbox_inches='tight')
 plt.show()
 #"""

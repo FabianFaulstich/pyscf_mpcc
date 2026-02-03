@@ -100,34 +100,54 @@ else:
 scan_str = str(scan).replace("_fix_Loo_1", "")
 
 # Load all Y files
-Y_files = sorted([
+DF_files = sorted([
     f for f in os.listdir(Y_folder)
-    if (f.startswith(f"CC2_{tensor}_CPD") or f.startswith(f"CC2_{tensor}_DF")) and f.endswith(".npy")
+    if f.startswith(f"CC2_{tensor}_DF") and f.endswith(".npy")
+])
+
+CPD_files = sorted([
+    f for f in os.listdir(Y_folder)
+    if f.startswith(f"CC2_{tensor}_CPD") and f.endswith(".npy")
 ])
 # LaTeX-friendly font sizes
 plt.rcParams.update({
     "font.family": "serif",
-    #"font.serif": ["Computer Modern Roman"],
     "mathtext.fontset": "cm",
-    "font.size": 18,
-    "axes.labelsize": 20,
-    "axes.titlesize": 22,
-    "xtick.labelsize": 16,
-    "ytick.labelsize": 16,
-    "legend.fontsize": 10,
+    "font.size": 22,
+    "axes.labelsize": 14,
+    "axes.titlesize": 16,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
+    "legend.fontsize": 14,
 })
 
-plt.figure(figsize=(10, 7))
+plt.figure(figsize=(6.5,6))
+bins = np.logspace(-16, -1.2, 120)
 
-for i, f in enumerate(Y_files):
-    file_path = os.path.join(Y_folder, f)
-    Y = np.load(file_path)         # load tensor
-    #print(f"shape of Y:{Y.shape}")
-    Y_flat = Y.flatten()           # flatten to 1D
-    Y_abs = np.abs(Y_flat)
+colors = plt.cm.tab10.colors  # nice default color cycle
+# ---- DF reference ----
+Y = np.load(os.path.join(Y_folder, DF_files[0]))
+Y_abs = np.abs(Y.flatten())
+Y_abs = Y_abs[Y_abs > 0]
+
+DF_label = DF_files[0].replace(f"CC2_{tensor}_", "").replace(".npy", "")
+
+plt.hist(
+    Y_abs,
+    bins=bins,
+    histtype='stepfilled',        # outline only
+    #linewidth=3,
+    color='saddlebrown',    # DF color
+    alpha=0.1,              # DF alpha
+    label=DF_label,
+    zorder=1
+)
+
+for i, f in enumerate(CPD_files):
+    Y = np.load(os.path.join(Y_folder, f))
+    Y_abs = np.abs(Y.flatten())
     Y_abs = Y_abs[Y_abs > 0]
-    #print(f"shape of flaten Y:{Y_flat.shape}")
-    # clean label
+
     label = (
         f.replace(f"CC2_{tensor}_", "")
          .replace(f"CPD_{scan_str}_rank", "")
@@ -136,33 +156,40 @@ for i, f in enumerate(Y_files):
          .replace(".0X", r"X")
     )
 
-    # Plot histogram of values
-    #bins = np.logspace(np.log10(Y_abs.min()),np.log10(Y_abs.max()),120)
-    bins = np.logspace(-16, -1.2, 120)
+    plt.hist(
+        Y_abs,
+        bins=bins,
+        histtype='stepfilled',
+        alpha=0.3,
+        color=colors[i % len(colors)],
+        edgecolor='none',
+        label=label,
+        zorder=3
+    )
 
-
-    plt.hist(Y_abs,bins=bins,label=label,histtype='step',linewidth=3)
-plt.xlim(1e-7, 1e-1)
-plt.xticks([ 1e-7,1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1])
 plt.xscale("log")
 plt.yscale("log")
-plt.xlabel(f"{tensor} Value")
-plt.ylabel("Count")
-title_text = (f"Histogram of Flattened {tensor}\n"
-          f" {title_name}, {Basis}, ")
-if fixed_rank_text != "":
-    title_text += "," + fixed_rank_text
-plt.title(title_text)
+plt.xlim(1e-10, 1e-1)
+plt.xticks([1e-10,1e-9,1e-8,1e-7,1e-6,1e-5,1e-4,1e-3,1e-2,1e-1])
 
-plt.grid(True,which="both", linestyle="--", alpha=0.4)
+plt.xlabel(f"{tensor} Value")
+plt.ylabel("Probability Density")
+
+title_text = (f"Distribution of {tensor} Values\n"
+              f"{title_name}, {Basis}")
+if fixed_rank_text:
+    title_text += ", " + fixed_rank_text
+
+plt.title(title_text)
 plt.legend(title=f"{scan_rank}")
+plt.grid(True, which="both", linestyle="--", alpha=0.3)
 plt.tight_layout()
 
-# Save histogram
 plt.savefig(
     os.path.join(Y_folder, f"Histogram_{tensor}_values_{mol_name}_{basis}.png"),
     dpi=300
 )
+
 plt.show()
 # ----------------------------
 # L2 error plotting
@@ -197,17 +224,17 @@ for f in cpd_files:
 ranks, errors = zip(*sorted(zip(ranks,errors)))
 
 # ----------------- PLOT -----------------
-plt.figure(figsize=(10, 7))
+plt.figure(figsize=(6.5,6))
 plt.plot(ranks, errors, marker="o", linewidth=2)
 
 plt.xlabel(rf"{scan_rank}")
-ticks = [1, 1.5, 2, 2.5, 3, 3.5]
-labels = [rf"${t:g}X$" for t in ticks]
+#ticks = [1, 1.5, 2, 2.5, 3, 3.5]
+#labels = [rf"${t:g}X$" for t in ticks]
 
-plt.xticks(ticks, labels)
-#yticks = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-#ylabels = [rf"${t:g}$" for t in yticks]
-#plt.yticks(yticks, ylabels)
+#plt.xticks(ticks, labels)
+yticks = [0.0, 0.4, 0.8,1.2, 1.6, 2,2.4,2.8]
+ylabels = [rf"{t:g}" for t in yticks]
+plt.yticks(yticks, ylabels)
 ylabel = r"Relative Percent Error"
 
 plt.ylabel(ylabel)
@@ -217,10 +244,10 @@ plt.ylabel(ylabel)
 title_text = (
     rf"{tensor} $L_2$ Percent Error vs Rank"
     "\n"
-    rf"{title_name}, {Basis}"
+    rf"{title_name}, {Basis}/{Basis}-RI"
 )
-if fixed_rank_text != "":
-    title_text += ", " + fixed_rank_text
+#if fixed_rank_text != "":
+    #title_text += ", " + fixed_rank_text
 
 plt.title(title_text)
 
@@ -229,9 +256,79 @@ plt.grid(True, linestyle="--", alpha=0.6)
 plt.tight_layout()
 
 out_file = os.path.join(
-    Y_folder, f"{tensor}_L2_error_{basis}_{mol_name}_{scan}.png"
+    Y_folder, f"{tensor}_L2_percent_error_{basis}_{mol_name}_{scan}.png"
 )
 plt.savefig(out_file, dpi=300)
 plt.show()
 
+'''
+# Load all Y files
+DF_files = sorted([
+    f for f in os.listdir(Y_folder)
+    if f.startswith(f"CC2_{tensor}_DF") and f.endswith(".npy")
+])
 
+CPD_files = sorted([
+    f for f in os.listdir(Y_folder)
+    if f.startswith(f"CC2_{tensor}_CPD") and f.endswith(".npy")
+])
+# LaTeX-friendly font sizes
+plt.rcParams.update({
+    "font.family": "serif",
+    #"font.serif": ["Computer Modern Roman"],
+    "mathtext.fontset": "cm",
+    "font.size": 18,
+    "axes.labelsize": 20,
+    "axes.titlesize": 22,
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 10,
+})
+
+plt.figure(figsize=(10, 7))
+bins = np.logspace(-16, -1.2, 120)
+
+colors = plt.cm.tab10.colors  # nice default color cycle
+# ---- DF reference ----
+Y = np.load(os.path.join(Y_folder, DF_files[0]))
+Y_abs = np.abs(Y.flatten())
+Y_abs = Y_abs[Y_abs > 0]
+
+DF_label = DF_files[0].replace(f"CC2_{tensor}_", "").replace(".npy", "")
+
+plt.hist(
+    Y_abs,
+    bins=bins,
+    histtype='stepfilled',        # outline only
+    #linewidth=3,
+    color='saddlebrown',    # DF color
+    alpha=0.3,              # DF alpha
+    label=DF_label,
+    zorder=1
+)
+
+for i, f in enumerate(CPD_files):
+    Y = np.load(os.path.join(Y_folder, f))
+    Y_abs = np.abs(Y.flatten())
+    Y_abs = Y_abs[Y_abs > 0]
+
+    label = (
+        f.replace(f"CC2_{tensor}_", "")
+         .replace(f"CPD_{scan_str}_rank", "")
+         .replace(".npy", "")
+         .replace("1X", r"X")
+         .replace(".0X", r"X")
+    )
+
+    plt.hist(
+        Y_abs,
+        bins=bins,
+        histtype='stepfilled',
+        alpha=0.6,
+        color=colors[i % len(colors)],
+        edgecolor='none',
+        label=label,
+        zorder=3
+    )
+
+'''

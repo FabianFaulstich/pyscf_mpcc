@@ -1,74 +1,33 @@
 import os
 import re
-import argparse
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 from pathlib import Path
+#import seaborn as sns
 
-# --------------------------------------------------
-# Argument parsing
-# --------------------------------------------------
-parser = argparse.ArgumentParser(
-    description="Histogram of CC2 Y amplitudes at fixed CP rank across water clusters"
-)
-parser.add_argument("basis", type=str, help="Basis set, e.g. cc-pvdz")
-parser.add_argument("--tensor",type=str,required=True, choices=["Y", "Ω"], help="tensor Y or Omega")
-parser.add_argument(
-    "--molecule", type=str, required=True,
-    choices=["water_clusters", "carbon_chains"],
-    help="Which systems to pick e.g water_clusters"
-)
-parser.add_argument(
-    "--scan", type=str, required=True,
-    choices=["Lvv", "Lov", "Lov_Lvv","Lov_fix_Loo_1","Lvv_fix_Loo_1","Lov_Lvv_fix_Loo_1"],
-    help="Which tensor to scan"
-)
-parser.add_argument(
-    "--results", type=str, default=None,
-    help="Path to results folder"
-)
-parser.add_argument(
-    "--rank", type=str, default="2.5X",
-    help="CP rank to plot (default: 2.5X)"
-)
+parser = argparse.ArgumentParser(description="Plot CC2 Y_amplitudes for a molecule and basis")
+parser.add_argument("basis", type=str, help="Basis set, e.g., cc-pvdz")
+parser.add_argument("molecules",nargs="+",type=str,help="One or more molecule names, e.g., H2O TIP4P-6")
+parser.add_argument("--scan",type=str,required=True, choices=["Lvv","Lov","Lov_Lvv","Lov_fix_Loo_1","Lvv_fix_Loo_1","Lov_Lvv_fix_Loo_1"],help="which tensor to scan:Lov etc")
+parser.add_argument("--results", type=str, default=None, help="path to result folder")
+parser.add_argument("--tensor",type=str,required=True, choices=["Y","Ω","Foo","Fov","Fvv"],help="which tensor to scan:Y etc")
 
 args = parser.parse_args()
 
+molecules = args.molecules
 basis = args.basis
-molecule = args.molecule
-tensor = args.tensor
 scan = args.scan
-target_rank = args.rank
-
-# --------------------------------------------------
-# Basis names for plotting
-# --------------------------------------------------
+tensor = args.tensor
 basis_to_mol = {
-    "cc-pvdz": "DZ",
-    "cc-pvtz": "TZ",
-    "aug-cc-pvdz": "aVDZ",
-    "aug-cc-pvtz": "aVTZ",
-}
-Basis = basis_to_mol.get(basis, basis)
+            "cc-pvdz": "DZ",
+            "cc-pvtz": "TZ",
+            "aug-cc-pvdz": "aVDZ",
+            "aug-cc-pvtz": "aug-cc-pvtz"
+            }
+Basis = basis_to_mol[basis]
+import re
 
-# --------------------------------------------------
-# Results path
-# --------------------------------------------------
-if args.results:
-    results = Path(os.path.expanduser(args.results)).resolve()
-else:
-    results = Path(__file__).parent / "output_data"
-
-# --------------------------------------------------
-# Molecule list: TIP4P-2 ... TIP4P-10
-# --------------------------------------------------
-if molecule == "water_clusters":
-    molecules = [f"TIP4P-{i}" for i in range(1, 11)]
-else:
-    molecules = ["c2h6", "c3h8","c4h10", "c5h12","c6h14","c8h18","c10h22"] 
-# --------------------------------------------------
-# Molecule → LaTeX
-# --------------------------------------------------
 def mol_to_latex(mol_name):
     """
     Convert molecule name to LaTeX string for plot titles.
@@ -80,148 +39,148 @@ def mol_to_latex(mol_name):
     if m:
         n = int(m.group(1))
         if n == 1:
-            return r"$\mathrm{H_2O}$"
+            return r"${H_2O}$"
         else:
-            return rf"$\mathrm{{(H_2O)_{{{n}}}}}$"
+            return rf"${{(H_2O)_{{{n}}}}}$"
 
     # --------------------------------------------------
     # Hydrocarbons: C2H6, C10H22
     # --------------------------------------------------
     m = re.match(r"c(\d+)h(\d+)$", mol_name)
     if m:
-        return rf"$\mathrm{{C_{{{m.group(1)}}}H_{{{m.group(2)}}}}}$"
+        return rf"${{C_{{{m.group(1)}}}H_{{{m.group(2)}}}}}$"
 
     # --------------------------------------------------
     # Generic fallback (safe default)
     # --------------------------------------------------
-    return rf"$\mathrm{{{mol_name}}}$"
-# --------------------------------------------------
-# Matplotlib style
-# --------------------------------------------------
-plt.rcParams.update({
-    "font.size": 18,
-    "axes.labelsize": 20,
-    "axes.titlesize": 22,
-    "xtick.labelsize": 16,
-    "ytick.labelsize": 16,
-    "legend.fontsize": 11,
-})
+    return rf"${{{mol_name}}}$"
+#title_name = mol_to_latex(mol_name)
 
-L_rank =  r"$R_{{oo}}= X$" if "_fix_Loo_1" in scan else  r"$R_{{oo}}=0.5X$"
+if args.results:
+    results = Path(os.path.expanduser(args.results)).resolve()
+else:
+    results = Path(__file__).parent / "output_data"
+
 if scan == "Lvv":
     if basis == "cc-pvdz":
-        fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{ov}} = 1.5X$"
+        fixed_rank_text = r"$R_{{oo}} = 0.5X,\; R_{{ov}} = 1.5X$"
     else: 
-         fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{ov}} = 2X$"
+         fixed_rank_text = r"$R_{{oo}} = 0.5X,\; R_{{ov}} = 2X$"
     scan_rank = r"$R_{\mathrm{vv}}$"
 
 elif scan == "Lov":
-    fixed_rank_text = r"$R_{\mathrm{oo}} = 0.5X,\; R_{\mathrm{vv}} = 2.5X$"
-    scan_rank = r"$R_{\mathrm{ov}}$"
+    fixed_rank_text = r"$R_{{oo}} = 0.5X,\; R_{{vv}} = 2.5X$"
+    scan_rank = r"$R_{{ov}}$"
 elif scan == "Lov_fix_Loo_1":
-    fixed_rank_text = r"$R_{\mathrm{oo}} = X,\; R_{\mathrm{vv}} = 2.5X$"
-    scan_rank = r"$R_{\mathrm{ov}}$"
+    fixed_rank_text = r"$R_{{oo}} = X,\; R_{{vv}} = 2.5X$"
+    scan_rank = r"$R_{{ov}}$"
 
 elif scan == "Lvv_fix_Loo_1":
     if basis == "cc-pvdz":
-        fixed_rank_text = r"$R_{\mathrm{ov}} = 1.5X,\; R_{\mathrm{oo}} = 1X$"
+        fixed_rank_text = r"$R_{{ov}} = 1.5X,\; R_{{oo}} = 1X$"
     else:
-        fixed_rank_text = r"$R_{\mathrm{ov}} = 2X,\; R_{\mathrm{oo}} = 1X$" 
-    scan_rank = r"$R_{\mathrm{vv}}$"
+        fixed_rank_text = r"$R_{{ov}} = 2X,\; R_{{oo}} = 1X$" 
+    scan_rank = r"$R_{{vv}}$"
 
 elif scan == "Lov_Lvv_fix_Loo_1":
-    fixed_rank_text = r"$R_{\mathrm{oo}} = 1X$"
-    scan_rank = r"CP rank"
+    fixed_rank_text = r"$R_{{oo}} = 1X$"
+    scan_rank = r"$R_{ov}$, $R_{vv}$"
 else:
-    fixed_rank_text = ""
+    fixed_rank_text = r"$R_{{oo}} = 0.5X$"
     scan_rank = r"CP rank"
 
-plt.figure(figsize=(10, 7))
 
-# --------------------------------------------------
-# Fixed bins for all histograms
-# --------------------------------------------------
-bins = np.logspace(-16, -1.2, 120)
+def compute_l2_errors(mol_name):
+    title_name = mol_to_latex(mol_name)
 
-# --------------------------------------------------
-# Main loop: fixed rank, varying molecule size
-# --------------------------------------------------
-for mol_name in molecules:
     if tensor == "Y":
-        Y_folder = results / basis / mol_name / f"Y_amp_{scan}"
+        Y_folder = os.path.join(results, basis, mol_name, f"Y_amp_{scan}")
     else:
-        Y_folder = results / basis / mol_name / f"{tensor}_{scan}"
+        Y_folder = os.path.join(results, basis, mol_name, f"{tensor}_{scan}")
 
-    if not Y_folder.is_dir():
-        print(f"[skip] {mol_name}: folder not found")
-        continue
+    # DF reference
+    df_file = os.path.join(Y_folder, f"CC2_{tensor}_DF_2.npy")
+    Y_DF = np.load(df_file)
 
-    # Pick CPD or DF file with the desired rank
-    Y_df_files = [
+    cpd_files = sorted(
         f for f in os.listdir(Y_folder)
-        if f.startswith(f"CC2_{tensor}_DF") and f.endswith(".npy")
-    ]
-
-    Y_cpd_files = [
-        f for f in os.listdir(Y_folder)
-        if f.startswith(f"CC2_{tensor}_CPD")
-        and target_rank in f
-        and f.endswith(".npy")
-    ]
-
-    if len(Y_df_files) == 0 or len(Y_cpd_files) == 0:
-        print(f"[skip] {mol_name}: missing DF or CPD data")
-        continue    
-    Y_df = np.load(Y_folder / Y_df_files[0])
-    Y_cpd = np.load(Y_folder / Y_cpd_files[0])
-    if Y_df.shape != Y_cpd.shape:
-        print(f"[skip] {mol_name}: shape mismatch DF {Y_df.shape} vs CPD {Y_cpd.shape}")
-        continue
-
-    # --- Difference ---
-    Y_diff = Y_df - Y_cpd
-    Y_abs = np.abs(Y_diff.ravel())
-    Y_abs = Y_abs[Y_abs > 0]
-
-    if Y_abs.size == 0:
-        print(f"[skip] {mol_name}: empty difference")
-        continue
-    plt.hist(
-        Y_abs,
-        bins=bins,
-        histtype="step",
-        linewidth=3,
-        label=mol_to_latex(mol_name),
+        if f.startswith(f"CC2_{tensor}_CPD") and f.endswith("2.npy")
     )
 
-    print(f"[ok] {mol_name} | {Y_abs.size} entries")
+    ranks = []
+    errors = []
 
-# --------------------------------------------------
-# Plot formatting
-# --------------------------------------------------
-plt.xscale("log")
-plt.yscale("log")
-plt.xlim(1e-9, 1e-4)
-plt.xticks([1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4])
+    for f in cpd_files:
+        Y_CPD = np.load(os.path.join(Y_folder, f))
 
-plt.xlabel(f"Approx. {tensor} Value")
-plt.ylabel("Frequency")
+        diff_norm = np.linalg.norm(Y_DF - Y_CPD)
+        diff_norm /= np.linalg.norm(Y_DF)
+        diff_norm *= 100  # percent
 
-plt.title(
-    f"Histogram of CC2 {tensor} at Fixed Rank\n"
-    rf"{Basis}, {scan_rank}={target_rank}, " + fixed_rank_text
+        m = re.search(r"rank([0-9.]+)X", f)
+        rank = float(m.group(1)) if m else None
+
+        ranks.append(rank)
+        errors.append(diff_norm)
+
+    ranks, errors = zip(*sorted(zip(ranks, errors)))
+    return ranks, errors, title_name
+# LaTeX-friendly font sizes
+plt.rcParams.update({
+    "font.family": "serif",
+    "mathtext.fontset": "cm",
+    "font.size": 22,
+    "axes.labelsize": 14,
+    "axes.titlesize": 16,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
+    "legend.fontsize": 14,
+})
+
+# ----------------- PLOT -----------------
+plt.figure(figsize=(6.5, 6))
+markers = ["o", "s", "D", "^", "v", "P", "X"]
+
+for i,mol in enumerate(molecules):
+    ranks, errors, title_name = compute_l2_errors(mol)
+    plt.plot(
+        ranks,
+        errors,
+        marker=markers[i % len(markers)],
+        markersize = 8,
+        linewidth=2,
+        label=title_name
+    )
+
+plt.xlabel(rf"{scan_rank}")
+ticks = [ 1.5, 2, 2.5, 3, 3.5]
+labels = [rf"{t:g}X" for t in ticks]
+
+plt.xticks(ticks, labels)
+yticks = [0.0, 0.5, 1,1.5, 2, 2.5,3,3.5]
+ylabels = [rf"{t:g}" for t in yticks]
+plt.yticks(yticks, ylabels)
+ylabel = r"Relative Percent Error"
+
+plt.ylabel(ylabel)
+#plt.yscale("log")
+#plt.yticks([0.6,0.8,1,1.2,1.4,1.6,1.8,2])
+
+title_text = (
+    rf"{tensor} $L_2$ Percent Error vs Rank"
+    "\n"
+    rf" {Basis}/{Basis}-RI"
 )
+#if fixed_rank_text != "":
+    #title_text += ", " + fixed_rank_text
 
-plt.grid(True, which="both", linestyle="--", alpha=0.4)
-plt.legend(title=f"{molecule}", ncol=2)
+plt.title(title_text)
+
+plt.legend()
+plt.grid(True, linestyle="--", alpha=0.6)
 plt.tight_layout()
 
-# --------------------------------------------------
-# Save figure
-# --------------------------------------------------
-outfile = results / basis / f"Histogram_{molecule}_{tensor}_rank_{target_rank}_{scan}_{basis}.png"
-plt.savefig(outfile, dpi=300)
-print(f"\nSaved figure: {outfile}")
-
+out_file = os.path.join(results,f"{basis}", f"{tensor}_L2_percent_error_{basis}_{scan}.png")
+plt.savefig(out_file, dpi=300)
 plt.show()
 

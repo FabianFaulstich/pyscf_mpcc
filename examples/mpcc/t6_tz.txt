@@ -1,0 +1,759 @@
+==========================================
+ Running DF (rank_reduced = false)
+==========================================
+
+=== Running calculation for TIP4P-6 ===
+value of Loo rank: 1
+converged SCF energy = -456.395526814743
+MPCC fragments: [[array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
+       17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]), array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11])]]
+output:In unfactorized Kernel
+eri norm:6.518965942108024
+It 1; correlation energy -1.358298e+00; residual 1.412259e-01
+eri norm:6.518965942108024
+It 2; correlation energy -1.422652e+00; residual 1.183086e-01
+eri norm:6.518965942108024
+It 3; correlation energy -1.618507e+00; residual 1.498123e-01
+eri norm:6.518965942108024
+It 4; correlation energy -1.601566e+00; residual 3.763955e-02
+eri norm:6.518965942108024
+It 5; correlation energy -1.614741e+00; residual 2.236933e-02
+eri norm:6.518965942108024
+It 6; correlation energy -1.643648e+00; residual 1.539735e-02
+eri norm:6.518965942108024
+It 7; correlation energy -1.658961e+00; residual 5.812437e-03
+eri norm:6.518965942108024
+It 8; correlation energy -1.662173e+00; residual 2.618488e-03
+eri norm:6.518965942108024
+It 9; correlation energy -1.662737e+00; residual 1.720768e-03
+eri norm:6.518965942108024
+It 10; correlation energy -1.662398e+00; residual 1.033763e-03
+eri norm:6.518965942108024
+It 11; correlation energy -1.662525e+00; residual 7.044734e-04
+eri norm:6.518965942108024
+It 12; correlation energy -1.662573e+00; residual 3.257011e-04
+eri norm:6.518965942108024
+It 13; correlation energy -1.662467e+00; residual 1.841148e-04
+eri norm:6.518965942108024
+It 14; correlation energy -1.662393e+00; residual 1.217814e-04
+eri norm:6.518965942108024
+It 15; correlation energy -1.662344e+00; residual 8.840125e-05
+eri norm:6.518965942108024
+It 16; correlation energy -1.662295e+00; residual 6.058517e-05
+eri norm:6.518965942108024
+It 17; correlation energy -1.662273e+00; residual 2.795992e-05
+eri norm:6.518965942108024
+It 18; correlation energy -1.662261e+00; residual 1.596776e-05
+eri norm:6.518965942108024
+It 19; correlation energy -1.662256e+00; residual 1.138306e-05
+eri norm:6.518965942108024
+It 20; correlation energy -1.662253e+00; residual 8.841700e-06
+eri norm:6.518965942108024
+It 21; correlation energy -1.662250e+00; residual 5.435229e-06
+eri norm:6.518965942108024
+It 22; correlation energy -1.662249e+00; residual 3.504092e-06
+eri norm:6.518965942108024
+It 23; correlation energy -1.662249e+00; residual 2.130169e-06
+eri norm:6.518965942108024
+It 24; correlation energy -1.662249e+00; residual 1.513760e-06
+eri norm:6.518965942108024
+It 25; correlation energy -1.662249e+00; residual 1.063736e-06
+eri norm:6.518965942108024
+It 26; correlation energy -1.662250e+00; residual 6.773577e-07
+
+eri norm:6.518965942108024
+norm of Omega:9.254274579045179e-07
+DFMPCC It: 1; correlation energy: -1.7021083442
+output:In unfactorized Kernel
+eri norm:6.518965942108024
+It 1; correlation energy -1.702108e+00; residual 2.254056e-02
+eri norm:6.518965942108024
+It 2; correlation energy -1.699769e+00; residual 1.291507e-02
+eri norm:6.518965942108024
+It 3; correlation energy -1.700151e+00; residual 1.743681e-02
+eri norm:6.518965942108024
+It 4; correlation energy -1.700099e+00; residual 3.555194e-03
+eri norm:6.518965942108024
+It 5; correlation energy -1.700137e+00; residual 2.497185e-03
+eri norm:6.518965942108024
+It 6; correlation energy -1.700194e+00; residual 1.589482e-03
+eri norm:6.518965942108024
+It 7; correlation energy -1.700240e+00; residual 7.532526e-04
+eri norm:6.518965942108024
+It 8; correlation energy -1.700269e+00; residual 4.328667e-04
+eri norm:6.518965942108024
+It 9; correlation energy -1.700280e+00; residual 2.718893e-04
+eri norm:6.518965942108024
+It 10; correlation energy -1.700281e+00; residual 1.905250e-04
+eri norm:6.518965942108024
+It 11; correlation energy -1.700283e+00; residual 1.205953e-04
+eri norm:6.518965942108024
+It 12; correlation energy -1.700283e+00; residual 7.183780e-05
+eri norm:6.518965942108024
+It 13; correlation energy -1.700281e+00; residual 4.652738e-05
+eri norm:6.518965942108024
+It 14; correlation energy -1.700280e+00; residual 3.327312e-05
+eri norm:6.518965942108024
+It 15; correlation energy -1.700279e+00; residual 2.513593e-05
+eri norm:6.518965942108024
+It 16; correlation energy -1.700278e+00; residual 1.559651e-05
+eri norm:6.518965942108024
+It 17; correlation energy -1.700277e+00; residual 1.067344e-05
+eri norm:6.518965942108024
+It 18; correlation energy -1.700277e+00; residual 7.127208e-06
+eri norm:6.518965942108024
+It 19; correlation energy -1.700277e+00; residual 5.567842e-06
+eri norm:6.518965942108024
+It 20; correlation energy -1.700277e+00; residual 4.076502e-06
+eri norm:6.518965942108024
+It 21; correlation energy -1.700277e+00; residual 2.831498e-06
+eri norm:6.518965942108024
+It 22; correlation energy -1.700277e+00; residual 1.961561e-06
+eri norm:6.518965942108024
+It 23; correlation energy -1.700277e+00; residual 1.351092e-06
+eri norm:6.518965942108024
+It 24; correlation energy -1.700277e+00; residual 1.055987e-06
+eri norm:6.518965942108024
+It 25; correlation energy -1.700277e+00; residual 8.138960e-07
+
+eri norm:6.518965942108024
+norm of Omega:0.034899619675201055
+DFMPCC It: 2; correlation energy: -1.7029275168
+  ΔE = 8.192e-04
+
+==========================================
+ Running CPD (rank_reduced = true)
+==========================================
+------ CPD Run: Lov=Lvv = 1.5 ------
+
+=== Running calculation for TIP4P-6 ===
+value of Loo rank: 1
+converged SCF energy = -456.395526814743
+Converged(CPD) in 37 iterations.
+Error: 0.0066041695694962895
+Converged(CPD) in 63 iterations.
+Error: 0.022923187162315874
+Converged(CPD) in 83 iterations.
+Error: 0.08258227319866841
+MPCC fragments: [[array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
+       17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]), array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11])]]
+output:In unfactorized Kernel
+eri norm:6.51725294782416
+It 1; correlation energy -1.357635e+00; residual 1.411592e-01
+eri norm:6.51725294782416
+It 2; correlation energy -1.421744e+00; residual 1.182625e-01
+eri norm:6.51725294782416
+It 3; correlation energy -1.617423e+00; residual 1.497497e-01
+eri norm:6.51725294782416
+It 4; correlation energy -1.600469e+00; residual 3.761889e-02
+eri norm:6.51725294782416
+It 5; correlation energy -1.613612e+00; residual 2.235123e-02
+eri norm:6.51725294782416
+It 6; correlation energy -1.642466e+00; residual 1.538602e-02
+eri norm:6.51725294782416
+It 7; correlation energy -1.657760e+00; residual 5.808938e-03
+eri norm:6.51725294782416
+It 8; correlation energy -1.660968e+00; residual 2.616556e-03
+eri norm:6.51725294782416
+It 9; correlation energy -1.661532e+00; residual 1.719683e-03
+eri norm:6.51725294782416
+It 10; correlation energy -1.661193e+00; residual 1.032799e-03
+eri norm:6.51725294782416
+It 11; correlation energy -1.661319e+00; residual 7.039027e-04
+eri norm:6.51725294782416
+It 12; correlation energy -1.661367e+00; residual 3.254773e-04
+eri norm:6.51725294782416
+It 13; correlation energy -1.661261e+00; residual 1.839687e-04
+eri norm:6.51725294782416
+It 14; correlation energy -1.661187e+00; residual 1.216878e-04
+eri norm:6.51725294782416
+It 15; correlation energy -1.661138e+00; residual 8.832478e-05
+eri norm:6.51725294782416
+It 16; correlation energy -1.661089e+00; residual 6.054383e-05
+eri norm:6.51725294782416
+It 17; correlation energy -1.661067e+00; residual 2.793575e-05
+eri norm:6.51725294782416
+It 18; correlation energy -1.661056e+00; residual 1.595287e-05
+eri norm:6.51725294782416
+It 19; correlation energy -1.661051e+00; residual 1.137135e-05
+eri norm:6.51725294782416
+It 20; correlation energy -1.661047e+00; residual 8.832889e-06
+eri norm:6.51725294782416
+It 21; correlation energy -1.661045e+00; residual 5.430928e-06
+eri norm:6.51725294782416
+It 22; correlation energy -1.661044e+00; residual 3.501541e-06
+eri norm:6.51725294782416
+It 23; correlation energy -1.661044e+00; residual 2.128565e-06
+eri norm:6.51725294782416
+It 24; correlation energy -1.661044e+00; residual 1.512198e-06
+eri norm:6.51725294782416
+It 25; correlation energy -1.661044e+00; residual 1.062650e-06
+eri norm:6.51725294782416
+It 26; correlation energy -1.661044e+00; residual 6.766255e-07
+
+eri norm:6.51725294782416
+norm of Omega:9.261920874262834e-07
+DFMPCC It: 1; correlation energy: -1.7011800610
+output:In unfactorized Kernel
+eri norm:6.51725294782416
+It 1; correlation energy -1.701180e+00; residual 2.242978e-02
+eri norm:6.51725294782416
+It 2; correlation energy -1.698797e+00; residual 1.281912e-02
+eri norm:6.51725294782416
+It 3; correlation energy -1.699175e+00; residual 1.725841e-02
+eri norm:6.51725294782416
+It 4; correlation energy -1.699117e+00; residual 3.540239e-03
+eri norm:6.51725294782416
+It 5; correlation energy -1.699150e+00; residual 2.490812e-03
+eri norm:6.51725294782416
+It 6; correlation energy -1.699203e+00; residual 1.584208e-03
+eri norm:6.51725294782416
+It 7; correlation energy -1.699247e+00; residual 7.527609e-04
+eri norm:6.51725294782416
+It 8; correlation energy -1.699277e+00; residual 4.346161e-04
+eri norm:6.51725294782416
+It 9; correlation energy -1.699287e+00; residual 2.734168e-04
+eri norm:6.51725294782416
+It 10; correlation energy -1.699288e+00; residual 1.923644e-04
+eri norm:6.51725294782416
+It 11; correlation energy -1.699290e+00; residual 1.218768e-04
+eri norm:6.51725294782416
+It 12; correlation energy -1.699291e+00; residual 7.271427e-05
+eri norm:6.51725294782416
+It 13; correlation energy -1.699289e+00; residual 4.715464e-05
+eri norm:6.51725294782416
+It 14; correlation energy -1.699287e+00; residual 3.376316e-05
+eri norm:6.51725294782416
+It 15; correlation energy -1.699286e+00; residual 2.555213e-05
+eri norm:6.51725294782416
+It 16; correlation energy -1.699285e+00; residual 1.587140e-05
+eri norm:6.51725294782416
+It 17; correlation energy -1.699285e+00; residual 1.088195e-05
+eri norm:6.51725294782416
+It 18; correlation energy -1.699285e+00; residual 7.288870e-06
+eri norm:6.51725294782416
+It 19; correlation energy -1.699284e+00; residual 5.709598e-06
+eri norm:6.51725294782416
+It 20; correlation energy -1.699284e+00; residual 4.177030e-06
+eri norm:6.51725294782416
+It 21; correlation energy -1.699284e+00; residual 2.904970e-06
+eri norm:6.51725294782416
+It 22; correlation energy -1.699284e+00; residual 2.014445e-06
+eri norm:6.51725294782416
+It 23; correlation energy -1.699284e+00; residual 1.390804e-06
+eri norm:6.51725294782416
+It 24; correlation energy -1.699284e+00; residual 1.089999e-06
+eri norm:6.51725294782416
+It 25; correlation energy -1.699284e+00; residual 8.438395e-07
+
+eri norm:6.51725294782416
+norm of Omega:0.03450952656234727
+DFMPCC It: 2; correlation energy: -1.7019602079
+  ΔE = 7.801e-04
+------ CPD Run: Lov=Lvv = 2 ------
+
+=== Running calculation for TIP4P-6 ===
+value of Loo rank: 1
+converged SCF energy = -456.395526814743
+Converged(CPD) in 37 iterations.
+Error: 0.006545445872595465
+Converged(CPD) in 42 iterations.
+Error: 0.01280461881430552
+Converged(CPD) in 86 iterations.
+Error: 0.0376301954941235
+MPCC fragments: [[array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
+       17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]), array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11])]]
+output:In unfactorized Kernel
+eri norm:6.518431500622657
+It 1; correlation energy -1.358053e+00; residual 1.412030e-01
+eri norm:6.518431500622657
+It 2; correlation energy -1.422336e+00; residual 1.182972e-01
+eri norm:6.518431500622657
+It 3; correlation energy -1.618128e+00; residual 1.498039e-01
+eri norm:6.518431500622657
+It 4; correlation energy -1.601182e+00; residual 3.763330e-02
+eri norm:6.518431500622657
+It 5; correlation energy -1.614346e+00; residual 2.236308e-02
+eri norm:6.518431500622657
+It 6; correlation energy -1.643233e+00; residual 1.539415e-02
+eri norm:6.518431500622657
+It 7; correlation energy -1.658540e+00; residual 5.811502e-03
+eri norm:6.518431500622657
+It 8; correlation energy -1.661751e+00; residual 2.617808e-03
+eri norm:6.518431500622657
+It 9; correlation energy -1.662315e+00; residual 1.720449e-03
+eri norm:6.518431500622657
+It 10; correlation energy -1.661976e+00; residual 1.033456e-03
+eri norm:6.518431500622657
+It 11; correlation energy -1.662102e+00; residual 7.042898e-04
+eri norm:6.518431500622657
+It 12; correlation energy -1.662150e+00; residual 3.256274e-04
+eri norm:6.518431500622657
+It 13; correlation energy -1.662044e+00; residual 1.840693e-04
+eri norm:6.518431500622657
+It 14; correlation energy -1.661970e+00; residual 1.217554e-04
+eri norm:6.518431500622657
+It 15; correlation energy -1.661921e+00; residual 8.837935e-05
+eri norm:6.518431500622657
+It 16; correlation energy -1.661872e+00; residual 6.057608e-05
+eri norm:6.518431500622657
+It 17; correlation energy -1.661850e+00; residual 2.795619e-05
+eri norm:6.518431500622657
+It 18; correlation energy -1.661839e+00; residual 1.596572e-05
+eri norm:6.518431500622657
+It 19; correlation energy -1.661834e+00; residual 1.138123e-05
+eri norm:6.518431500622657
+It 20; correlation energy -1.661830e+00; residual 8.840249e-06
+eri norm:6.518431500622657
+It 21; correlation energy -1.661828e+00; residual 5.434429e-06
+eri norm:6.518431500622657
+It 22; correlation energy -1.661827e+00; residual 3.503776e-06
+eri norm:6.518431500622657
+It 23; correlation energy -1.661827e+00; residual 2.129977e-06
+eri norm:6.518431500622657
+It 24; correlation energy -1.661827e+00; residual 1.513523e-06
+eri norm:6.518431500622657
+It 25; correlation energy -1.661827e+00; residual 1.063618e-06
+eri norm:6.518431500622657
+It 26; correlation energy -1.661827e+00; residual 6.773136e-07
+
+eri norm:6.518431500622657
+norm of Omega:9.257596211458079e-07
+DFMPCC It: 1; correlation energy: -1.7017017577
+output:In unfactorized Kernel
+eri norm:6.518431500622657
+It 1; correlation energy -1.701702e+00; residual 2.247079e-02
+eri norm:6.518431500622657
+It 2; correlation energy -1.699351e+00; residual 1.286423e-02
+eri norm:6.518431500622657
+It 3; correlation energy -1.699729e+00; residual 1.735132e-02
+eri norm:6.518431500622657
+It 4; correlation energy -1.699676e+00; residual 3.550011e-03
+eri norm:6.518431500622657
+It 5; correlation energy -1.699712e+00; residual 2.494423e-03
+eri norm:6.518431500622657
+It 6; correlation energy -1.699768e+00; residual 1.589201e-03
+eri norm:6.518431500622657
+It 7; correlation energy -1.699813e+00; residual 7.537012e-04
+eri norm:6.518431500622657
+It 8; correlation energy -1.699842e+00; residual 4.331237e-04
+eri norm:6.518431500622657
+It 9; correlation energy -1.699853e+00; residual 2.720513e-04
+eri norm:6.518431500622657
+It 10; correlation energy -1.699853e+00; residual 1.909316e-04
+eri norm:6.518431500622657
+It 11; correlation energy -1.699856e+00; residual 1.209649e-04
+eri norm:6.518431500622657
+It 12; correlation energy -1.699856e+00; residual 7.214489e-05
+eri norm:6.518431500622657
+It 13; correlation energy -1.699854e+00; residual 4.674056e-05
+eri norm:6.518431500622657
+It 14; correlation energy -1.699853e+00; residual 3.344058e-05
+eri norm:6.518431500622657
+It 15; correlation energy -1.699852e+00; residual 2.528070e-05
+eri norm:6.518431500622657
+It 16; correlation energy -1.699851e+00; residual 1.568382e-05
+eri norm:6.518431500622657
+It 17; correlation energy -1.699850e+00; residual 1.073493e-05
+eri norm:6.518431500622657
+It 18; correlation energy -1.699850e+00; residual 7.177284e-06
+eri norm:6.518431500622657
+It 19; correlation energy -1.699850e+00; residual 5.614094e-06
+eri norm:6.518431500622657
+It 20; correlation energy -1.699850e+00; residual 4.112003e-06
+eri norm:6.518431500622657
+It 21; correlation energy -1.699850e+00; residual 2.858676e-06
+eri norm:6.518431500622657
+It 22; correlation energy -1.699850e+00; residual 1.980538e-06
+eri norm:6.518431500622657
+It 23; correlation energy -1.699850e+00; residual 1.364544e-06
+eri norm:6.518431500622657
+It 24; correlation energy -1.699850e+00; residual 1.067332e-06
+eri norm:6.518431500622657
+It 25; correlation energy -1.699850e+00; residual 8.236951e-07
+
+eri norm:6.518431500622657
+norm of Omega:0.03476619302641671
+DFMPCC It: 2; correlation energy: -1.7025046519
+  ΔE = 8.029e-04
+------ CPD Run: Lov=Lvv = 2.5 ------
+
+=== Running calculation for TIP4P-6 ===
+value of Loo rank: 1
+converged SCF energy = -456.395526814743
+Converged(CPD) in 37 iterations.
+Error: 0.006317716152274442
+Converged(CPD) in 37 iterations.
+Error: 0.007835060247193564
+Converged(CPD) in 74 iterations.
+Error: 0.02144800283586609
+MPCC fragments: [[array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
+       17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]), array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11])]]
+output:In unfactorized Kernel
+eri norm:6.518765844983394
+It 1; correlation energy -1.358185e+00; residual 1.412156e-01
+eri norm:6.518765844983394
+It 2; correlation energy -1.422511e+00; residual 1.183025e-01
+eri norm:6.518765844983394
+It 3; correlation energy -1.618338e+00; residual 1.498065e-01
+eri norm:6.518765844983394
+It 4; correlation energy -1.601396e+00; residual 3.763683e-02
+eri norm:6.518765844983394
+It 5; correlation energy -1.614566e+00; residual 2.236649e-02
+eri norm:6.518765844983394
+It 6; correlation energy -1.643464e+00; residual 1.539535e-02
+eri norm:6.518765844983394
+It 7; correlation energy -1.658774e+00; residual 5.811810e-03
+eri norm:6.518765844983394
+It 8; correlation energy -1.661986e+00; residual 2.618117e-03
+eri norm:6.518765844983394
+It 9; correlation energy -1.662550e+00; residual 1.720581e-03
+eri norm:6.518765844983394
+It 10; correlation energy -1.662211e+00; residual 1.033592e-03
+eri norm:6.518765844983394
+It 11; correlation energy -1.662337e+00; residual 7.043630e-04
+eri norm:6.518765844983394
+It 12; correlation energy -1.662385e+00; residual 3.256503e-04
+eri norm:6.518765844983394
+It 13; correlation energy -1.662280e+00; residual 1.840826e-04
+eri norm:6.518765844983394
+It 14; correlation energy -1.662206e+00; residual 1.217612e-04
+eri norm:6.518765844983394
+It 15; correlation energy -1.662156e+00; residual 8.838496e-05
+eri norm:6.518765844983394
+It 16; correlation energy -1.662107e+00; residual 6.057601e-05
+eri norm:6.518765844983394
+It 17; correlation energy -1.662085e+00; residual 2.795511e-05
+eri norm:6.518765844983394
+It 18; correlation energy -1.662074e+00; residual 1.596500e-05
+eri norm:6.518765844983394
+It 19; correlation energy -1.662069e+00; residual 1.138091e-05
+eri norm:6.518765844983394
+It 20; correlation energy -1.662065e+00; residual 8.840070e-06
+eri norm:6.518765844983394
+It 21; correlation energy -1.662063e+00; residual 5.434159e-06
+eri norm:6.518765844983394
+It 22; correlation energy -1.662062e+00; residual 3.503499e-06
+eri norm:6.518765844983394
+It 23; correlation energy -1.662062e+00; residual 2.129813e-06
+eri norm:6.518765844983394
+It 24; correlation energy -1.662062e+00; residual 1.513426e-06
+eri norm:6.518765844983394
+It 25; correlation energy -1.662062e+00; residual 1.063509e-06
+eri norm:6.518765844983394
+It 26; correlation energy -1.662062e+00; residual 6.772144e-07
+
+eri norm:6.518765844983394
+norm of Omega:9.256009957307135e-07
+DFMPCC It: 1; correlation energy: -1.7019178946
+output:In unfactorized Kernel
+eri norm:6.518765844983394
+It 1; correlation energy -1.701918e+00; residual 2.251909e-02
+eri norm:6.518765844983394
+It 2; correlation energy -1.699575e+00; residual 1.289893e-02
+eri norm:6.518765844983394
+It 3; correlation energy -1.699955e+00; residual 1.740813e-02
+eri norm:6.518765844983394
+It 4; correlation energy -1.699902e+00; residual 3.553880e-03
+eri norm:6.518765844983394
+It 5; correlation energy -1.699940e+00; residual 2.497447e-03
+eri norm:6.518765844983394
+It 6; correlation energy -1.699996e+00; residual 1.589975e-03
+eri norm:6.518765844983394
+It 7; correlation energy -1.700042e+00; residual 7.537179e-04
+eri norm:6.518765844983394
+It 8; correlation energy -1.700071e+00; residual 4.332441e-04
+eri norm:6.518765844983394
+It 9; correlation energy -1.700082e+00; residual 2.721594e-04
+eri norm:6.518765844983394
+It 10; correlation energy -1.700082e+00; residual 1.908672e-04
+eri norm:6.518765844983394
+It 11; correlation energy -1.700084e+00; residual 1.208297e-04
+eri norm:6.518765844983394
+It 12; correlation energy -1.700085e+00; residual 7.201216e-05
+eri norm:6.518765844983394
+It 13; correlation energy -1.700083e+00; residual 4.665006e-05
+eri norm:6.518765844983394
+It 14; correlation energy -1.700081e+00; residual 3.337445e-05
+eri norm:6.518765844983394
+It 15; correlation energy -1.700080e+00; residual 2.521939e-05
+eri norm:6.518765844983394
+It 16; correlation energy -1.700079e+00; residual 1.564731e-05
+eri norm:6.518765844983394
+It 17; correlation energy -1.700079e+00; residual 1.070990e-05
+eri norm:6.518765844983394
+It 18; correlation energy -1.700079e+00; residual 7.155423e-06
+eri norm:6.518765844983394
+It 19; correlation energy -1.700078e+00; residual 5.592133e-06
+eri norm:6.518765844983394
+It 20; correlation energy -1.700078e+00; residual 4.095562e-06
+eri norm:6.518765844983394
+It 21; correlation energy -1.700078e+00; residual 2.845671e-06
+eri norm:6.518765844983394
+It 22; correlation energy -1.700078e+00; residual 1.971569e-06
+eri norm:6.518765844983394
+It 23; correlation energy -1.700078e+00; residual 1.358204e-06
+eri norm:6.518765844983394
+It 24; correlation energy -1.700078e+00; residual 1.062095e-06
+eri norm:6.518765844983394
+It 25; correlation energy -1.700078e+00; residual 8.191243e-07
+
+eri norm:6.518765844983394
+norm of Omega:0.034870434157425564
+DFMPCC It: 2; correlation energy: -1.7027301740
+  ΔE = 8.123e-04
+------ CPD Run: Lov=Lvv = 3 ------
+
+=== Running calculation for TIP4P-6 ===
+value of Loo rank: 1
+converged SCF energy = -456.395526814743
+Converged(CPD) in 37 iterations.
+Error: 0.006436984949577914
+Converged(CPD) in 52 iterations.
+Error: 0.0061586615604013245
+Converged(CPD) in 68 iterations.
+Error: 0.016147626018885735
+MPCC fragments: [[array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
+       17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]), array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11])]]
+output:In unfactorized Kernel
+eri norm:6.518842311294645
+It 1; correlation energy -1.358195e+00; residual 1.412171e-01
+eri norm:6.518842311294645
+It 2; correlation energy -1.422543e+00; residual 1.183022e-01
+eri norm:6.518842311294645
+It 3; correlation energy -1.618375e+00; residual 1.498043e-01
+eri norm:6.518842311294645
+It 4; correlation energy -1.601436e+00; residual 3.763752e-02
+eri norm:6.518842311294645
+It 5; correlation energy -1.614609e+00; residual 2.236823e-02
+eri norm:6.518842311294645
+It 6; correlation energy -1.643512e+00; residual 1.539645e-02
+eri norm:6.518842311294645
+It 7; correlation energy -1.658823e+00; residual 5.812201e-03
+eri norm:6.518842311294645
+It 8; correlation energy -1.662034e+00; residual 2.618378e-03
+eri norm:6.518842311294645
+It 9; correlation energy -1.662599e+00; residual 1.720728e-03
+eri norm:6.518842311294645
+It 10; correlation energy -1.662260e+00; residual 1.033736e-03
+eri norm:6.518842311294645
+It 11; correlation energy -1.662386e+00; residual 7.044453e-04
+eri norm:6.518842311294645
+It 12; correlation energy -1.662434e+00; residual 3.256873e-04
+eri norm:6.518842311294645
+It 13; correlation energy -1.662328e+00; residual 1.841073e-04
+eri norm:6.518842311294645
+It 14; correlation energy -1.662255e+00; residual 1.217760e-04
+eri norm:6.518842311294645
+It 15; correlation energy -1.662205e+00; residual 8.839775e-05
+eri norm:6.518842311294645
+It 16; correlation energy -1.662156e+00; residual 6.058367e-05
+eri norm:6.518842311294645
+It 17; correlation energy -1.662134e+00; residual 2.796042e-05
+eri norm:6.518842311294645
+It 18; correlation energy -1.662123e+00; residual 1.596830e-05
+eri norm:6.518842311294645
+It 19; correlation energy -1.662118e+00; residual 1.138357e-05
+eri norm:6.518842311294645
+It 20; correlation energy -1.662114e+00; residual 8.841952e-06
+eri norm:6.518842311294645
+It 21; correlation energy -1.662112e+00; residual 5.435119e-06
+eri norm:6.518842311294645
+It 22; correlation energy -1.662111e+00; residual 3.504040e-06
+eri norm:6.518842311294645
+It 23; correlation energy -1.662111e+00; residual 2.130186e-06
+eri norm:6.518842311294645
+It 24; correlation energy -1.662111e+00; residual 1.513817e-06
+eri norm:6.518842311294645
+It 25; correlation energy -1.662111e+00; residual 1.063788e-06
+eri norm:6.518842311294645
+It 26; correlation energy -1.662111e+00; residual 6.774209e-07
+
+eri norm:6.518842311294645
+norm of Omega:9.25465196888089e-07
+DFMPCC It: 1; correlation energy: -1.7019128115
+output:In unfactorized Kernel
+eri norm:6.518842311294645
+It 1; correlation energy -1.701913e+00; residual 2.252579e-02
+eri norm:6.518842311294645
+It 2; correlation energy -1.699576e+00; residual 1.290595e-02
+eri norm:6.518842311294645
+It 3; correlation energy -1.699957e+00; residual 1.742460e-02
+eri norm:6.518842311294645
+It 4; correlation energy -1.699906e+00; residual 3.554523e-03
+eri norm:6.518842311294645
+It 5; correlation energy -1.699944e+00; residual 2.498339e-03
+eri norm:6.518842311294645
+It 6; correlation energy -1.700001e+00; residual 1.590284e-03
+eri norm:6.518842311294645
+It 7; correlation energy -1.700047e+00; residual 7.537612e-04
+eri norm:6.518842311294645
+It 8; correlation energy -1.700076e+00; residual 4.332225e-04
+eri norm:6.518842311294645
+It 9; correlation energy -1.700087e+00; residual 2.721262e-04
+eri norm:6.518842311294645
+It 10; correlation energy -1.700087e+00; residual 1.907472e-04
+eri norm:6.518842311294645
+It 11; correlation energy -1.700089e+00; residual 1.207551e-04
+eri norm:6.518842311294645
+It 12; correlation energy -1.700090e+00; residual 7.196661e-05
+eri norm:6.518842311294645
+It 13; correlation energy -1.700088e+00; residual 4.661610e-05
+eri norm:6.518842311294645
+It 14; correlation energy -1.700086e+00; residual 3.334509e-05
+eri norm:6.518842311294645
+It 15; correlation energy -1.700085e+00; residual 2.519559e-05
+eri norm:6.518842311294645
+It 16; correlation energy -1.700084e+00; residual 1.563599e-05
+eri norm:6.518842311294645
+It 17; correlation energy -1.700084e+00; residual 1.070013e-05
+eri norm:6.518842311294645
+It 18; correlation energy -1.700084e+00; residual 7.148333e-06
+eri norm:6.518842311294645
+It 19; correlation energy -1.700083e+00; residual 5.586668e-06
+eri norm:6.518842311294645
+It 20; correlation energy -1.700083e+00; residual 4.090217e-06
+eri norm:6.518842311294645
+It 21; correlation energy -1.700083e+00; residual 2.841830e-06
+eri norm:6.518842311294645
+It 22; correlation energy -1.700083e+00; residual 1.968624e-06
+eri norm:6.518842311294645
+It 23; correlation energy -1.700083e+00; residual 1.356023e-06
+eri norm:6.518842311294645
+It 24; correlation energy -1.700083e+00; residual 1.059983e-06
+eri norm:6.518842311294645
+It 25; correlation energy -1.700083e+00; residual 8.173143e-07
+
+eri norm:6.518842311294645
+norm of Omega:0.03492401355600444
+DFMPCC It: 2; correlation energy: -1.7027312916
+  ΔE = 8.185e-04
+------ CPD Run: Lov=Lvv = 3.5 ------
+
+=== Running calculation for TIP4P-6 ===
+value of Loo rank: 1
+converged SCF energy = -456.395526814743
+Converged(CPD) in 37 iterations.
+Error: 0.006522202872867995
+Converged(CPD) in 71 iterations.
+Error: 0.00814783285716625
+Converged(CPD) in 66 iterations.
+Error: 0.014001898050886254
+MPCC fragments: [[array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
+       17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]), array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11])]]
+output:In unfactorized Kernel
+eri norm:6.518749550262047
+It 1; correlation energy -1.358134e+00; residual 1.412134e-01
+eri norm:6.518749550262047
+It 2; correlation energy -1.422485e+00; residual 1.183008e-01
+eri norm:6.518749550262047
+It 3; correlation energy -1.618304e+00; residual 1.498057e-01
+eri norm:6.518749550262047
+It 4; correlation energy -1.601366e+00; residual 3.763643e-02
+eri norm:6.518749550262047
+It 5; correlation energy -1.614538e+00; residual 2.236769e-02
+eri norm:6.518749550262047
+It 6; correlation energy -1.643439e+00; residual 1.539594e-02
+eri norm:6.518749550262047
+It 7; correlation energy -1.658749e+00; residual 5.811958e-03
+eri norm:6.518749550262047
+It 8; correlation energy -1.661961e+00; residual 2.618278e-03
+eri norm:6.518749550262047
+It 9; correlation energy -1.662525e+00; residual 1.720655e-03
+eri norm:6.518749550262047
+It 10; correlation energy -1.662186e+00; residual 1.033680e-03
+eri norm:6.518749550262047
+It 11; correlation energy -1.662313e+00; residual 7.044043e-04
+eri norm:6.518749550262047
+It 12; correlation energy -1.662361e+00; residual 3.256660e-04
+eri norm:6.518749550262047
+It 13; correlation energy -1.662255e+00; residual 1.840942e-04
+eri norm:6.518749550262047
+It 14; correlation energy -1.662181e+00; residual 1.217664e-04
+eri norm:6.518749550262047
+It 15; correlation energy -1.662132e+00; residual 8.839003e-05
+eri norm:6.518749550262047
+It 16; correlation energy -1.662083e+00; residual 6.057955e-05
+eri norm:6.518749550262047
+It 17; correlation energy -1.662061e+00; residual 2.795881e-05
+eri norm:6.518749550262047
+It 18; correlation energy -1.662049e+00; residual 1.596737e-05
+eri norm:6.518749550262047
+It 19; correlation energy -1.662045e+00; residual 1.138291e-05
+eri norm:6.518749550262047
+It 20; correlation energy -1.662041e+00; residual 8.841428e-06
+eri norm:6.518749550262047
+It 21; correlation energy -1.662038e+00; residual 5.434630e-06
+eri norm:6.518749550262047
+It 22; correlation energy -1.662038e+00; residual 3.503741e-06
+eri norm:6.518749550262047
+It 23; correlation energy -1.662037e+00; residual 2.130035e-06
+eri norm:6.518749550262047
+It 24; correlation energy -1.662038e+00; residual 1.513720e-06
+eri norm:6.518749550262047
+It 25; correlation energy -1.662038e+00; residual 1.063708e-06
+eri norm:6.518749550262047
+It 26; correlation energy -1.662038e+00; residual 6.773728e-07
+
+eri norm:6.518749550262047
+norm of Omega:9.254568724960384e-07
+DFMPCC It: 1; correlation energy: -1.7018648135
+output:In unfactorized Kernel
+eri norm:6.518749550262047
+It 1; correlation energy -1.701865e+00; residual 2.253182e-02
+eri norm:6.518749550262047
+It 2; correlation energy -1.699526e+00; residual 1.290850e-02
+eri norm:6.518749550262047
+It 3; correlation energy -1.699907e+00; residual 1.742497e-02
+eri norm:6.518749550262047
+It 4; correlation energy -1.699855e+00; residual 3.554320e-03
+eri norm:6.518749550262047
+It 5; correlation energy -1.699893e+00; residual 2.497719e-03
+eri norm:6.518749550262047
+It 6; correlation energy -1.699951e+00; residual 1.589644e-03
+eri norm:6.518749550262047
+It 7; correlation energy -1.699996e+00; residual 7.532822e-04
+eri norm:6.518749550262047
+It 8; correlation energy -1.700025e+00; residual 4.331231e-04
+eri norm:6.518749550262047
+It 9; correlation energy -1.700036e+00; residual 2.720604e-04
+eri norm:6.518749550262047
+It 10; correlation energy -1.700036e+00; residual 1.906622e-04
+eri norm:6.518749550262047
+It 11; correlation energy -1.700039e+00; residual 1.206627e-04
+eri norm:6.518749550262047
+It 12; correlation energy -1.700039e+00; residual 7.187564e-05
+eri norm:6.518749550262047
+It 13; correlation energy -1.700037e+00; residual 4.655581e-05
+eri norm:6.518749550262047
+It 14; correlation energy -1.700036e+00; residual 3.329729e-05
+eri norm:6.518749550262047
+It 15; correlation energy -1.700035e+00; residual 2.515540e-05
+eri norm:6.518749550262047
+It 16; correlation energy -1.700034e+00; residual 1.560825e-05
+eri norm:6.518749550262047
+It 17; correlation energy -1.700033e+00; residual 1.067968e-05
+eri norm:6.518749550262047
+It 18; correlation energy -1.700033e+00; residual 7.131313e-06
+eri norm:6.518749550262047
+It 19; correlation energy -1.700033e+00; residual 5.571856e-06
+eri norm:6.518749550262047
+It 20; correlation energy -1.700033e+00; residual 4.079666e-06
+eri norm:6.518749550262047
+It 21; correlation energy -1.700033e+00; residual 2.834292e-06
+eri norm:6.518749550262047
+It 22; correlation energy -1.700033e+00; residual 1.963220e-06
+eri norm:6.518749550262047
+It 23; correlation energy -1.700033e+00; residual 1.352439e-06
+eri norm:6.518749550262047
+It 24; correlation energy -1.700033e+00; residual 1.057087e-06
+eri norm:6.518749550262047
+It 25; correlation energy -1.700033e+00; residual 8.148237e-07
+
+eri norm:6.518749550262047
+norm of Omega:0.0349128163478251
+DFMPCC It: 2; correlation energy: -1.7026823394
+  ΔE = 8.175e-04
+==========================================
+ ALL RUNS COMPLETED 
+==========================================

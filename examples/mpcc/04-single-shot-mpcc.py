@@ -1,7 +1,4 @@
 import os
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 from pyscf import gto, scf, cc
 from pyscf import mpcc
@@ -72,24 +69,24 @@ if __name__ == "__main__":
 
 
     mf = scf.RHF(mol).density_fit().run()
-    
+    """
     print("\n=== Running DF-CCSD reference ===")
 
-    #cc_sd = cc.CCSD(mf)
+    cc_sd = cc.CCSD(mf)
     
     # Optional but recommended for clean comparison
     #cc_sd.conv_tol = 1e-6
     #cc_sd.max_cycle = 100
     
-    #t0 = time.time()
-    #e_ccsd, t1_ccsd, t2_ccsd = cc_sd.kernel()
-    #t1_time = time.time() - t0
-    #np.savetxt(os.path.join(energy_folder_CC_SD,"DF_CCSD_energy.txt"),np.array([e_ccsd]))
+    t0 = time.time()
+    e_ccsd, t1_ccsd, t2_ccsd = cc_sd.kernel()
+    t1_time = time.time() - t0
+    np.savetxt(os.path.join(energy_folder_CC_SD,"DF_CCSD_energy.txt"),np.array([e_ccsd]))
  
-    #print(f"DF-CCSD correlation energy: {e_ccsd:.10f}")
-    #print(f"DF-CCSD total energy: {mf.e_tot + e_ccsd:.10f}")
-    #print(f"DF-CCSD wall time: {t1_time:.2f} s")
-    
+    print(f"DF-CCSD correlation energy: {e_ccsd:.10f}")
+    print(f"DF-CCSD total energy: {mf.e_tot + e_ccsd:.10f}")
+    print(f"DF-CCSD wall time: {t1_time:.2f} s")
+    """
     # Generating LO basis 
     ao_labels = mpt.get_ao_labels(mol)
     minao="sto-3g"
@@ -130,7 +127,7 @@ if __name__ == "__main__":
 
     #num_its = 2
     energy_tol = 1e-6
-    max_macro_its = 20
+    max_macro_its = 2
 
     prev_mpcc_ene = None
     i = 0
@@ -145,14 +142,14 @@ if __name__ == "__main__":
         print(f"output:{output}")
         energy_pattern = r"It\s+\d+;\s+correlation energy\s+([-+]?\d+\.\d+e[-+]\d+)"
         iter_energies, n_iter = parse_iteration_energies(output,energy_pattern)
-        if i == 2:
-            np.savetxt(os.path.join(energy_folder_CC2,f"CC2_iter_energy_{suffix}_{i}.txt"),np.array(iter_energies))
+        #if i == 2:
+            #np.savetxt(os.path.join(energy_folder_CC2,f"CC2_iter_energies_{suffix}_{i}.txt"),np.array(iter_energies))
         Xoo, Xvo, X = mympcc.lowlevel.get_X(t1)
         Foo, Fvv, Fov = mympcc.lowlevel.get_F(t1, X, Xoo, Xvo)
         
         Ω = mympcc.lowlevel.get_Ω_slow(X, Xvo, Foo, Fvv, Fov, t1, t2)
         omega_n = np.linalg.norm(Ω)
-
+        print(f"norm of Omega:{omega_n}")
         if i == 2:
             np.save(os.path.join(Ω_folder_Lov_Lvv, f"CC2_Ω_{suffix}_{i}.npy"), Ω)
 
@@ -169,8 +166,8 @@ if __name__ == "__main__":
         t1_act_tmp, t2_act_tmp = result_hl
         ccsd_energy_pattern = r"CCSD correlation energy:\s+([-+]?\d+\.\d+)"
         ccsd_iter_energies, n_ccsd_iter = parse_iteration_energies(output_hl, ccsd_energy_pattern)
-        if i == 2:
-            np.savetxt(os.path.join(energy_folder_CCSD, f"CCSD_iter_energy_{suffix}_{i}.txt"),np.array(ccsd_iter_energies))
+        #if i == 2:
+            #np.savetxt(os.path.join(energy_folder_CCSD, f"CCSD_iter_energies_{suffix}_{i}.txt"),np.array(ccsd_iter_energies))
         
         t1_act.append(t1_act_tmp)    
         t2_act.append(t2_act_tmp) 
@@ -194,6 +191,7 @@ if __name__ == "__main__":
                 break
 
         prev_mpcc_ene = mpcc_ene
+   
     mpcc_macro_energies = np.array(mpcc_macro_energies)
 
-    np.savetxt(os.path.join(energy_folder_MPCC, f"MPCC_iter_energy_{suffix}.txt"),mpcc_macro_energies)
+    #np.savetxt(os.path.join(energy_folder_MPCC, f"MPCC_iter_energies_{suffix}.txt"),mpcc_macro_energies)

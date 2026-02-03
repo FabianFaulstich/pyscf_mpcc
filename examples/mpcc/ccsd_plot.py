@@ -36,15 +36,14 @@ basis_to_mol = {
             "aug-cc-pvtz": "aug-cc-pvtz"
             }
 Basis = basis_to_mol[basis]
-# LaTeX-friendly font sizes
 plt.rcParams.update({
     "font.family": "serif",
     "mathtext.fontset": "cm",
-    "font.size": 18,
-    "axes.labelsize": 20,
-    "axes.titlesize": 22,
-    "xtick.labelsize": 18,
-    "ytick.labelsize": 18,
+    "font.size": 22,
+    "axes.labelsize": 14,
+    "axes.titlesize": 16,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
     "legend.fontsize": 14,
 })
 
@@ -147,10 +146,12 @@ for rank in cpd_ranks:
             continue
 
         files = [
-            f for f in os.listdir(folder)
-            if f.startswith(f"{method}_iter_energies")
-            and f"rank{rank}" in f
-        ]
+                f for f in os.listdir(folder)
+                if f.startswith(f"{method}_iter_energies_CPD_Lvv")
+                and f"rank{rank}" in f
+                #and not any(r in f for r in ("rank2.0", "rank3.0"))
+                ]
+
 
         if not files:
             continue
@@ -174,24 +175,25 @@ for rank, energies in final_energy.items():
 # ============================================================
 # NEW: ERROR RELATIVE TO DF
 # ============================================================
+"""
 DF_error = {
-    n: abs(D_df[n] - D_ccsd[n])
+    n: abs(D_ccsd[n] - D_df[n])
     for n in D_df if n in D_ccsd
 }
-
+"""
 
 CPD_error = {}
 
 for rank, Dn in D_complete.items():
     CPD_error[rank] = {
-        n: abs(Dn[n] - D_ccsd[n])
-        for n in Dn if n in D_ccsd
+        n: (D_df[n] - Dn[n])
+        for n in Dn if n in D_df
     }
 # ---------------- PLOT ERROR ----------------
-plt.figure(figsize=(8, 6))
+plt.figure(figsize=(6.5, 6))
 
-markers = ["o", "s", "^", "D", "v", "P", "X"]
-
+markers = ["s", "^", "D", "v", "P", "X"]
+"""
 # ---- DF baseline ----
 n_vals = sorted(DF_error.keys())
 err_vals = [DF_error[n] for n in n_vals]
@@ -199,41 +201,46 @@ err_vals = [DF_error[n] for n in n_vals]
 plt.plot(
     n_vals,
     err_vals,
+    color = "black",
     marker="o",
-    linestyle="--",
-    linewidth=2.5,
+    linestyle="-",
+    linewidth=2,
     markersize=8,
-    label=r"$\mathrm{DF}$"
+    label=r"MPCC"
 )
-
+#"""
 # ---- CPD ranks ----
 for i, (rank, Derr) in enumerate(CPD_error.items()):
     n_vals = sorted(Derr.keys())
     err_vals = [Derr[n] for n in n_vals]
-
+    label = (
+        rank.replace(".0X", "X")
+         )
     plt.plot(
         n_vals,
         err_vals,
         marker=markers[i % len(markers)],
         linewidth=2,
         markersize=8,
-        label=rf"$\mathrm{{CPD}}\ {rank}$"
+        label=rf" {label}"
+        #label=r"$R_{vv}=$" rf" {label}"
     )
 #plt.axhline(0.0, color="black", linestyle="--", linewidth=1)
 
 plt.xlabel(r"$n, (H_{2}O)_n$")
-#plt.yticks([0,0.1,0.2,0.3,0.4,0.5,0.6])
-plt.yticks([0,0.5,1,1.5,2,2.5,3])
-#plt.yticks([0,0.3,0.6,0.9,1.2,1.5,1.8])
+#plt.yticks([1.5,1.2,0.9,0.6,0.3,0,-0.3,-0.6])
+#plt.yticks([0.6,0.3,0,-0.3,-0.6])
+plt.yticks([3,2.5,2,1.5,1,0.5,0,-0.5])
 
 plt.ylabel(r"Error (kcal/mol)")
-plt.title(rf" Dissociation {method} Energy Error""\n"
-          rf" Reference = CCSD, {Basis}")
+plt.title(rf"Error in Dissociation Energy""\n"
+          rf" Reference = {method}, {Basis}/{Basis}-RI")
 plt.grid(True, linestyle="--", alpha=0.6)
-plt.legend(title= r"$R_{vv}$")
+plt.legend(loc='best',labelspacing=0.1,handletextpad=0.5,title= r"$R_{vv}$")
+#plt.legend(loc='best',labelspacing=0.1,handletextpad=0.5)
 plt.tight_layout()
 
-out = results / basis / f"dissociation_error_{method}_DF_all_ranks_{basis}_{scan}_ref_ccsd.png"
+out = results / basis / f"dissociation_error_{method}_DF_all_ranks_{basis}_{scan}_signed.png"
 plt.savefig(out, dpi=300)
 plt.show()
 

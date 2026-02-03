@@ -15,7 +15,7 @@ basis=$2
 scan_mode=$3   # required string
 
 ranks=(1.5 2 2.5 3 3.5)
-results_dir="$HOME/Documents/RR_MPCC/All_output_data"
+results_dir="$HOME/Documents/Nov_11_MPCC/All_output_data"
 
 echo "=========================================="
 echo " Running DF (rank_reduced = false)"
