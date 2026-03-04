@@ -86,6 +86,38 @@ class screened:
 
         return t1_ii, t1_ia, t1_ai, t1_aa
 
+    def _set_t2_antisym_blocks(self, t2):
+        """
+        Extract all antisymmetrized t2 blocks in a structured way.
+        
+        Returns all 16 combinations of t2_antisym[h1_type, h2_type, p1_type, p2_type]
+        where types are {i=inact, a=act} for both holes (h1, h2) and particles (p1, p2).
+        
+        Returns
+        -------
+        dict
+            Dictionary with keys like 'iiii', 'iiia', 'iiai', ..., 'aaaa' where:
+            - First two characters denote hole indices types (from {i, a})
+            - Last two characters denote particle indices types (from {i, a})
+        """
+        # Construct antisymmetrized t2
+        t2_antisym = 2.0 * t2 - t2.transpose(0, 1, 3, 2)
+        
+        blocks = {}
+        
+        # Generate all 16 combinations of hole and particle types
+        hole_types = {'i': self.inact_hole, 'a': self.act_hole}
+        particle_types = {'i': self.inact_particle, 'a': self.act_particle}
+        
+        for h1_type, h1_idx in hole_types.items():
+            for h2_type, h2_idx in hole_types.items():
+                for p1_type, p1_idx in particle_types.items():
+                    for p2_type, p2_idx in particle_types.items():
+                        key = f"{h1_type}{h2_type}{p1_type}{p2_type}"
+                        blocks[key] = t2_antisym[numpy.ix_(h1_idx, h2_idx, p1_idx, p2_idx)].copy()
+        
+        return blocks
+
     def t1_transform(self, t1, M, Moo, Mvo, Mvo_t2):
         #fetch the 3-center integrals in MO basis
 
@@ -198,54 +230,119 @@ class screened:
 
         return Joo, Jvv, Jvo, Foo, Fvv, Fov
 
-    def create_M_intermediates(self, t1, t2):
-        #construct the intermediates for the t2 update:
-
+    def create_M_intermediates_debug(self, t1, t2):
+        """
+        Simplified version of create_M_intermediates for debugging purposes.
+        Uses explicit zeroing of 'aaaa' block instead of complex block iteration.
+        
+        Construct M intermediates (M0, Moo, Mvo, Mvo_t2) for CC equations.
+        """
         t1_ii, t1_ia, t1_ai, t1_aa = self._set_t1_blocks(t1)
 
-        #M0
-        M0 = lib.einsum("Lkc,kc->L", self.Lov_ii, t1_ii)*2.0
-        M0 += lib.einsum("Lkc,kc->L", self.Lov_ia, t1_ia)*2.0
-        M0 += lib.einsum("Lkc,kc->L", self.Lov_ai, t1_ai)*2.0
+        # === M0: Energy-like quantity ===
+        M0 = lib.einsum("Lkc,kc->L", self.Lov_ii, t1_ii) * 2.0
+        M0 += lib.einsum("Lkc,kc->L", self.Lov_ia, t1_ia) * 2.0
+        M0 += lib.einsum("Lkc,kc->L", self.Lov_ai, t1_ai) * 2.0
 
-        #Moo
+        # === Moo: Occupied-occupied intermediate ===
         Moo_ii = lib.einsum("Lia,ja->Lij", self.Lov_ii, t1_ii) + lib.einsum("Lia,ja->Lij", self.Lov_ia, t1_ia)
-        Moo_ia = lib.einsum("Lia,ja->Lij", self.Lov_ii, t1_ai) #we can construct it from taa block as well 
+        Moo_ia = lib.einsum("Lia,ja->Lij", self.Lov_ii, t1_ai)
         Moo_ai = lib.einsum("Lia,ja->Lij", self.Lov_ai, t1_ii) + lib.einsum("Lia,ja->Lij", self.Lov_aa, t1_ia)
-        Moo_aa = lib.einsum("Lia,ja->Lij", self.Lov_ai, t1_ai)  
+        Moo_aa = lib.einsum("Lia,ja->Lij", self.Lov_ai, t1_ai)
 
-        #Mvo
+        # === Mvo: Virtual-occupied intermediate ===
         Mvo_ii = lib.einsum("Lac,ic->Lai", self.Lvv_ii, t1_ii) + lib.einsum("Lac,ic->Lai", self.Lvv_ia, t1_ia)
-        Mvo_ia = lib.einsum("Lac,ic->Lai", self.Lvv_ii, t1_ai) 
+        Mvo_ia = lib.einsum("Lac,ic->Lai", self.Lvv_ii, t1_ai)
         Mvo_ai = lib.einsum("Lac,ic->Lai", self.Lvv_ai, t1_ii) + lib.einsum("Lac,ic->Lai", self.Lvv_aa, t1_ia)
         Mvo_aa = lib.einsum("Lac,ic->Lai", self.Lvv_ai, t1_ai)
 
-        #construct antisymmetrized t2:
-        t2_antisym = 2.0*t2 - t2.transpose(0, 1, 3, 2)
-
-        nocc = self.nocc
-        nvir = self.nvir
-        Mvo_t2  = lib.einsum("Lkc, ikac -> Lai", self.Lov_ii, 
-                             t2_antisym[numpy.ix_(numpy.arange(nocc), self.inact_hole, numpy.arange(nvir), self.inact_particle)])
-        Mvo_t2 += lib.einsum(
-            "Lkc, ikac -> Lai",
-            self.Lov_ia,
-            t2_antisym[
-            numpy.ix_(
-                numpy.arange(self.nocc),
-                self.inact_hole,
-                numpy.arange(self.nvir),
-                self.act_particle,
-            )
-            ]
-        )
-        Mvo_t2 += lib.einsum("Lkc, ikac -> Lai", self.Lov_ai, 
-                             t2_antisym[numpy.ix_(numpy.arange(nocc), self.act_hole, numpy.arange(nvir), self.inact_particle)])
-
+        # === Mvo_t2: Simplified single-contraction version ===
+        # Construct antisymmetrized t2
+        t2_antisym = 2.0 * t2 - t2.transpose(0, 1, 3, 2)
+        
+        # Explicitly zero out the 'aaaa' block (all four indices are active)
+        t2_antisym[numpy.ix_(self.act_hole, self.act_hole, self.act_particle, self.act_particle)] = 0.0
+        
+        # Single contraction with full Lov tensor
+        # Lov[L, all_holes, all_particles] x t2_antisym[all_holes, all_holes, all_particles, all_particles]
+        # -> [L, all_particles, all_holes]
+        Mvo_t2_full = lib.einsum("Lkc, ikac -> Lai", self._eris.Lov, t2_antisym)
+        
         Moo = [Moo_ii, Moo_ia, Moo_ai, Moo_aa]
         Mvo = [Mvo_ii, Mvo_ia, Mvo_ai, Mvo_aa]
 
-        return M0, Moo, Mvo, Mvo_t2
+        return M0, Moo, Mvo, Mvo_t2_full
+
+    def create_M_intermediates(self, t1, t2):
+        """
+        Construct M intermediates (M0, Moo, Mvo, Mvo_t2) for CC equations.
+        
+        Uses elaborate block-based approach with specific Lov blocks and t2 block iteration.
+        This is the original implementation for comparison/debugging.
+        """
+        t1_ii, t1_ia, t1_ai, t1_aa = self._set_t1_blocks(t1)
+
+        # === M0 ===
+        M0 = lib.einsum("Lkc,kc->L", self.Lov_ii, t1_ii) * 2.0
+        M0 += lib.einsum("Lkc,kc->L", self.Lov_ia, t1_ia) * 2.0
+        M0 += lib.einsum("Lkc,kc->L", self.Lov_ai, t1_ai) * 2.0
+
+        # === Moo: Occupied-occupied intermediate ===
+        Moo_ii = lib.einsum("Lia,ja->Lij", self.Lov_ii, t1_ii) + lib.einsum("Lia,ja->Lij", self.Lov_ia, t1_ia)
+        Moo_ia = lib.einsum("Lia,ja->Lij", self.Lov_ii, t1_ai)
+        Moo_ai = lib.einsum("Lia,ja->Lij", self.Lov_ai, t1_ii) + lib.einsum("Lia,ja->Lij", self.Lov_aa, t1_ia)
+        Moo_aa = lib.einsum("Lia,ja->Lij", self.Lov_ai, t1_ai)
+
+        # === Mvo: Virtual-occupied intermediate ===
+        Mvo_ii = lib.einsum("Lac,ic->Lai", self.Lvv_ii, t1_ii) + lib.einsum("Lac,ic->Lai", self.Lvv_ia, t1_ia)
+        Mvo_ia = lib.einsum("Lac,ic->Lai", self.Lvv_ii, t1_ai)
+        Mvo_ai = lib.einsum("Lac,ic->Lai", self.Lvv_ai, t1_ii) + lib.einsum("Lac,ic->Lai", self.Lvv_aa, t1_ia)
+        Mvo_aa = lib.einsum("Lac,ic->Lai", self.Lvv_ai, t1_ai)
+
+        # === Mvo_t2: Elaborate block-based version ===
+        # Extract all 16 t2_antisym blocks (exclude 'aaaa')
+        t2_blocks = self._set_t2_antisym_blocks(t2)
+        
+        # Initialize Mvo_t2 to full shape [naux, nvir, nocc] to accommodate all block sizes
+        Mvo_t2_full = numpy.zeros((self.naux, self.nvir, self.nocc))
+        
+        # For each Lov_xy block, contract with all compatible t2 blocks
+        # Place each contribution in the correct indices based on h1 and p1 types
+        lov_blocks = {'ii': self.Lov_ii, 'ia': self.Lov_ia, 'ai': self.Lov_ai, 'aa': self.Lov_aa}
+        
+        for xy, lov_xy in lov_blocks.items():
+            x, y = xy[0], xy[1]  # hole_type, particle_type of Lov
+            x_holes = self.inact_hole if x == 'i' else self.act_hole
+            y_particles = self.inact_particle if y == 'i' else self.act_particle
+            
+            if x_holes .size == 0 or y_particles.size == 0:
+                continue  # Skip if no indices in this block
+
+            # Iterate through all h1, p1 combinations (except h1='a', p1='a')
+            for h1 in ['i', 'a']:
+                for p1 in ['i', 'a']:
+                    # Skip 'aaaa' block if h1 and p1 are 'a' and x and y are also 'a':
+                    if h1 == 'a' and p1 == 'a' and x == 'a' and y == 'a':
+                        continue
+                    
+                    h1_holes = self.inact_hole if h1 == 'i' else self.act_hole
+                    p1_particles = self.inact_particle if p1 == 'i' else self.act_particle
+                    
+                    if h1_holes.size == 0 or p1_particles.size == 0:
+                        continue  # Skip if no indices in this block
+
+                    key = f"{h1}{x}{p1}{y}"
+                    if key in t2_blocks:
+                        # Contraction: [L, h, c] x [i, h, a, c] -> [L, a, i]
+                        # Result shape: [naux, n_p1_particles, n_h1_holes]
+                        term = lib.einsum("Lkc, ikac -> Lai", lov_xy, t2_blocks[key])
+                        # Place in correct indices of full array
+                        Mvo_t2_full[numpy.ix_(numpy.arange(self.naux), p1_particles, h1_holes)] += term
+        
+        Moo = [Moo_ii, Moo_ia, Moo_ai, Moo_aa]
+        Mvo = [Mvo_ii, Mvo_ia, Mvo_ai, Mvo_aa]
+
+        return M0, Moo, Mvo, Mvo_t2_full
 
 
     def add_t2_to_fock(self, Fvv, Foo, Mvo_t2):    
@@ -261,7 +358,6 @@ class screened:
         act_hole = self.act_hole
         inact_particle = self.inact_particle
         act_particle = self.act_particle
-
 
         #generate the intermediate with full arrays 
         Foo_tmp = lib.einsum("Lie,Lej->ij", self.Lov_ai, Mvo_t2[numpy.ix_(numpy.arange(self.naux), inact_particle, act_hole)])
@@ -290,7 +386,7 @@ class screened:
         return Foo, Fvv
 
 
-    def R1_residue_active(self, t1, t2, Fov, Fvv, Foo, M0=None, Mvo=None, Mvo_t2=None):
+    def R1_residue_active(self, t1, t2, Fov, Fvv, Foo, M0, Mvo, Mvo_t2):
          # Get index arrays for inactive holes and active particles
          inact_hole = self.inact_hole
          act_hole = self.act_hole
@@ -339,14 +435,13 @@ class screened:
          R1 += lib.einsum("jb, ijab -> ia", Fov_ia, 
                           t2_antisym[numpy.ix_(self.act_hole, self.inact_hole, self.act_particle, self.act_particle)])
      
-         if M0 is not None:
-             R1 += lib.einsum("Lia, L -> ia", self.Lov_aa, M0)
-         if Mvo is not None:
-             R1 -= lib.einsum("Lji,Laj->ia", self.Loo_ia, Mvo_ai)
-             R1 -= lib.einsum("Lji,Laj->ia", self.Loo_aa, Mvo_aa) #probably not allowed
-         if Mvo_t2 is not None:
-             R1 -= lib.einsum("Lji, Laj -> ia", self.Loo_ia, Mvo_t2[numpy.ix_(numpy.arange(self.naux), act_particle, inact_hole)])
-             R1 -= lib.einsum("Lji, Laj -> ia", self.Loo_aa, Mvo_t2[numpy.ix_(numpy.arange(self.naux), self.act_particle, self.act_hole)])
+       
+         R1 += lib.einsum("Lia, L -> ia", self.Lov_aa, M0)
+         R1 -= lib.einsum("Lji,Laj->ia", self.Loo_ia, Mvo_ai)
+         R1 -= lib.einsum("Lji,Laj->ia", self.Loo_aa, Mvo_aa) #probably not allowed
+         
+         R1 -= lib.einsum("Lji, Laj -> ia", self.Loo_ia, Mvo_t2[numpy.ix_(numpy.arange(self.naux), act_particle, inact_hole)])
+         R1 -= lib.einsum("Lji, Laj -> ia", self.Loo_aa, Mvo_t2[numpy.ix_(numpy.arange(self.naux), self.act_particle, self.act_hole)])
 
          R1 += lib.einsum("Lae, Lei -> ia", self.Lvv_ai, Mvo_t2[numpy.ix_(numpy.arange(self.naux), self.inact_particle, self.act_hole)])
          R1 += lib.einsum("Lae, Lei -> ia", self.Lvv_aa, Mvo_t2[numpy.ix_(numpy.arange(self.naux), self.act_particle, self.act_hole)])
@@ -357,7 +452,6 @@ class screened:
          return R1
 
     def R2_residue_active(self, t1, t2, Joo, Jvv, Jvo, Fov, Fvv, Foo):
-
 
         inact_hole = self.inact_hole
         act_hole = self.act_hole
@@ -391,10 +485,8 @@ class screened:
 
 
         #factorized part of the residue:
-       # R2 = lib.einsum("Lia, Ljb -> ijab", Jvo_aa, Jvo_aa)
         #PPL 
         Wabef = lib.einsum("Lae, Lbf -> abef", Jvv_ai, Jvv_ai)
-#       R2 += lib.einsum("abef, ijef -> ijab", Waebf, t2)#three possibilities (ii, ia, ai)
         R2  = lib.einsum("abef, ijef -> ijab", Wabef, t2[numpy.ix_(act_hole, act_hole, inact_particle, inact_particle)])
 
         Wabef = lib.einsum("Lae, Lbf -> abef", Jvv_ai, Jvv_aa)
@@ -407,9 +499,7 @@ class screened:
         #HHL
         Wijmn = lib.einsum("Lmi, Lnj -> mnij", Joo_ia, Joo_ia) 
         if (self.add_DCA):
-           Wijmn += Imnij[numpy.ix_(inact_hole, inact_hole,numpy.arange(n_act_hole),numpy.arange(n_act_hole))]
-
-#       R2 += lib.einsum("ijmn, mnab -> ijab", Wijmn, t2) #three possibilities (aa, ai, ia)
+            Wijmn += Imnij[numpy.ix_(inact_hole, inact_hole,numpy.arange(n_act_hole),numpy.arange(n_act_hole))]
 
         R2 += lib.einsum("mnij, mnab -> ijab", Wijmn, t2[numpy.ix_(inact_hole, inact_hole, act_particle, act_particle)])
 
@@ -459,7 +549,6 @@ class screened:
         if (self.add_DCA):
             W_mbje  -= Imbje[numpy.ix_(inact_hole,numpy.arange(n_act_particle),numpy.arange(n_act_hole),inact_particle)]
 
-#       R2_tmp -= lib.einsum("jebm, imae -> ijab", W_jebm, t2) # em should be ii, ia, ai types
 
         R2_tmp -= lib.einsum("mbje, imae -> ijab", W_mbje, t2[numpy.ix_(act_hole, inact_hole, act_particle, inact_particle)])
 
@@ -491,7 +580,6 @@ class screened:
 
         if (self.add_DCA):
             W_jema -= 0.5*Imbje[numpy.ix_(inact_hole, numpy.arange(n_act_particle), numpy.arange(n_act_hole), inact_particle)]
-#       R2_tmp -= lib.einsum("jema, imeb -> ijab", W_jema, t2) # em should be ii, ia, ai types
 
         R2_tmp -= lib.einsum("maje, imeb -> ijab", W_jema, t2[numpy.ix_(act_hole, inact_hole, inact_particle, act_particle)])
 
@@ -552,57 +640,76 @@ class screened:
         return Imbje_active,Imbej_active,Imnij_active
 
 
-    def t2_transform_quadratic_inactive(self,t2):
-
-
-       #Extract the active part from the follwing terms:
-
-        # We have already built the DCA terms by assembling the factorized terms.  
-        # these terms shall be ignored with the DCA approximation.
-
-        #I_mn^ij 
-
+    def t2_transform_quadratic_inactive(self, t2):
+        """
+        Compute quadratic T2 intermediate contributions for inactive indices.
+        
+        Extracts the active part from the following terms:
+        - I_mn^ij: Occupied-occupied intermediate
+        - I^je_bm: Virtual-occupied intermediate (variant 1)
+        - I^je_mb: Virtual-occupied intermediate (variant 2)
+        
+        These DCA terms are built by assembling the factorized terms and should be
+        ignored with the DCA approximation.
+        
+        Parameters
+        ----------
+        t2 : ndarray
+            T2 amplitudes
+        
+        Returns
+        -------
+        tuple
+            (Imbje, Imbej, Imnij) intermediate tensors
+        """
+        # Compute array V[n, m, e, f] = L[n, e] * L[m, f]
         Vnmef = lib.einsum("Lne, Lmf -> nmef", self._eris.Lov, self._eris.Lov)
-
-        #Imnij = lib.einsum("menf, ijef -> ijmn", Vmenf, t2) #ef should be ii, ia, ai types
         
-        Imnij = lib.einsum("mnef, ijef->mnij", Vnmef[numpy.ix_(numpy.arange(self.nocc), numpy.arange(self.nocc),self.inact_particle,self.act_particle)],
-                            t2[numpy.ix_(self.act_hole, self.act_hole, self.inact_particle, self.act_particle)]) #ia
-
-        Imnij += lib.einsum("mnef,ijef->mnij", Vnmef[numpy.ix_(numpy.arange(self.nocc), numpy.arange(self.nocc),self.act_particle,self.inact_particle)],
-                             t2[numpy.ix_(self.act_hole, self.act_hole,self.act_particle,self.inact_particle)]) #ai
+        # Prepare index ranges
+        all_occ_range = numpy.arange(self.nocc)
+        all_vir_range = numpy.arange(self.nvir)
         
-        Imnij += lib.einsum("mnef,ijef->mnij", Vnmef[numpy.ix_(numpy.arange(self.nocc), numpy.arange(self.nocc),self.inact_particle,self.inact_particle)],
-                            t2[numpy.ix_(self.act_hole, self.act_hole, self.inact_particle, self.inact_particle)]) #ii
-
-
-        #I^je_bm
-        #Ijebm = lib.einsum("nemf, jnbf -> jebm", Vnemf, t2) #nf should be ii, ia, ai types
-                                                             #em should be nvir and nocc
-                                                             #jb should be active hole, particle       
-
-        Imbej = lib.einsum("nmef,jnbf->mbej", Vnmef[numpy.ix_(self.inact_hole,numpy.arange(self.nocc), numpy.arange(self.nvir),self.inact_particle)],
-                            t2[numpy.ix_(self.act_hole, self.inact_hole, self.act_particle, self.inact_particle)]) #nf ii
-
-        Imbej += lib.einsum("nmef,jnbf->mbej", Vnmef[numpy.ix_(self.inact_hole, numpy.arange(self.nocc),numpy.arange(self.nvir),self.act_particle)],
-                            t2[numpy.ix_(self.act_hole, self.inact_hole, self.act_particle, self.act_particle)]) #nf ia
-
-        Imbej += lib.einsum("nmef,jnbf->mbej", Vnmef[numpy.ix_(self.act_hole,  numpy.arange(self.nocc),numpy.arange(self.nvir),self.inact_particle)],
-                             t2[numpy.ix_(self.act_hole, self.act_hole, self.act_particle, self.inact_particle)]) #nf ai
-
-        #I^je_mb
-
-        #Ijemb = lib.einsum("nemf, jnfb -> jemb", Vnemf, t2) # #nf should be ii, ia, ai types
-
-        Imbje = lib.einsum("nmef, jnfb -> mbje", Vnmef[numpy.ix_(self.inact_hole,numpy.arange(self.nocc),numpy.arange(self.nvir),self.inact_particle)],
-                                                                  t2[numpy.ix_(self.act_hole, self.inact_hole, self.inact_particle, self.act_particle)])
-
-        Imbje += lib.einsum("nmef, jnfb -> mbje", Vnmef[numpy.ix_(self.inact_hole, numpy.arange(self.nocc),numpy.arange(self.nvir),self.act_particle)],
-                            t2[numpy.ix_(self.act_hole, self.inact_hole, self.act_particle, self.act_particle)])
-
-        Imbje += lib.einsum("nmef, jnfb -> mbje", Vnmef[numpy.ix_(self.act_hole,numpy.arange(self.nocc), numpy.arange(self.nvir),self.inact_particle)],
-                             t2[numpy.ix_(self.act_hole, self.act_hole, self.inact_particle, self.act_particle)])
-
+        # === I_mn^ij: Occupied-occupied intermediate ===
+        # Contract over (e=inactive, f=active), (e=active, f=inactive), (e=inactive, f=inactive)
+        Imnij = None
+        for e_type, f_type in [('i', 'a'), ('a', 'i'), ('i', 'i')]:
+            e_idx = self.inact_particle if e_type == 'i' else self.act_particle
+            f_idx = self.inact_particle if f_type == 'i' else self.act_particle
+            
+            vnmef_slice = Vnmef[numpy.ix_(all_occ_range, all_occ_range, e_idx, f_idx)]
+            t2_slice = t2[numpy.ix_(self.act_hole, self.act_hole, e_idx, f_idx)]
+            
+            term = lib.einsum("mnef, ijef->mnij", vnmef_slice, t2_slice)
+            Imnij = term if Imnij is None else Imnij + term
+        
+        # === I^je_bm: Virtual-occupied intermediate (m-index fixed to inactive) ===
+        # Index pattern: Vnmef[inact_hole, all_occ, all_vir, varying]
+        # Contraction: nmef x jnbf -> mbej
+        Imbej = None
+        for n_type, f_type in [('i', 'i'), ('i', 'a'), ('a', 'i')]:
+            n_idx = self.inact_hole if n_type == 'i' else self.act_hole
+            f_idx = self.inact_particle if f_type == 'i' else self.act_particle
+            
+            vnmef_slice = Vnmef[numpy.ix_(n_idx, all_occ_range, all_vir_range, f_idx)]
+            t2_slice = t2[numpy.ix_(self.act_hole, n_idx, self.act_particle, f_idx)]
+            
+            term = lib.einsum("nmef, jnbf->mbej", vnmef_slice, t2_slice)
+            Imbej = term if Imbej is None else Imbej + term
+        
+        # === I^je_mb: Virtual-occupied intermediate (m-index fixed to inactive) ===
+        # Index pattern: Vnmef[varying, all_occ, all_vir, varying]
+        # Contraction: nmef x jnfb -> mbje
+        Imbje = None
+        for n_type, f_type in [('i', 'i'), ('i', 'a'), ('a', 'i')]:
+            n_idx = self.inact_hole if n_type == 'i' else self.act_hole
+            f_idx = self.inact_particle if f_type == 'i' else self.act_particle
+            
+            vnmef_slice = Vnmef[numpy.ix_(n_idx, all_occ_range, all_vir_range, f_idx)]
+            t2_slice = t2[numpy.ix_(self.act_hole, n_idx, f_idx, self.act_particle)]
+            
+            term = lib.einsum("nmef, jnfb->mbje", vnmef_slice, t2_slice)
+            Imbje = term if Imbje is None else Imbje + term
+        
         return Imbje, Imbej, Imnij
 
 
