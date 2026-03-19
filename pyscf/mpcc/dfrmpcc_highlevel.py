@@ -75,6 +75,7 @@ class MPCC_HL:
 
         self.Lov_ia = self._eris.Lov[numpy.ix_(naux_idx, inact_hole, act_particle)]
         self.Lov_aa = self._eris.Lov[numpy.ix_(naux_idx, act_hole, act_particle)]
+        self.Lov_ai = self._eris.Lov[numpy.ix_(naux_idx, act_hole, inact_particle)]
 
 
     def t1_transform(self, imds, t1, M, Moo, Mvo, Mvo_t2):
@@ -109,7 +110,7 @@ class MPCC_HL:
 #Now construct Fock matrix: (active-active, active-inactive)
         Foo_aa  = lib.einsum("Lij,L->ij", self.Loo_aa, M)
         Foo_aa -= lib.einsum("Lmj,Lim->ij",self.Loo_aa,Moo_aa)
-#       Foo_aa -= lib.einsum("Lmj,Lim->ij",self.Loo_ia,Moo_ia)###perhaps not required?
+     #  Foo_aa -= lib.einsum("Lmj,Lim->ij",self.Loo_ia,Moo_ia)###perhaps not required?
         Foo_aa_t1  = numpy.array(imds.Foo_t1).copy()
        
         Foo_aa_t1 += Foo_aa
@@ -121,8 +122,6 @@ class MPCC_HL:
          
 #       Fvv_aa  = numpy.array(imds.Fvv).copy()
         Fvv_aa = lib.einsum("Lab,L->ab",self.Lvv_aa,M) 
-        
-#       Fvv_aa -= lib.einsum("Lma,Lmb->ab",self.Lov_aa,Mvo_aa)
         Fvv_aa -= lib.einsum("Lmb,Lam->ab",self.Lov_aa,Mvo_aa)
 
 
@@ -206,7 +205,7 @@ class MPCC_HL:
         R1 -= lib.einsum("ki,ka->ia", Foo_t1, t1)       
 
         Fvv_t1 -= lib.einsum("lb,la->ab", Fov, t1)*0.5
- 
+
         R1 += lib.einsum("ab,ib->ia", Fvv_t1, t1)
         R1 += lib.einsum("me, imae -> ia", Fov, t2_antisym) #many terms
         R1 += lib.einsum("Lia, L -> ia", self.Lov_aa, M0)
@@ -217,8 +216,7 @@ class MPCC_HL:
         return R1
 
     def R2_residue_active(self, imds, t1, t2, Joo, Jvv, Jvo, Fov, Fvv, Foo):
-
-        
+ 
         Jvo = Jvo[0]
         Joo = Joo[0]
         Jvv = Jvv[0]
@@ -250,7 +248,7 @@ class MPCC_HL:
         R2_tmp = -lib.einsum("mi, mjab -> ijab", Foo_t2, t2) #only one possibility m has to be inactive.
 
         Fvv_t2 -= lib.einsum("lb,la->ab", Fov, t1)
-        R2_tmp += lib.einsum("bc, ijac -> ijab", Fvv_t2, t2) # only one possibility e has to be inactive.
+        R2_tmp += lib.einsum("bc, ijac -> ijab", Fvv_t2, t2) # only one possibility e has to be inactive
 
         #N3V3 terms:
 
@@ -265,7 +263,7 @@ class MPCC_HL:
         #symmetrize R2_tmp:
         R2 += (R2_tmp + R2_tmp.transpose(1, 0, 3, 2))
 
-        Foo_t2 = Fvv_t2 = None
+        del Foo_t2, Fvv_t2
 
         return R2
 
@@ -312,8 +310,6 @@ class MPCC_HL:
         """
         Following Table XXX in Future Paper
         """
-
-
         M0, Moo, Mvo, Mvo_t2 = self.create_M_intermediates(t1, t2)
         Joo, Jvv, Jvo, Foo, Fvv, Fov = self.t1_transform(imds, t1, M0, Moo, Mvo, Mvo_t2)
         Foo, Fvv = self.add_t2_to_fock(Fvv, Foo, Mvo_t2)
@@ -326,9 +322,8 @@ class MPCC_HL:
  
         t1 -= res1
         t2 -= res2
-#        res = numpy.linalg.norm(res1) + numpy.linalg.norm(res2)
-        res = numpy.linalg.norm(res2)
-
+        res = numpy.linalg.norm(res1) + numpy.linalg.norm(res2)
+#       res = numpy.linalg.norm(res2)
         return res, t1, t2
 
 
