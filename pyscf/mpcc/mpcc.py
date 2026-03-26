@@ -65,12 +65,13 @@ class MPCC(lib.StreamObject):
 
                # NOTE can we remove the t2 dependence? 
                imds = self.screened.kernel(t1, t2)
-               #print the attributes of the imds object
+               
                print('MPCC: Screened kernel calculated for fragment:', frag)
 
                # NOTE can we remove the t2 dependence? 
                # YES, remove t2!
                t1_act_tmp, t2_act_tmp = self.highlevel.kernel(imds, t1, t2)
+#              t1_act_tmp, t2_act_tmp = self.highlevel.kernel(t1, t2)
 
                t1_act.append(t1_act_tmp)    
                t2_act.append(t2_act_tmp) 

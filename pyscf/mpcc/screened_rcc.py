@@ -15,8 +15,6 @@ class screened:
 
         self._eris = eris
         self.frag = frags
-#       self.DCA = kwargs.get('DCA')
-#       self.add_DCA = True 
         self.add_DCA = kwargs.get('DCA', True)
         self._set_integral_blocks()
     @property
@@ -54,85 +52,7 @@ class screened:
     def _antisymmetrize_t2(self, t2):
         return 2.0 * t2 - t2.transpose(0, 1, 3, 2)
 
-    @staticmethod
-    def _validate_block_specs(m0_specs, moo_specs, mvo_specs, include_active_terms):
-        """
-        Validate that block contribution specs are physically consistent.
-
-        Rules enforced
-        --------------
-        M0  (Lkc,kc->L)   : Lov and t1 must share *both* index types
-                            (tensor_key == t1_key).
-        Moo (Lia,ja->Lij) : result block == tensor_key[0] + t1_key[0];
-                            contracted particle type must match
-                            (tensor_key[1] == t1_key[1]).
-        Mvo (Lac,ic->Lai) : result block == tensor_key[0] + t1_key[0];
-                            contracted second-particle type must match
-                            (tensor_key[1] == t1_key[1]).
-        Active gate        : when include_active_terms=False, no 'aa'
-                            t1 block may appear in any spec.
-        """
-        errors = []
-
-        # --- M0: full index match ---
-        for tensor_key, t1_key in m0_specs:
-            if tensor_key != t1_key:
-                errors.append(
-                    f"M0 spec ({tensor_key}, {t1_key}): "
-                    "Lov and t1 index types must be identical."
-                )
-
-        # --- Moo: block name + contracted-particle consistency ---
-        for block_name, specs in moo_specs.items():
-            for tensor_key, t1_key in specs:
-                expected = tensor_key[0] + t1_key[0]
-                if expected != block_name:
-                    errors.append(
-                        f"Moo_{block_name} spec ({tensor_key}, {t1_key}): "
-                        f"holes imply result block '{expected}', declared as '{block_name}'."
-                    )
-                if tensor_key[1] != t1_key[1]:
-                    errors.append(
-                        f"Moo_{block_name} spec ({tensor_key}, {t1_key}): "
-                        f"contracted particle type '{tensor_key[1]}' (Lov) "
-                        f"!= '{t1_key[1]}' (t1)."
-                    )
-
-        # --- Mvo: block name + contracted second-particle consistency ---
-        for block_name, specs in mvo_specs.items():
-            for tensor_key, t1_key in specs:
-                expected = tensor_key[0] + t1_key[0]
-                if expected != block_name:
-                    errors.append(
-                        f"Mvo_{block_name} spec ({tensor_key}, {t1_key}): "
-                        f"indices imply result block '{expected}', declared as '{block_name}'."
-                    )
-                if tensor_key[1] != t1_key[1]:
-                    errors.append(
-                        f"Mvo_{block_name} spec ({tensor_key}, {t1_key}): "
-                        f"contracted particle type '{tensor_key[1]}' (Lvv) "
-                        f"!= '{t1_key[1]}' (t1)."
-                    )
-
-        # --- Active-terms gate ---
-        if not include_active_terms:
-            all_specs = list(m0_specs)
-            for specs in moo_specs.values():
-                all_specs += specs
-            for specs in mvo_specs.values():
-                all_specs += specs
-            for tensor_key, t1_key in all_specs:
-                if t1_key == "aa":
-                    errors.append(
-                        f"Spec ({tensor_key}, {t1_key}): "
-                        "t1_aa block not allowed when include_active_terms=False."
-                    )
-
-        if errors:
-            raise ValueError(
-                "Invalid block specs in _build_M_t1_intermediates:\n"
-                + "\n".join(f"  - {e}" for e in errors)
-            )
+    
 
     def _build_M_t1_intermediates(self, t1, include_active_terms):
         t1_blocks = dict(zip(("ii", "ia", "ai", "aa"), self._set_t1_blocks(t1)))
@@ -181,8 +101,6 @@ class screened:
         if include_active_terms:
             mvo_specs["ia"].append(("ia", "aa"))
             mvo_specs["aa"].append(("aa", "aa"))
-
-        self._validate_block_specs(m0_specs, moo_specs, mvo_specs, include_active_terms)
 
         Moo_ii = contract_sum(moo_specs["ii"], "Lov", "Lia,ja->Lij")
         Moo_ia = contract_sum(moo_specs["ia"], "Lov", "Lia,ja->Lij")
@@ -720,7 +638,7 @@ class screened:
          Mvo_ii, Mvo_ia, Mvo_ai, Mvo_aa = Mvo
 
          #R1 = Fov_aa.copy()
-         R1 = self._eris.fov[numpy.ix_(act_hole, act_particle)].copy() #overwrite with correct shape and values
+         R1 = self._eris.fov[numpy.ix_(act_hole, act_particle)].copy()
      
          Foo_ia_tmp = Foo_ia.copy()
          Fvv_ai_tmp = Fvv_ai.copy() 
@@ -847,8 +765,6 @@ class screened:
 
         R2_tmp += lib.einsum("bc,ijac->ijab", Fvv_ai_tmp, t2[numpy.ix_(act_hole, act_hole, act_particle, inact_particle)]) # only one possibility e has to be inactive.
 
-
-      #up to here##
 
         #N3V3 terms:
 

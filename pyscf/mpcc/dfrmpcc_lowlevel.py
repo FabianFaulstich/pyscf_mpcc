@@ -34,6 +34,11 @@ class MPCC_LL:
         else:
             self.kernel_type = 'factorized'
 
+        if 'll_method' in kwargs:
+            self.ll_method = kwargs['ll_method']
+        else:
+            self.ll_method = 'T1_transform'
+
         self._kernels = {
                 'factorized': self._factorized_kernel,
                 'unfactorized': self._unfactorized_kernel, 
@@ -78,12 +83,23 @@ class MPCC_LL:
         try:
             func = self._kernels[self.kernel_type]
         except KeyError:
-            raise ValueError(f'Unknown low-level kernel type: {kind}')
+            raise ValueError(f'Unknown low-level kernel type: {self.kernel_type}')
         
         return func(t1, t2_act ,**kwargs)
 
-    def _unfactorized_kernel(self, t1=None, t2=None):
+    def _unfactorized_kernel(self, t1=None, t2=None, **kwargs):
         print('In unfactorized Kernel')
+
+        #ll_method = kwargs.get('ll_method', self.ll_method)
+        if self.ll_method == 'rpax':
+            update_amps = self.update_amps_unfactorized_RPA
+        elif self.ll_method == 'T1_transform':
+            update_amps = self.update_amps_unfactorized
+        else:
+            raise ValueError(
+                f"Unknown ll_method: {self.ll_method}. "
+                "Use 'rpax', or 'T1_transform'."
+            )
         
         err = np.inf
         count = 0
@@ -93,9 +109,7 @@ class MPCC_LL:
 
         while err > self.ll_con_tol and count < self.ll_max_its:
 
-#           res, e_corr, t1_new, t2_new = self.update_amps_unfactorized_RPA(t1, self._t2)
-#           res, e_corr, t1_new, t2_new = self.update_amps_unfactorized(t1, self._t2)
-            res, e_corr, t1_new, t2_new = self.update_amps_unfactorized(t1, t2)
+            res, e_corr, t1_new, t2_new = update_amps(t1, t2)
             if self.diis:
                 t1_new, t2_new = self.run_diis_full(t1_new, t2_new, adiis)
             else:
@@ -177,7 +191,6 @@ class MPCC_LL:
         t2 -= res2
 
         return res, ΔE, t1, t2
-
 
 
     def _factorized_kernel(self, t1=None, t2=None, **kwargs):
@@ -377,7 +390,7 @@ class MPCC_LL:
 
         Joo = Xoo + self._eris.Loo
         Jvo = (
-            Xvo +  self._eris.Lvo - lib.einsum("Lji,ja->Lai", Joo, t1)
+            Xvo + Xvo_t2 + self._eris.Lvo - lib.einsum("Lji,ja->Lai", Joo, t1)
         )
 
         Jvv = self._eris.Lvv - lib.einsum("Lkb,ka->Lab", self._eris.Lov, t1) #we don't need this here  
@@ -402,7 +415,6 @@ class MPCC_LL:
 
         return Foo, Fvv, Fov
 
-    
     # FIXME There is substantial code overlap with get_Ω
     def get_Ω_slow(self, X, Xvo, Foo, Fvv, Fov, t1, t2):
 
@@ -443,7 +455,6 @@ class MPCC_LL:
         Ω -= lib.einsum("Laj,Lji->ai", Xvo_t2, self._eris.Loo) #new
         Ω += lib.einsum("Lai,L->ai", self._eris.Lvo, X)
 
-
         Ω += lib.einsum("Lae,Lei->ai", self._eris.Lvv, Xvo_t2) #new
 
 
@@ -476,8 +487,6 @@ class MPCC_LL:
 
     def update_t2_RPA(self, t2, Jvo, Foo, Fvv, Fov, t1, Joo, Jvv, Xvo_t2):
 
-#       Imbje = self.t2_transform_quadratic(t2)  
-
         Foo_tmp = Foo.copy()
         Fvv_tmp = Fvv.copy() 
 
@@ -488,14 +497,23 @@ class MPCC_LL:
         tmp -= lib.einsum("mi,mjab->ijab", Foo_tmp, t2)
 
 ## N3V3
-#       W_jebm = lib.einsum("Lmj, Lbe -> mbje", Joo, Jvv) - Imbje 
-        W_jebm = lib.einsum("Lmj, Lbe -> mbje", Joo, Jvv) 
+        W_jebm = lib.einsum("Lmj, Lbe -> mbje", Joo, Jvv)
         tmp -= lib.einsum("mbje, imae -> ijab", W_jebm, t2)
+
+#       W_jema = lib.einsum("Lmj, Lae -> maje", Joo, Jvv)
+#       tmp -= lib.einsum("maje, imeb -> ijab", W_jema, t2) 
 
         res2 = tmp + tmp.transpose(1,0,3,2)
         res2 += lib.einsum("Lai,Lbj->ijab", Jvo, Jvo)
-        res2 += lib.einsum("Lai,Lbj->ijab", Xvo_t2, Jvo)
-        res2 += lib.einsum("Lai,Lbj->ijab", Jvo, Xvo_t2)
+
+    #    Waebf = lib.einsum("Lae, Lbf -> abef", Jvv, Jvv)
+    #    res2 += lib.einsum("abef, ijef -> ijab", Waebf, t2)
+
+    #    Wijmn = lib.einsum("Lmi, Lnj -> mnij", Joo, Joo)
+    #    res2 += lib.einsum("mnij, mnab -> ijab", Wijmn, t2) 
+
+#       res2 += lib.einsum("Lai,Lbj->ijab", Xvo_t2, Jvo)
+#       res2 += lib.einsum("Lai,Lbj->ijab", Jvo, Xvo_t2)
 
         return res2
 
@@ -634,57 +652,130 @@ class MPCC_LL:
                                Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)])    
             Δt2 = t2_act[k] - δt2 
   
-            Δt2_o = -np.einsum('kI, kjab -> Ijab ',Foo[np.ix_(act_hole, inact_hole)], Δt2)
-            Δt2_o -=  np.einsum('kJ, ikab -> Jiab ',Foo[np.ix_(act_hole, inact_hole)], Δt2)
-  
-            Δt2_v = np.einsum('cA, ijcb -> ijAb ',Fvv[np.ix_(act_particle, inact_particle)], Δt2)
-            Δt2_v += np.einsum('cB, ijac -> ijBa ',Fvv[np.ix_(act_particle, inact_particle)], Δt2)
-                 
-            Δt2_o_it = np.copy(Δt2_o)
-            Δt2_v_it = np.copy(Δt2_v)
+            Δt2_o = -lib.einsum('kI, kjab -> Ijab ',Foo[np.ix_(act_hole, inact_hole)], Δt2)
+        #   Δt2_o -=  lib.einsum('kJ, ikab -> Jiab ',Foo[np.ix_(act_hole, inact_hole)], Δt2)
+            Δt2_o -=  lib.einsum('kJ, kiba -> Jiba ',Foo[np.ix_(act_hole, inact_hole)], Δt2) 
+
+            Δt2_v = lib.einsum('Ac, ijcb -> ijAb ',Fvv[np.ix_(inact_particle, act_particle)], Δt2)
+            Δt2_v += lib.einsum('Bc, ijac -> ijBa ',Fvv[np.ix_(inact_particle, act_particle)], Δt2)
+          # Δt2_v += lib.einsum('Bc, jica -> jiBa ',Fvv[np.ix_(inact_particle, act_particle)], Δt2)
+
+            #calculate the norm of Δt2_o and Δt2_v 
+            res_o = np.linalg.norm(Δt2_o)
+            res_v = np.linalg.norm(Δt2_v)
+            res = np.sqrt(res_o**2 + res_v**2)
+            #res = res_o + res_v
+            print(f'    Initial residual for t2 correction: {res:.3e}')
+            #unit test this residual calculation, to match it with a precalculated residual value  1.13262e-01
+            if abs(res - 1.13262e-01) > 1e-3:
+                print(f'    WARNING: Residual calculation does not match expected value! Computed: {abs(res - 1.13262e-01):.5e}, Expected: 1.13262e-01')
+
+            Δt2_o_it_save = np.copy(Δt2_o)
+            Δt2_v_it_save = np.copy(Δt2_v)
+
+  #          Δt2_o_it = np.copy(Δt2_o)
+  #          Δt2_v_it = np.copy(Δt2_v)
+
+            Δt2_o = Δt2_o / eia_o
+            Δt2_v = Δt2_v / eia_v
+
+           #set active part to zero
+            #Δt2_o[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
+            #Δt2_v[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
 
             count = 0 
             acc = np.inf 
-
-            adiis = lib.diis.DIIS()
-
-            adiis.min_space = 2
-            adiis.space = 10
+            acc_prev = np.inf
             
-            diis_start = 15
-            damp = 0.9
+            # DIIS acceleration parameters
+          #  adiis_o = lib.diis.DIIS()
+            adiis_v = lib.diis.DIIS()
+          #  adiis_o.min_space = 2
+           # adiis_o.space = 15
+            adiis_v.min_space = 2
+            adiis_v.space = 15
+            
+            diis_start = 3
+            
+            # Adaptive damping: aggressive early, conservative later
+            damp_init = 0.3
+            damp_final = 0.8
+            
+            # Preconditioning: normalize by expected magnitude scales
+            scale_o = np.sqrt(np.mean(eia_o**2))
+            scale_v = np.sqrt(np.mean(eia_v**2))
 
-            while (acc > tol and count< count_tol):
-                Δt2_o_it -= np.einsum('jk,ikab -> ijab',Foo[np.ix_(act_hole, act_hole)], Δt2_o)
-                Δt2_o_it -= np.einsum('ik,kjab -> ijab',Foo[np.ix_(inact_hole, inact_hole)], Δt2_o)
-                Δt2_o_it = Δt2_o_it / eia_o
-                
-                Δt2_v_it += np.einsum('bc,ijac -> ijab', Fvv[np.ix_(act_particle, act_particle)], Δt2_v)
-                Δt2_v_it += np.einsum('ac,ijcb -> ijab', Fvv[np.ix_(inact_particle, inact_particle)], Δt2_v)
-                Δt2_v_it = Δt2_v_it / eia_v
+            while (acc > tol and count < count_tol):
+                Δt2_o_it = Δt2_o_it_save.copy()
+                Δt2_v_it = Δt2_v_it_save.copy()
 
-                # Δt2_v_it = self.run_diis_Δt2(Δt2_v_it, adiis)
+                # Compute residuals with Fock contributions
+                Δt2_o_it -= lib.einsum('jk,Ikab -> Ijab', Foo[np.ix_(act_hole, act_hole)], Δt2_o)
+                Δt2_o_it -= lib.einsum('IK,Kjab -> Ijab', Foo[np.ix_(inact_hole, inact_hole)], Δt2_o)
+                Δt2_o_it /= eia_o
                 
+                Δt2_v_it += lib.einsum('bc,ijAc -> ijAb', Fvv[np.ix_(act_particle, act_particle)], Δt2_v)
+                Δt2_v_it += lib.einsum('AC,ijCb -> ijAb', Fvv[np.ix_(inact_particle, inact_particle)], Δt2_v)
+                Δt2_v_it /= eia_v
+
+            #set active part to zero
+                #Δt2_o[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
+                #Δt2_v[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
+                
+
+
+                # Compute convergence criteria before update
                 acc_o = np.linalg.norm(Δt2_o_it)
                 acc_v = np.linalg.norm(Δt2_v_it)
                 acc = np.sqrt(acc_o**2 + acc_v**2)
 
-                Δt2_o -= Δt2_o_it
+                # Adaptive damping based on convergence rate
+                if count == 0:
+                    damp = damp_init
+                else:
+                    # Progress-based damping: stronger damping when progress stalls
+                    rel_improvement = (acc_prev - acc) / (acc_prev + 1e-12)
+                    if rel_improvement < 0.05:  # Stalled convergence
+                        damp = min(damp_final, damp + 0.05)
+                    elif rel_improvement > 0.3:  # Good progress
+                        damp = max(damp_init, damp - 0.02)
+                    else:
+                        damp = damp_init + (damp_final - damp_init) * (count / max(count_tol, 1)) ** 1.5
 
-                #Δt2_v_new =  Δt2_v - Δt2_v_it
-                #Δt2_v_new = (1 - damp) * Δt2_v + damp * (Δt2_v - Δt2_v_it) 
-                
-                Δt2_v -= damp * Δt2_v_it 
 
-                if count > diis_start:
-                    #Δt2_v = self.run_diis_Δt2(Δt2_v, adiis)
-                    None
+                damp = damp_init + (damp_final - damp_init) * (count / count_tol) ** 1.5
+
+                # Apply DIIS acceleration if converging well
+                if count >= diis_start:
+                    try:
+                        # Combine amplitude updates for DIIS
+                        #Δt2_o_vec = self.run_diis_Δt2(Δt2_o - (1.0 - damp) * Δt2_o_it, adiis_o)
+                        Δt2_v_vec = self.run_diis_Δt2(Δt2_v - (1.0 - damp) * Δt2_v_it, adiis_v)
+                        
+                        Δt2_o = Δt2_o - Δt2_o_it
+                        Δt2_v = Δt2_v_vec
+                    except:
+                        # Fall back to damped update if DIIS fails
+                        Δt2_o = Δt2_o - (1.0 - damp) * Δt2_o_it
+                        Δt2_v = Δt2_v - (1.0 - damp) * Δt2_v_it
+                else:
+                    # Standard damped update in early iterations
+                    Δt2_o = Δt2_o - (1.0 - damp) * Δt2_o_it
+                    Δt2_v = Δt2_v - (1.0 - damp) * Δt2_v_it
 
                 count += 1
-
-                print(f'    It: {count},  acc occ: {acc_o},  acc vir: {acc_v} ')
+                
+                # Diagnostic output
+                if acc_prev != np.inf:
+                    rel_improvement = (acc_prev - acc) / (acc_prev + 1e-12) * 100
+                    print(f'    It: {count},  acc occ: {acc_o:.2e},  acc vir: {acc_v:.2e},  '
+                          f'total: {acc:.2e},  rel_impr: {rel_improvement:+.1f}%,  damp: {damp:.2f}')
+                else:
+                    print(f'    It: {count},  acc occ: {acc_o:.2e},  acc vir: {acc_v:.2e},  total: {acc:.2e}')
+                
+                acc_prev = acc
             
-            print(f'    Iter. T2 correction finished in {count}/{count_tol} steps at {acc:.2e} accuracy.')
+            print(f'    Iter. T2 correction converged in {count}/{count_tol} steps with final accuracy {acc:.2e}')
 
             Δt2s_o.append(Δt2_o)
             Δt2s_v.append(Δt2_v)
@@ -697,7 +788,143 @@ class MPCC_LL:
             t2_antisym = 2.0*Δt2_v - np.transpose(Δt2_v, (1, 0, 2, 3))
             Ω[np.ix_(inact_particle, act_hole)] += np.einsum("ijAb,jb -> Ai", t2_antisym, Fov[np.ix_(act_hole, act_particle)])
 
-            return Δt2s_o, Δt2s_v , Ω
+        return Δt2s_o, Δt2s_v , Ω
+
+
+    def include_t2_active_stupid(self, Foo, Fvv, Fov, t2_act, Y, Ω, tol = 1e-6, count_tol = 1000):
+       
+        print(f'Computing active t2-correction ...')   
+        Δt2s_o = [] 
+        Δt2s_v = [] 
+
+        n_aux, n_rank, n_vir, n_occ = Y.shape
+        for k, frag in enumerate(self.frags):
+
+            # FIXME once fragmentation is assigned, compute these once!!!
+            act_hole = frag[0]
+            inact_hole = np.delete(range(n_occ), act_hole)
+            act_particle = frag[1]
+            inact_particle = np.delete(range(n_vir), act_particle)
+ 
+            eia_o = lib.direct_sum("Ia+jb->Ijab", 
+                                   self._eris.eia[np.ix_(inact_hole, act_particle)], 
+                                   self._eris.eia[np.ix_(act_hole, act_particle)])
+            eia_v = lib.direct_sum("iA+jb->ijAb", 
+                                   self._eris.eia[np.ix_(act_hole, inact_particle)], 
+                                   self._eris.eia[np.ix_(act_hole, act_particle)])
+
+            # NOTE This is the truly iterative part
+            # Step 10  
+            Ω[np.ix_(act_particle, act_hole)] = 0.0
+
+            δt2 = -lib.einsum("LRai, LRbj -> ijab", 
+                               Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)], 
+                               Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)])    
+            Δt2 = t2_act[k] - δt2 
+
+            dt2_all = np.zeros((n_occ, n_occ, n_vir, n_vir)) 
+
+            dt2_all[np.ix_(act_hole, act_hole, act_particle, act_particle)] = Δt2
+
+            tmp  = lib.einsum("bc,ijac->ijab", Fvv, dt2_all)
+            tmp -= lib.einsum("mi,mjab->ijab", Foo, dt2_all)
+
+            res2 = tmp + tmp.transpose(1,0,3,2)
+
+
+   # set active part to zero before iteration, we will add it back after convergence
+            res2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
+
+
+            print(f'Initial residual norm before iteration: {np.linalg.norm(res2):.5e}')   
+
+            Δt2_it_save = np.copy(res2)
+
+  #         Δt2_o_it = np.copy(Δt2_o)
+  #         Δt2_v_it = np.copy(Δt2_v)
+
+
+            #dt2_all = 0.0*dt2_all
+            dt2_all = res2/self._eris.D
+
+           #set active part to zero
+            dt2_all[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
+    #       Δt2_o[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
+   #        Δt2_v[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
+
+
+            count = 0 
+            acc = np.inf 
+            acc_prev = np.inf
+
+            adiis = lib.diis.DIIS()
+            adiis.min_space = 2
+            adiis.space = 15
+            
+            diis_start = 4
+            damp_init = 0.1
+            damp_final = 0.8
+            use_diis = True
+
+            while (acc > tol and count< count_tol):
+                Δt2_it = Δt2_it_save.copy()
+
+                res2 = -lib.einsum("mi,mjab->ijab", Foo, dt2_all)
+                res2 += lib.einsum("bc,ijac->ijab", Fvv, dt2_all)
+
+                Δt2_it += res2 + res2.transpose(1,0,3,2)
+
+                Δt2_it /= self._eris.D
+
+                # Zero out active-active part before computing residual
+                Δt2_it[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
+                acc = np.linalg.norm(Δt2_it)
+
+                # Adaptive damping: stronger early, weaker later
+                damp = damp_init + (damp_final - damp_init) * (count / count_tol) ** 1.5
+
+                if use_diis and count >= diis_start:
+                    # Apply DIIS to the full residual
+                    #dt2_all = self.run_diis_Δt2(dt2_all - (1.0 - damp) * Δt2_it, adiis)
+                    dt2_all = self.run_diis_Δt2(dt2_all - Δt2_it, adiis)
+                else:
+                    # Standard damped update without DIIS
+                    dt2_all = dt2_all - (1.0 - damp) * Δt2_it
+                    dt2_all = dt2_all - Δt2_it
+
+                count += 1
+
+                # Check relative convergence
+                if acc_prev != 0:
+                    rel_improvement = (acc_prev - acc) / acc_prev
+                else:
+                    rel_improvement = 0.0
+
+                print(f'    It: {count},  acc: {acc:.2e},  rel_impr: {rel_improvement:.2e},  damp: {damp:.2f}')
+                
+                acc_prev = acc
+            
+            print(f'    Iter. T2 correction finished in {count}/{count_tol} steps at {acc:.2e} accuracy.')
+
+
+            Δt2_o = Δt2_it[np.ix_(inact_hole, act_hole, act_particle, act_particle)] 
+            Δt2_v = Δt2_it[np.ix_(act_hole, act_hole, inact_particle, act_particle)]
+
+
+            Δt2s_o.append(Δt2_o)
+            Δt2s_v.append(Δt2_v)
+
+            # Step 11 use t2 active correction to improve Ω
+
+            t2_antisym = 2.0*Δt2_o - np.transpose(Δt2_o, (0, 1, 3, 2))
+            Ω[np.ix_(act_particle, inact_hole)] += np.einsum("Ijab,jb -> aI", t2_antisym, Fov[np.ix_(act_hole, act_particle)])
+  
+            t2_antisym = 2.0*Δt2_v - np.transpose(Δt2_v, (1, 0, 2, 3))
+            Ω[np.ix_(inact_particle, act_hole)] += np.einsum("ijAb,jb -> Ai", t2_antisym, Fov[np.ix_(act_hole, act_particle)])
+
+        return Δt2s_o, Δt2s_v , Ω
+
+
             
     def init_amps_fact(self):
        
