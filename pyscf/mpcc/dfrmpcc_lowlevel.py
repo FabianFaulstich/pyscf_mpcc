@@ -39,6 +39,11 @@ class MPCC_LL:
         else:
             self.ll_method = 'T1_transform'
 
+        if 'll_low_rank_tol' in kwargs:
+            self.ll_low_rank_tol = kwargs['ll_low_rank_tol']
+        else:
+            self.ll_low_rank_tol = None
+
         self._kernels = {
                 'factorized': self._factorized_kernel,
                 'unfactorized': self._unfactorized_kernel, 
@@ -484,6 +489,58 @@ class MPCC_LL:
 
         return res2
 
+    def _svd_factorize_slice(self, mat, tol):
+
+        u, s, vh = np.linalg.svd(mat, full_matrices=False)
+        if s.size == 0:
+            return u[:, :0], vh[:0]
+
+        cutoff = tol * s[0]
+        rank = np.count_nonzero(s > cutoff)
+        if rank == 0:
+            rank = 1
+
+        return u[:, :rank] * s[:rank], vh[:rank]
+
+    def _contract_n3v3(self, Joo, Jvv, t2):
+
+        tol = self.ll_low_rank_tol
+        if tol is None:
+            return lib.einsum("Lmj,Lbe,imae->ijab", Joo, Jvv, t2, optimize=True)
+
+        naux = Joo.shape[0]
+        nocc = Joo.shape[1]
+        nvir = Jvv.shape[1]
+
+        contracted = np.zeros((nocc, nocc, nvir, nvir), dtype=t2.dtype)
+        rank_oo = []
+        rank_vv = []
+
+        print(f"Performing low-rank factorization of Joo and Jvv with tol={tol:.2e} for N3V3 contraction...")
+
+        for aux_idx in range(naux):
+            left_oo, right_oo = self._svd_factorize_slice(Joo[aux_idx], tol)
+            left_vv, right_vv = self._svd_factorize_slice(Jvv[aux_idx], tol)
+
+            rank_oo.append(left_oo.shape[1])
+            rank_vv.append(left_vv.shape[1])
+
+            tmp_lr = lib.einsum("mp,qe,imae->iapq", left_oo, right_vv, t2, optimize=True)
+            contracted += lib.einsum("pj,bq,iapq->ijab", right_oo, left_vv, tmp_lr, optimize=True)
+
+        avg_rank_oo = float(np.mean(rank_oo))
+        avg_rank_vv = float(np.mean(rank_vv))
+
+        print(f"rank-reduced N3V3 contraction enabled: avg rank(Joo)={avg_rank_oo:.2f} avg rank(Jvv)={avg_rank_vv:.2f}")
+
+        #logger.debug1(
+        #    self,
+        #    "rank-reduced N3V3 contraction enabled: avg rank(Joo)=%.2f avg rank(Jvv)=%.2f",
+        #    avg_rank_oo,
+        #    avg_rank_vv,
+        #)
+        return contracted
+
 
     def update_t2_RPA(self, t2, Jvo, Foo, Fvv, Fov, t1, Joo, Jvv, Xvo_t2):
 
@@ -497,8 +554,12 @@ class MPCC_LL:
         tmp -= lib.einsum("mi,mjab->ijab", Foo_tmp, t2)
 
 ## N3V3
-        W_jebm = lib.einsum("Lmj, Lbe -> mbje", Joo, Jvv)
-        tmp -= lib.einsum("mbje, imae -> ijab", W_jebm, t2)
+
+        #W_jebm = lib.einsum("Lmj, Lbe -> mbje", Joo, Jvv)
+        #tmp -= lib.einsum("mbje, imae -> ijab", W_jebm, t2)
+
+        tmp -= self._contract_n3v3(Joo, Jvv, t2)
+
 
 #       W_jema = lib.einsum("Lmj, Lae -> maje", Joo, Jvv)
 #       tmp -= lib.einsum("maje, imeb -> ijab", W_jema, t2) 
