@@ -17,7 +17,7 @@ if __name__ == "__main__":
         [1, (0.0, -0.757, 0.587)],
         [1, (0.0, 0.757, 0.587)],
     ]
-    mol.basis = "cc-pvdz"
+    mol.basis = "cc-pvtz"
     mol.build()
 
     mf = scf.RHF(mol).density_fit().run()
@@ -61,8 +61,9 @@ if __name__ == "__main__":
 
     kwargs = {'frag'            : [[act_hole, act_part]],
                 'll_con_tol'    : 1e-6, 
-                'll_max_its'    : 80,
-                'll_kernel_type': 'factorized',
+                'll_max_its'    : 50,
+                'll_kernel_type': 'unfactorized',
+                'll_method'     :'rpax',
                 'lo_coeff'      : c_lo
             }
 
@@ -76,5 +77,3 @@ if __name__ == "__main__":
     print(f'CCSD:\n Total energy: {mycc.e_tot} Correlation energ: {mycc.e_corr}')
     print(f'DF-MPCCSD:\n Total energy: {mympcc.lowlevel.e_tot} Correlation energ: {mympcc.lowlevel.e_corr}')
     print(f'Difference:\n Total energy: {float(mympcc.lowlevel.e_tot - mycc.e_tot)} Correlation energ: {mympcc.lowlevel.e_corr - mycc.e_corr}')
-    breakpoint()
-
