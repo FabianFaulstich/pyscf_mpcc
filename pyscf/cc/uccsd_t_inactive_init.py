@@ -18,6 +18,7 @@
 
 import numpy
 import scipy
+import h5py
 from pyscf import lib
 from pyscf.cc import uccsd
 from pyscf import df
@@ -46,15 +47,6 @@ def update_amps(ints):
     '''Update non-canonical MP2 amplitudes'''
     #assert (isinstance(eris, _ChemistsERIs))
 
-    def p6(t):
-        return (t + t.transpose(1,2,0,4,5,3) +
-                t.transpose(2,0,1,5,3,4) + t.transpose(0,2,1,3,5,4) +
-                t.transpose(2,1,0,5,4,3) + t.transpose(1,0,2,4,3,5))
-    def r6(w):
-        return (w + w.transpose(2,0,1,3,4,5) + w.transpose(1,2,0,3,4,5)
-                - w.transpose(2,1,0,3,4,5) - w.transpose(0,2,1,3,4,5)
-                - w.transpose(1,0,2,3,4,5))
-
     def cyclic_hole(u):
         return (u + u.transpose(1,2,0,3,4,5)+u.transpose(2,0,1,3,4,5))     
 
@@ -72,12 +64,10 @@ def update_amps(ints):
     eia = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
     eIA = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
 
-
-    d3aaa  = lib.direct_sum('ia+jb+kc->ijkabc', eia, eia, eia)
-    d3bbb = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eIA)
     d3baa = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eia, eia)
     d3bba = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eia)
 
+    fh5 = h5py.File('u3_amplitudes.h5', 'w')
 
     # aaa
     start = time.time()
@@ -85,12 +75,23 @@ def update_amps(ints):
     x  = lib.einsum('ijae,beck->ijkabc', t2aa, ints.Wvvvo )
     x -= lib.einsum('imab,mjck->ijkabc', t2aa, ints.Woovo )
 
-    end = time.time()
     print("time to make aaa contribution to t3", end-start)
 
     start = time.time()
     u3aaa = cyclic_hole(cyclic_particle(x)) 
+    
+    d3aaa  = lib.direct_sum('ia+jb+kc->ijkabc', eia, eia, eia) 
+
+    u3aaa /=d3aaa 
+
+    u3aaa_tr = numpy.einsum("IJKABC, iI, jJ, kK, aA, bB, cC -> ijkabc", u3aaa, ints.umat_occ_a,
+                          ints.umat_occ_a, ints.umat_occ_a, ints.umat_vir_a, ints.umat_vir_a, ints.umat_vir_a,optimize=True)
+
+    fh5['u3aaa_tr'] = u3aaa_tr
+    del u3aaa, u3aaa_tr, d3aaa
+
     end = time.time()
+
     print("time to make aaa permutation", end-start)
 
     # bbb
@@ -98,6 +99,15 @@ def update_amps(ints):
     x -= lib.einsum('imab,mjck->ijkabc',t2bb, ints.WOOVO )
 
     u3bbb = cyclic_particle(cyclic_hole(x)) 
+
+    d3bbb = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eIA)
+
+    u3bbb /=d3bbb   
+    u3bbb_tr = numpy.einsum("IJKABC, iI, jJ, kK, aA, bB, cC -> ijkabc", u3bbb, ints.umat_occ_b,
+                          ints.umat_occ_b, ints.umat_occ_b, ints.umat_vir_b, ints.umat_vir_b, ints.umat_vir_b,optimize=True)
+
+    fh5['u3bbb_tr'] = u3bbb_tr
+    del u3bbb, u3bbb_tr, d3bbb 
 
     # baa
     u3baa  = lib.einsum('jIeA,beck->IjkAbc', t2ab, ints.Wvvvo)    # 2
@@ -132,6 +142,15 @@ def update_amps(ints):
     #P(jk) 
     r += u3baa - u3baa.transpose(0,2,1,3,4,5)
 
+    d3baa = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eia, eia)
+
+    u3baa = r/d3baa   
+    u3baa_tr = numpy.einsum("IJKABC, iI, jJ, kK, aA, bB, cC -> ijkabc", u3baa, ints.umat_occ_b,
+                          ints.umat_occ_a, ints.umat_occ_a, ints.umat_vir_b, ints.umat_vir_a, ints.umat_vir_a,optimize=True)    
+
+    fh5['u3baa_tr'] = u3baa_tr
+    del u3baa, u3baa_tr, d3baa
+
     # bba
     u3bba  = lib.einsum('IJAE,BEck->IJkABc', t2bb, ints.WVVvo ) 
 #  P(AB)
@@ -163,30 +182,17 @@ def update_amps(ints):
 
     y = u3bba - u3bba.transpose(1,0,2,3,4,5)
     v += y - y.transpose(0,1,2,4,3,5)
+    d3bba = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eIA, eia)
 
-    u3aaa /=d3aaa 
-    u3bbb /=d3bbb 
     u3bba = v/d3bba 
-    u3baa = r/d3baa 
-
-    u3aaa_tr = numpy.einsum("IJKABC, iI, jJ, kK, aA, bB, cC -> ijkabc", u3aaa, ints.umat_occ_a,
-                          ints.umat_occ_a, ints.umat_occ_a, ints.umat_vir_a, ints.umat_vir_a, ints.umat_vir_a,optimize=True)
-
-
-    u3bbb_tr = numpy.einsum("IJKABC, iI, jJ, kK, aA, bB, cC -> ijkabc", u3bbb, ints.umat_occ_b,
-                          ints.umat_occ_b, ints.umat_occ_b, ints.umat_vir_b, ints.umat_vir_b, ints.umat_vir_b,optimize=True)
-
-
-    u3baa_tr = numpy.einsum("IJKABC, iI, jJ, kK, aA, bB, cC -> ijkabc", u3baa, ints.umat_occ_b,
-                          ints.umat_occ_a, ints.umat_occ_a, ints.umat_vir_b, ints.umat_vir_a, ints.umat_vir_a,optimize=True)
-
-
+      
     u3bba_tr = numpy.einsum("IJKABC, iI, jJ, kK, aA, bB, cC -> ijkabc", u3bba, ints.umat_occ_b,
                           ints.umat_occ_b, ints.umat_occ_a, ints.umat_vir_b, ints.umat_vir_b, ints.umat_vir_a,optimize=True)
 
-    w3 = u3aaa_tr, u3bbb_tr, u3baa_tr, u3bba_tr
-
-    return w3 
+    fh5['u3bba_tr'] = u3bba_tr
+    del u3bba, u3bba_tr, d3bba
+    fh5.close()
+    
 
 def _make_4c_integrals_bare(mycc, eris, t1, t2, mo_coeff):
     assert mycc._scf.istype('UHF')
