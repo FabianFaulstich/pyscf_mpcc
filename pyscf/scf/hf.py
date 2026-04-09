@@ -34,6 +34,7 @@ from pyscf.scf import diis
 from pyscf.scf import _vhf
 from pyscf.scf import chkfile
 from pyscf.scf import dispersion
+from pyscf.scf import smearing
 from pyscf.data import nist
 from pyscf import __config__
 
@@ -229,6 +230,8 @@ Keyword argument "init_dm" is replaced by "dm0"''')
             scf_conv = mf.check_convergence(locals())
         elif abs(e_tot-last_hf_e) < conv_tol or norm_gorb < conv_tol_grad:
             scf_conv = True
+        else:
+            scf_conv = False
         logger.info(mf, 'Extra cycle  E= %.15g  delta_E= %4.3g  |g|= %4.3g  |ddm|= %4.3g',
                     e_tot, e_tot-last_hf_e, norm_gorb, norm_ddm)
         if dump_chk and mf.chkfile:
@@ -244,7 +247,7 @@ def energy_elec(mf, dm=None, h1e=None, vhf=None):
     r'''Electronic part of Hartree-Fock energy, for given core hamiltonian and
     HF potential
 
-    ... math::
+    .. math::
 
         E = \sum_{ij}h_{ij} \gamma_{ji}
           + \frac{1}{2}\sum_{ijkl} \gamma_{ji}\gamma_{lk} \langle ik||jl\rangle
@@ -456,6 +459,14 @@ def init_guess_by_minao(mol):
         if not gto.is_ghost_atom(symb):
             occ.append(occdic[symb])
             new_atom.append(mol._atom[ia])
+
+    if not occ:
+        # A system with only ghost atoms. (issue 3155)
+        nao = mol.nao
+        occ = numpy.zeros(nao)
+        dm = mo_coeff = numpy.zeros((nao, nao))
+        return lib.tag_array(dm, mo_coeff=mo_coeff, mo_occ=occ)
+
     occ = numpy.hstack(occ)
 
     pmol = gto.Mole()
@@ -1148,6 +1159,8 @@ def get_occ(mf, mo_energy=None, mo_coeff=None):
     mo_occ = numpy.zeros_like(mo_energy)
     nocc = mf.mol.nelectron // 2
     mo_occ[e_idx[:nocc]] = 2
+    if nocc > nmo:
+        raise RuntimeError(f'Failed to assign mo_occ. Nocc ({nocc}) > Nmo ({nmo})')
     if mf.verbose >= logger.INFO and nocc < nmo:
         if e_sort[nocc-1]+1e-3 > e_sort[nocc]:
             logger.warn(mf, 'HOMO %.15g == LUMO %.15g',
@@ -1974,6 +1987,8 @@ This is the Gaussian fit version as described in doi:10.1063/5.0004046.''')
     do_disp = dispersion.check_disp
     get_dispersion = dispersion.get_dispersion
 
+    smearing = smearing.smearing
+
     def energy_nuc(self):
         return self.mol.enuc
 
@@ -2149,7 +2164,29 @@ This is the Gaussian fit version as described in doi:10.1063/5.0004046.''')
 
     def density_fit(self, auxbasis=None, with_df=None, only_dfj=False):
         import pyscf.df.df_jk
+        if self.istype('_Solvation'):
+            logger.warn(self,
+                'It is recommended to call density_fit() before applying a solvent model. '
+                'Calling density_fit() after the solvent model may result in '
+                'incorrect nuclear gradients, TDDFT and other methods.')
         return pyscf.df.df_jk.density_fit(self, auxbasis, with_df, only_dfj)
+
+    def multigrid_numint(self, margin=None, mesh=None):
+        '''Apply the MultiGrid algorithm for XC numerical integartion.
+
+        Kwargs:
+            margin : float
+                A box will be created to enclose the molecule, with the molecule
+                positioned at the center. "margin" specifies the distance from
+                the edge of the molecule to the edge of the box. If not provided,
+                a default margin is estimated, which ensures that the electron
+                density decays to approximately 1e-7 at the boundary of the box.
+            mesh : (3,) ndarray
+                The number of mesh grids along each axis. If not specified, the
+                number of mesh grids will be estimated based on the basis sets
+                and the margin.
+        '''
+        raise NotImplementedError
 
     def sfx2c1e(self):
         import pyscf.x2c.sfx2c1e
@@ -2173,6 +2210,10 @@ This is the Gaussian fit version as described in doi:10.1063/5.0004046.''')
         raise NotImplementedError
 
     def nuc_grad_method(self):  # pragma: no cover
+        '''Hook to create object for analytical nuclear gradients.'''
+        return self.Gradients()
+
+    def Gradients(self):  # pragma: no cover
         '''Hook to create object for analytical nuclear gradients.'''
         raise NotImplementedError
 
@@ -2450,7 +2491,6 @@ class RHF(SCF):
         from pyscf import dft
         return self._transfer_attrs_(dft.RKS(self.mol, xc=xc))
 
-    # FIXME: consider the density_fit, x2c and soscf decoration
     to_gpu = lib.to_gpu
 
 def _hf1e_scf(mf, *args):
@@ -2462,26 +2502,10 @@ def _hf1e_scf(mf, *args):
     mf.mo_energy, mf.mo_coeff = mf.eig(h1e, s1e)
     mf.mo_occ = mf.get_occ(mf.mo_energy, mf.mo_coeff)
     mf.e_tot = mf.mo_energy[mf.mo_occ>0][0].real + mf.mol.energy_nuc()
+    if mf.chkfile:
+        mf.dump_chk(mf.chkfile)
     mf._finalize()
     return mf.e_tot
 
 
 del (WITH_META_LOWDIN, PRE_ORTH_METHOD)
-
-
-if __name__ == '__main__':
-    from pyscf import scf
-    mol = gto.Mole()
-    mol.verbose = 5
-    mol.output = None
-
-    mol.atom = [['He', (0, 0, 0)], ]
-    mol.basis = 'ccpvdz'
-    mol.build(0, 0)
-
-##############
-# SCF result
-    method = scf.RHF(mol).x2c().density_fit().newton()
-    method.init_guess = '1e'
-    energy = method.scf()
-    print(energy)
