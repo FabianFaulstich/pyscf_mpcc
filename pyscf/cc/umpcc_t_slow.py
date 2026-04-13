@@ -266,15 +266,6 @@ def update_amps_t3(mcc, imds, wtriples, t3, eris, act_hole, act_particle):
 
     u3aaa, u3bbb, u3baa, u3bba = wtriples
 
-    print("BEFORE UPDATE=======")
-
-    print("norm of u3aaa", numpy.linalg.norm(u3aaa))
-    print("norm of u3bbb", numpy.linalg.norm(u3bbb))
-    print("norm of u3baa", numpy.linalg.norm(u3baa))
-    print("norm of u3bba", numpy.linalg.norm(u3bba))
-#    noccb, nocca, _, nvirb, nvira, _ = t3baa.shape
-
-    print("=======")
 
     mo_ea_o = numpy.diag(imds.Foo_act)
     mo_ea_v = numpy.diag(imds.Fvv_act)+mcc.level_shift
@@ -301,14 +292,6 @@ def update_amps_t3(mcc, imds, wtriples, t3, eris, act_hole, act_particle):
     x = -lib.einsum('mjkabc,mi->ijkabc', t3bbb, imds.FOO_act)
     u3bbb += cyclic_hole(x)
 
-    print("norm of u3aaa, fock", numpy.linalg.norm(u3aaa))
-    print("norm of u3bbb, fock", numpy.linalg.norm(u3bbb))
-
-    print("fock_ooa", numpy.linalg.norm(imds.Foo_act))
-    print("fock_oob", numpy.linalg.norm(imds.FOO_act))
-
-    print("fock_vva", numpy.linalg.norm(imds.Fvv_act))
-    print("fock_vvb", numpy.linalg.norm(imds.FVV_act))
     # baa
     d3baa_active = lib.direct_sum('ia+jb+kc->ijkabc', eIA, eia, eia)
 
@@ -319,10 +302,6 @@ def update_amps_t3(mcc, imds, wtriples, t3, eris, act_hole, act_particle):
     r = -lib.einsum('ImkAbc,mj->IjkAbc', t3baa, imds.Foo_act)  
     u3baa += r - r.transpose(0,2,1,3,4,5)
     u3baa -= lib.einsum('MjkAbc,MI->IjkAbc', t3baa, imds.FOO_act)  
-
-# fish out the energy contribution
-#    temp_t3 = t3baa + u3baa/d3baa_active
-#    print("energy contribution:t3baa", (1.0/4)*lib.einsum('ijkabc,ijkabc', temp_t3.conj(), u3baa))   
 
     # bba
 
@@ -336,12 +315,6 @@ def update_amps_t3(mcc, imds, wtriples, t3, eris, act_hole, act_particle):
     v = -lib.einsum('MJkABc,MI->IJkABc', t3bba, imds.FOO_act)  
     u3bba += v - v.transpose(1,0,2,3,4,5)
     u3bba -= lib.einsum('IJmABc,mk->IJkABc',t3bba, imds.Foo_act)  
-
-    print("norm of u3baa, fock", numpy.linalg.norm(u3baa))
-    print("norm of u3bba, fock", numpy.linalg.norm(u3bba))
-# fish out the energy contribution
-#    temp_t3 = t3bba + u3bba/d3bba_active
-#    print("energy contribution:t3bba", (1.0/4)*lib.einsum('ijkabc,ijkabc', temp_t3.conj(), u3bba))   
 
 
 # divide by denominator..
