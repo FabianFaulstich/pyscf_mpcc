@@ -702,8 +702,6 @@ class screened:
         
         t1_ii, t1_ia, t1_ai, t1_aa = self._set_t1_blocks(t1)
 
-        #self.add_DCA = True
-
         #Non DCA terms:
         if (self.add_DCA):
            Imbje, Imbej, Imnij = self.t2_transform_quadratic_inactive(t2)  

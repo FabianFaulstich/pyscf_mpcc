@@ -1,3 +1,4 @@
+from time import time
 from pyscf import lib
 import numpy as np
 
@@ -64,8 +65,10 @@ class MPCC(lib.StreamObject):
                self.highlevel.frag = frag
 
                # NOTE can we remove the t2 dependence? 
+               time_start = time.time()
                imds = self.screened.kernel(t1, t2)
-               
+               time_end = time.time()
+               print(f'MPCC: Screened kernel calculated for fragment {frag} in {time_end - time_start:.4f} seconds')
                print('MPCC: Screened kernel calculated for fragment:', frag)
 
                # NOTE can we remove the t2 dependence? 
