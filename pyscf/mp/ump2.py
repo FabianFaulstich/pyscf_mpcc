@@ -263,11 +263,17 @@ def update_amps(mp, t2, eris):
     u2aa += eris_ovov.transpose(0,2,1,3) - eris_ovov.transpose(0,2,3,1)
     u2bb += eris_OVOV.transpose(0,2,1,3) - eris_OVOV.transpose(0,2,3,1)
     u2ab += eris_ovOV.transpose(0,2,1,3)
+
     u2aa = u2aa + u2aa.transpose(1,0,3,2)
     u2bb = u2bb + u2bb.transpose(1,0,3,2)
 
-    eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
-    eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+#    eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
+#    eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+
+    eia_a = lib.direct_sum('i-a->ia', numpy.diag(focka[:nocca,:nocca]), numpy.diag(focka[nocca:,nocca:]))
+    eia_b = lib.direct_sum('i-a->ia', numpy.diag(fockb[:noccb,:noccb]), numpy.diag(fockb[noccb:,noccb:]))
+
+
     u2aa /= lib.direct_sum('ia+jb->ijab', eia_a, eia_a)
     u2ab /= lib.direct_sum('ia+jb->ijab', eia_a, eia_b)
     u2bb /= lib.direct_sum('ia+jb->ijab', eia_b, eia_b)
@@ -448,6 +454,7 @@ def make_rdm1(mp, t2=None, ao_repr=False, with_frozen=True):
     '''
     from pyscf.cc import uccsd_rdm
     if t2 is None: t2 = mp.t2
+    assert t2 is not None
     doo, dvv = _gamma1_intermediates(mp, t2)
     nocca, noccb, nvira, nvirb = t2[1].shape
     dov = numpy.zeros((nocca,nvira))
@@ -565,6 +572,7 @@ def make_rdm2(mp, t2=None, ao_repr=False):
     eri_bb[p,q,r,s] = ( p_beta q_beta | r_beta s_beta )
     '''
     if t2 is None: t2 = mp.t2
+    assert t2 is not None
     nmoa, nmob = nmoa0, nmob0 = mp.nmo
     nocca, noccb = nocca0, noccb0 = mp.nocc
     t2aa, t2ab, t2bb = t2
@@ -651,7 +659,7 @@ def make_rdm2(mp, t2=None, ao_repr=False):
     return dm2aa, dm2ab, dm2bb
 
 
-class UMP2(mp2.MP2):
+class UMP2(mp2.MP2Base):
 
     get_nocc = get_nocc
     get_nmo = get_nmo
@@ -674,10 +682,19 @@ class UMP2(mp2.MP2):
     update_amps = update_amps
     _iterative_kernel = _iterative_kernel
     get_t1 = get_t1 
+
     def init_amps(self, mo_energy=None, mo_coeff=None, eris=None, with_t2=WITH_T2):
         return kernel(self, mo_energy, mo_coeff, eris, with_t2)
 
-    to_gpu = lib.to_gpu
+    def density_fit(self, auxbasis=None, with_df=None):
+        from pyscf.mp import dfump2
+        mymp = dfump2.DFUMP2(self._scf, self.frozen, self.mo_coeff, self.mo_occ)
+        if with_df is not None:
+            mymp.with_df = with_df
+        if mymp.with_df.auxbasis != auxbasis:
+            mymp.with_df = mymp.with_df.copy()
+            mymp.with_df.auxbasis = auxbasis
+        return mymp
 
 MP2 = UMP2
 
