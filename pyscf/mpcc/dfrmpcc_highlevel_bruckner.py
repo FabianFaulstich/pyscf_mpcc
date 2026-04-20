@@ -109,18 +109,31 @@ class MPCC_HL:
         Following Table XXX in Future Paper
         """
 
-        # Contractions
-        X, Xoo, Xvo = self.get_X_t1(t1)
-        Xvo_t2 = self.get_X_t2(t2)
+        t1_renorm, L1_renorm = self.get_renormalized_t1(t1, -t1)
 
-        Joo, Jvo, Jvv = self.get_J(Xoo, Xvo, Xvo_t2, t1)
         
-        Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo, Jvo)
+        # Contractions
+        X, Xoo, Xvo = self.get_X_t1(t1_renorm)
+        
+
+        Joo, Jvo, Jvv = self.get_J_t1(Xoo, Xvo, t1_renorm)
+
+        Xt, Xoo, Xov = self.get_X_L1(Jvv, Xoo, Jvo, L1_renorm)
+        
+        Joo, Jov, Jvv = self.get_J_L1(Joo, Xoo, Xov, Xvo, Jvv, L1_renorm)
+
+        Xvo_t2 = self.get_X_t2(t2)
+    
+        Jvo = self.get_J_t2(Jvo, Xvo_t2)
+
+      # Foo, Fvv, Fov = self.get_F(t1_renorm, X, Xoo, Xvo, Jvo)
+
+        Foo, Fvv, Fov = self.get_F(t1_renorm, X, Xt, Xoo, Xvo, Jvo)
 
         Foo, Fvv = self.add_t2_to_fock(Fvv, Foo, Xvo_t2)    
 
-        Ω = self.get_Ω(X, Xvo, Xvo_t2, Foo, Fvv, Fov, t1, t2)
-        res2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1, Joo, Jvv)
+        Ω = self.get_Ω(X, Xt, Xvo, Xvo_t2, Foo, Fvv, Fov, t1_renorm, t2)
+        res2 = self.update_t2(t2, Jvo, Foo, Fvv, Fov, t1_renorm, Joo, Jvv)
 
         #make the the inactive residuals zero
         
@@ -139,8 +152,9 @@ class MPCC_HL:
 
         print("norm of the residuals: res1, res2", np.linalg.norm(res1), np.linalg.norm(res2))
 
+    #    res = np.linalg.norm(res1)/(self.nocc * self.nvir) + np.linalg.norm(res2)/(self.nocc**2 * self.nvir**2)
         res = np.linalg.norm(res1) + np.linalg.norm(res2)
-
+        
         t1 -= res1
         t2 -= res2
         return res, t1, t2
@@ -191,6 +205,34 @@ class MPCC_HL:
             0, 2, 1, 3
         )
         return t1, np.asarray(t2, order="C")
+
+    @staticmethod
+    def get_renormalized_t1(t1, L1, conv_tol=1e-8, max_cycle=50):
+
+        #initialize the renormalized t1 and L1
+        t1_renorm = t1.copy()
+        L1_renorm = L1.copy()
+
+        for niter in range(max_cycle):
+            t1_prev = t1_renorm.copy()
+            L1_prev = L1_renorm.copy()
+
+            den_oo = lib.einsum("ic, jc ->ij", L1_prev, t1_prev)
+            den_vv = -lib.einsum("kb, ka ->ab", L1_prev, t1_prev)
+
+            #update t1 and L1 until the renormalized amplitudes converge
+            t1_renorm = t1 - lib.einsum("ia,ij->ja", t1, den_oo)
+            L1_renorm = L1 + lib.einsum("ia,ab->ib", t1, den_vv)
+
+            delta = np.max([np.linalg.norm(t1_renorm - t1_prev),
+                             np.linalg.norm(L1_renorm - L1_prev)])
+            
+            if delta < conv_tol:
+                break
+
+        print (f"Renormalization converged in {niter+1} iterations")
+
+        return t1_renorm, L1_renorm
 
     def get_X_t1(self, t1):
 
@@ -260,7 +302,6 @@ class MPCC_HL:
 
         return Foo, Fvv, Fov
 
-
     def add_t2_to_fock(self, Fvv, Foo, Xvo_t2):    
 
         Foo += lib.einsum("Lie,Lej->ij", self._eris.Lov,Xvo_t2)
@@ -295,7 +336,7 @@ class MPCC_HL:
 
         return Ω
 
-    def get_Ω(self, X, Xvo, Xvo_t2, Foo, Fvv, Fov, t1, t2):
+    def get_Ω(self, X, Xt, Xvo, Xvo_t2, Foo, Fvv, Fov, t1, t2):
 
         Foo_tmp = Foo.copy()
         Fvv_tmp = Fvv.copy() 
@@ -307,7 +348,7 @@ class MPCC_HL:
 
         Ω -= lib.einsum("Laj,Lji->ai", Xvo, self._eris.Loo)
         Ω -= lib.einsum("Laj,Lji->ai", Xvo_t2, self._eris.Loo)
-        Ω += lib.einsum("Lai,L->ai", self._eris.Lvo, X)
+        Ω += lib.einsum("Lai,L->ai", self._eris.Lvo, X+Xt)
 
         Ω += lib.einsum("Lae,Lei->ai", self._eris.Lvv, Xvo_t2)
 
@@ -369,7 +410,7 @@ class MPCC_HL:
         
         #norm of the active part of the HHL contribution to the R2 residue
         res2_active = res2[np.ix_(self.act_hole, self.act_hole, self.act_particle, self.act_particle)]
-        print("norm of the active part of the HHL contribution to the R2 residue", np.linalg.norm(res2_active)) 
+        #print("norm of the active part of the HHL contribution to the R2 residue", np.linalg.norm(res2_active)) 
 
 
         Foo_tmp = Foo.copy()
@@ -383,26 +424,26 @@ class MPCC_HL:
 
         #extract the active part of the tmp matrix
         tmp_active = tmp[np.ix_(self.act_hole, self.act_hole, self.act_particle, self.act_particle)]
-        print("norm of the active part of the R2 residue after Foo and Fvv contractions", np.linalg.norm(tmp_active)) 
+        #print("norm of the active part of the R2 residue after Foo and Fvv contractions", np.linalg.norm(tmp_active)) 
 
 ## N3V3
         W_jebm = lib.einsum("Lmj, Lbe -> mbje", Joo, Jvv) - Imbje 
         tmp -= lib.einsum("mbje, imae -> ijab", W_jebm, t2) # em should be ii, ia, ai types
 
         tmp_active = tmp[np.ix_(self.act_hole, self.act_hole, self.act_particle, self.act_particle)]
-        print("norm of the active part of the R2 residue after W_jebm contribution", np.linalg.norm(tmp_active))
+        #print("norm of the active part of the R2 residue after W_jebm contribution", np.linalg.norm(tmp_active))
 
 
         W_jema = lib.einsum("Lmj, Lae -> maje", Joo, Jvv) - Imbje*0.5
         tmp -= lib.einsum("maje, imeb -> ijab", W_jema, t2) # em should be ii, ia, ai types
 
         tmp_active = tmp[np.ix_(self.act_hole, self.act_hole, self.act_particle, self.act_particle)]
-        print("norm of the active part of the R2 residue after W_jema contribution", np.linalg.norm(tmp_active))
+        #print("norm of the active part of the R2 residue after W_jema contribution", np.linalg.norm(tmp_active))
 ## more DCA like terms:
         tmp -= lib.einsum("mbej, imae -> ijab", Imbej, t2) #should it not be antisym
 
         tmp_active = tmp[np.ix_(self.act_hole, self.act_hole, self.act_particle, self.act_particle)]
-        print("norm of the active part of the R2 residue after Imbej contribution", np.linalg.norm(tmp_active))
+        #print("norm of the active part of the R2 residue after Imbej contribution", np.linalg.norm(tmp_active))
 
         res2 += tmp + tmp.transpose(1,0,3,2) 
 
