@@ -3,8 +3,11 @@ from pyscf import lib, df
 from pyscf.lib import logger
 import numpy as np
 from dataclasses import dataclass
+import scipy.sparse.linalg
+import scipy.special
 
 from pyscf.mpcc import mpcc_tools
+from pyscf.mpcc import laplace_quadrature
 from functools import partial
 
 import time 
@@ -44,9 +47,21 @@ class MPCC_LL:
         else:
             self.ll_low_rank_tol = None
 
+        self.ll_laplace_quad = kwargs.get('ll_laplace_quad', None)
+        self.ll_laplace_quad_file = kwargs.get('ll_laplace_quad_file', None)
+        self.ll_laplace_root = kwargs.get('ll_laplace_root', None)
+        self.ll_laplace_npoints = kwargs.get(
+            'll_laplace_npoints', kwargs.get('ll_laplace_nlap', 16)
+        )
+        self.ll_active_t2_tol = kwargs.get(
+            'll_active_t2_tol', min(self.ll_con_tol, 1.0e-8)
+        )
+        self.ll_active_t2_max_its = kwargs.get('ll_active_t2_max_its', 1000)
+
         self._kernels = {
                 'factorized': self._factorized_kernel,
                 'unfactorized': self._unfactorized_kernel, 
+                'sylvester_laplace_factorized': self._sylvester_laplace_factorized_kernel,
                 }
 
         self.frags = frags
@@ -55,6 +70,7 @@ class MPCC_LL:
         #self.t1 = None
         self.t2 = None
         self._Y = None
+        self._t2_full = None
 
         # NOTE use DIIS as default
         self.diis = True
@@ -98,12 +114,14 @@ class MPCC_LL:
         #ll_method = kwargs.get('ll_method', self.ll_method)
         if self.ll_method == 'rpax':
             update_amps = self.update_amps_unfactorized_RPA
+        elif self.ll_method == 'sylvester_laplace':
+            update_amps = self.update_amps_sylvester_laplace
         elif self.ll_method == 'T1_transform':
             update_amps = self.update_amps_unfactorized
         else:
             raise ValueError(
                 f"Unknown ll_method: {self.ll_method}. "
-                "Use 'rpax', or 'T1_transform'."
+                "Use 'rpax', 'T1_transform', or 'sylvester_laplace'."
             )
         
         err = np.inf
@@ -115,7 +133,9 @@ class MPCC_LL:
         while err > self.ll_con_tol and count < self.ll_max_its:
 
             res, e_corr, t1_new, t2_new = update_amps(t1, t2)
-            if self.diis:
+            if self.diis and self.ll_method == "sylvester_laplace":
+                t1_new = self.run_diis(t1_new, adiis)
+            elif self.diis:
                 t1_new, t2_new = self.run_diis_full(t1_new, t2_new, adiis)
             else:
                 t1_new, t2_new = t1_new, t2_new
@@ -128,7 +148,7 @@ class MPCC_LL:
             # NOTE change this to logger!
             print(f"It {count}; correlation energy {e_corr:.6e}; residual {res:.6e}")
 
-        self._e_corr = e_corr
+        self._e_corr = self.get_energy(t1, t2)
         self._e_tot = self.mf.e_tot + self._e_corr
 
         return t1, t2
@@ -162,6 +182,302 @@ class MPCC_LL:
         t2 -= res2
 
         return res, ΔE, t1, t2
+
+    def update_amps_sylvester_laplace(self, t1, t2):
+        """Update amplitudes using a Laplace-quadrature Sylvester T2 solve."""
+        Xoo, Xvo, X = self.get_X(t1)
+        Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+        Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+
+        Foo_eff, Fvv_eff = self.update_F(Foo.copy(), Fvv.copy(), Fov, t1)
+        t2_ll = self.solve_t2_sylvester_laplace(Jvo, Foo_eff, Fvv_eff)
+
+        omega = self.get_Ω_slow(X, Xvo, Foo, Fvv, Fov, t1, t2_ll)
+        ΔE = self.get_energy(t1, t2)
+
+        t2_act = []
+        for frag in self.frags:
+            act_hole = frag[0]
+            act_particle = frag[1]
+            t2_act.append(
+                t2[np.ix_(act_hole, act_hole, act_particle, act_particle)]
+            )
+
+        t2_new, omega = self.include_t2_active_dense(
+            Foo_eff, Fvv_eff, Fov, t2_act, t2_ll, omega
+        )
+
+        res1 = omega.T / self._eris.eia
+        res = np.linalg.norm(res1)
+
+        t1 -= res1
+
+        return res, ΔE, t1, t2_new
+
+    def get_sylvester_intermediates(self, t1):
+        """
+        Build the intermediates used by Eq. T2_ampl_env_noDC.
+
+        Returns
+        -------
+        Jvo : np.ndarray
+            T1-transformed DF coupling with shape (naux, nvir, nocc).
+        Foo : np.ndarray
+            Effective occupied Fock block used by the Sylvester operator.
+        Fvv : np.ndarray
+            Effective virtual Fock block used by the Sylvester operator.
+        Fov : np.ndarray
+            Effective occupied-virtual Fock block, returned for verification
+            against the existing unfactorized update_t2 implementation.
+        """
+        Xoo, Xvo, X = self.get_X(t1)
+        Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+        Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+        Foo, Fvv = self.update_F(Foo, Fvv, Fov, t1)
+
+        return Jvo, Foo, Fvv, Fov
+
+    def solve_t2_sylvester_laplace(self, Jvo, Foo, Fvv, quad=None):
+        """Solve Eq. T2_ampl_env_noDC with scalar denominator quadrature."""
+        Foo = 0.5 * (Foo + Foo.T)
+        Fvv = 0.5 * (Fvv + Fvv.T)
+
+        eo, Uo = np.linalg.eigh(Foo)
+        ev, Uv = np.linalg.eigh(Fvv)
+
+        Jvo = lib.einsum("aA,Lai,iI->LAI", Uv, Jvo, Uo)
+        denom = lib.direct_sum("A+B-I-J->IJAB", ev, ev, eo, eo)
+        if np.any(denom <= 0.0):
+            raise ValueError("Laplace Sylvester denominators must be positive")
+
+        if quad is None:
+            if self.ll_laplace_quad is not None:
+                quad = self.ll_laplace_quad
+            elif self.ll_laplace_quad_file is not None:
+                self.ll_laplace_quad = laplace_quadrature.load(self.ll_laplace_quad_file)
+                quad = self.ll_laplace_quad
+            elif self.ll_laplace_root is not None:
+                quad = laplace_quadrature.from_denominators(
+                    self.ll_laplace_root,
+                    denom,
+                    self.ll_laplace_npoints,
+                )
+            else:
+                raise ValueError(
+                    "No Laplace quadrature configured. Provide ll_laplace_quad, "
+                    "ll_laplace_quad_file, or ll_laplace_root."
+                )
+        interval_tol = 100.0 * np.finfo(float).eps * max(1.0, quad.ymax)
+        if np.min(denom) < quad.ymin - interval_tol or np.max(denom) > quad.ymax + interval_tol:
+            raise ValueError("Laplace quadrature interval does not cover denominators")
+
+        inv_denom_laplace = np.zeros_like(denom)
+        for exponent, weight in zip(quad.exponents, quad.weights):
+            inv_denom_laplace += weight * np.exp(-exponent * denom)
+
+        t2 = -lib.einsum("LAI,LBJ,IJAB->IJAB", Jvo, Jvo, inv_denom_laplace)
+        return lib.einsum("iI,jJ,aA,bB,IJAB->ijab", Uo, Uo, Uv, Uv, t2)
+
+    def get_sylvester_laplace_factors(self, Jvo, Foo, Fvv, quad=None):
+        """Build factorized Laplace amplitudes Y with t2 = -Y Y^T."""
+        Foo = 0.5 * (Foo + Foo.T)
+        Fvv = 0.5 * (Fvv + Fvv.T)
+
+        eo, Uo = np.linalg.eigh(Foo)
+        ev, Uv = np.linalg.eigh(Fvv)
+
+        Jvo = lib.einsum("aA,Lai,iI->LAI", Uv, Jvo, Uo)
+        denom = lib.direct_sum("A+B-I-J->IJAB", ev, ev, eo, eo)
+        if np.any(denom <= 0.0):
+            raise ValueError("Laplace Sylvester denominators must be positive")
+
+        if quad is None:
+            quad = self.get_sylvester_laplace_quadrature(denom)
+        if np.any(quad.weights < 0.0):
+            raise ValueError("factorized Laplace Sylvester requires nonnegative weights")
+        interval_tol = 100.0 * np.finfo(float).eps * max(1.0, quad.ymax)
+        if np.min(denom) < quad.ymin - interval_tol or np.max(denom) > quad.ymax + interval_tol:
+            raise ValueError("Laplace quadrature interval does not cover denominators")
+
+        factors = np.empty(
+            (Jvo.shape[0], quad.nlap, Jvo.shape[1], Jvo.shape[2]),
+            dtype=Jvo.dtype,
+        )
+        for idx, (exponent, weight) in enumerate(zip(quad.exponents, quad.weights)):
+            vo_scale = np.exp(-exponent * ev)
+            oo_scale = np.exp(exponent * eo)
+            Jvo_mu = np.sqrt(weight) * Jvo * vo_scale[None, :, None]
+            Jvo_mu = Jvo_mu * oo_scale[None, None, :]
+            factors[:, idx] = lib.einsum("aA,LAI,iI->Lai", Uv, Jvo_mu, Uo)
+
+        return factors
+
+    def get_sylvester_laplace_matrix_factors(
+            self, Jvo, Foo, Fvv, quad=None, tol=1.0e-12, max_degree=200):
+        """Build Laplace factors by applying matrix exponentials to Jvo."""
+        Foo = 0.5 * (Foo + Foo.T)
+        Fvv = 0.5 * (Fvv + Fvv.T)
+
+        if quad is None:
+            ymin, ymax = self.get_sylvester_laplace_interval()
+            quad = self.get_sylvester_laplace_quadrature_interval(ymin, ymax)
+        if np.any(quad.weights < 0.0):
+            raise ValueError("factorized Laplace Sylvester requires nonnegative weights")
+
+        bounds_v = self._symmetric_spectral_bounds(Fvv)
+        bounds_o = self._symmetric_spectral_bounds(Foo)
+        factors = np.empty(
+            (Jvo.shape[0], quad.nlap, Jvo.shape[1], Jvo.shape[2]),
+            dtype=Jvo.dtype,
+        )
+        for idx, (exponent, weight) in enumerate(zip(quad.exponents, quad.weights)):
+            Jhat = self._chebyshev_exp_action_left(
+                Fvv, Jvo, -exponent, bounds_v, tol, max_degree
+            )
+            Jhat = self._chebyshev_exp_action_right(
+                Foo, Jhat, exponent, bounds_o, tol, max_degree
+            )
+            factors[:, idx] = np.sqrt(weight) * Jhat
+
+        return factors
+
+    @staticmethod
+    def _symmetric_spectral_bounds(matrix):
+        """Return tight scalar spectral bounds without eigenvectors."""
+        matrix = np.asarray(matrix)
+        if matrix.shape[0] == 1:
+            value = float(matrix[0, 0])
+            pad = max(1.0, abs(value)) * np.finfo(float).eps
+            return value - pad, value + pad
+
+        lower = float(
+            scipy.sparse.linalg.eigsh(
+                matrix, k=1, which="SA", return_eigenvectors=False
+            )[0]
+        )
+        upper = float(
+            scipy.sparse.linalg.eigsh(
+                matrix, k=1, which="LA", return_eigenvectors=False
+            )[0]
+        )
+        pad = 100.0 * np.finfo(float).eps * max(1.0, abs(lower), abs(upper))
+        return lower - pad, upper + pad
+
+    @staticmethod
+    def _chebyshev_exp_coefficients(scale, center, radius, tol, max_degree):
+        prefactor = np.exp(scale * center)
+        beta = scale * radius
+        coeffs = [prefactor * scipy.special.iv(0, beta)]
+        for degree in range(1, max_degree + 1):
+            coeff = 2.0 * prefactor * scipy.special.iv(degree, beta)
+            coeffs.append(coeff)
+            if abs(coeff) <= tol * max(1.0, abs(coeffs[0])):
+                return np.asarray(coeffs)
+        raise RuntimeError(
+            "Chebyshev exponential action did not converge within max_degree"
+        )
+
+    @classmethod
+    def _chebyshev_exp_action_left(
+            cls, matrix, rhs, scale, bounds, tol=1.0e-12, max_degree=200):
+        lower, upper = bounds
+        center = 0.5 * (upper + lower)
+        radius = 0.5 * (upper - lower)
+        coeffs = cls._chebyshev_exp_coefficients(
+            scale, center, radius, tol, max_degree
+        )
+
+        def apply_scaled(x):
+            return (lib.einsum("ab,Lbi->Lai", matrix, x) - center * x) / radius
+
+        t0 = rhs
+        out = coeffs[0] * t0
+        if len(coeffs) == 1:
+            return out
+        t1 = apply_scaled(t0)
+        out = out + coeffs[1] * t1
+        for coeff in coeffs[2:]:
+            t2 = 2.0 * apply_scaled(t1) - t0
+            out = out + coeff * t2
+            t0, t1 = t1, t2
+        return out
+
+    @classmethod
+    def _chebyshev_exp_action_right(
+            cls, matrix, rhs, scale, bounds, tol=1.0e-12, max_degree=200):
+        lower, upper = bounds
+        center = 0.5 * (upper + lower)
+        radius = 0.5 * (upper - lower)
+        coeffs = cls._chebyshev_exp_coefficients(
+            scale, center, radius, tol, max_degree
+        )
+
+        def apply_scaled(x):
+            return (lib.einsum("Lak,ki->Lai", x, matrix) - center * x) / radius
+
+        t0 = rhs
+        out = coeffs[0] * t0
+        if len(coeffs) == 1:
+            return out
+        t1 = apply_scaled(t0)
+        out = out + coeffs[1] * t1
+        for coeff in coeffs[2:]:
+            t2 = 2.0 * apply_scaled(t1) - t0
+            out = out + coeff * t2
+            t0, t1 = t1, t2
+        return out
+
+    def get_sylvester_laplace_interval(self):
+        """Return denominator bounds from precomputed one-particle gaps."""
+        eia = np.asarray(self._eris.eia)
+        if np.any(eia <= 0.0):
+            raise ValueError("Laplace Sylvester one-particle gaps must be positive")
+        return 2.0 * float(np.min(eia)), 2.0 * float(np.max(eia))
+
+    def get_sylvester_laplace_quadrature_interval(self, ymin, ymax):
+        """Return the configured Laplace quadrature for a scalar interval."""
+        if self.ll_laplace_quad is not None:
+            quad = self.ll_laplace_quad
+        elif self.ll_laplace_quad_file is not None:
+            self.ll_laplace_quad = laplace_quadrature.load(self.ll_laplace_quad_file)
+            quad = self.ll_laplace_quad
+        elif self.ll_laplace_root is not None:
+            self.ll_laplace_quad = laplace_quadrature.from_init_table(
+                self.ll_laplace_root,
+                ymin,
+                ymax,
+                self.ll_laplace_npoints,
+            )
+            quad = self.ll_laplace_quad
+        else:
+            raise ValueError(
+                "No Laplace quadrature configured. Provide ll_laplace_quad, "
+                "ll_laplace_quad_file, or ll_laplace_root."
+            )
+
+        interval_tol = 100.0 * np.finfo(float).eps * max(1.0, quad.ymax)
+        if ymin < quad.ymin - interval_tol or ymax > quad.ymax + interval_tol:
+            raise ValueError("Laplace quadrature interval does not cover denominators")
+        return quad
+
+    def get_sylvester_laplace_quadrature(self, denominators):
+        """Return the configured Laplace quadrature for a denominator range."""
+        if self.ll_laplace_quad is not None:
+            return self.ll_laplace_quad
+        if self.ll_laplace_quad_file is not None:
+            self.ll_laplace_quad = laplace_quadrature.load(self.ll_laplace_quad_file)
+            return self.ll_laplace_quad
+        if self.ll_laplace_root is not None:
+            self.ll_laplace_quad = laplace_quadrature.from_denominators(
+                self.ll_laplace_root,
+                denominators,
+                self.ll_laplace_npoints,
+            )
+            return self.ll_laplace_quad
+        raise ValueError(
+            "No Laplace quadrature configured. Provide ll_laplace_quad, "
+            "ll_laplace_quad_file, or ll_laplace_root."
+        )
 
 
     def update_amps_unfactorized_RPA(self, t1, t2):
@@ -229,6 +545,270 @@ class MPCC_LL:
         self._e_corr = self.get_energy(t1, t2) 
 
         return t1, t2
+
+    def _sylvester_laplace_factorized_kernel(self, t1=None, t2=None, **kwargs):
+        """Low-memory Laplace Sylvester kernel that iterates with Y factors."""
+        res = np.inf
+        count = 0
+        adiis = lib.diis.DIIS()
+        Δt2s_o = []
+        Δt2s_v = []
+        self._t2_full = None
+
+        t2_act = []
+        for frag in self.frags:
+            act_hole = frag[0]
+            act_particle = frag[1]
+            t2_act.append(t2[np.ix_(act_hole, act_hole, act_particle, act_particle)])
+
+        while res > self.ll_con_tol and count < self.ll_max_its:
+            res, t1_new, Δt2s_o, Δt2s_v, Y = (
+                self.update_amps_sylvester_laplace_factorized(
+                    t1, t2_act, **kwargs
+                )
+            )
+            if self.diis:
+                t1_new = self.run_diis(t1_new, adiis)
+
+            t1 = t1_new
+            self._Y = Y
+
+            count += 1
+            print(f"It {count}; residual {res:.6e}")
+
+        if self._t2_full is None:
+            t2 = self.get_t2_factorized_laplace(Y, t2_act, Δt2s_o, Δt2s_v)
+        else:
+            t2 = self._t2_full
+        self._e_corr = self.get_energy(t1, t2)
+
+        return t1, t2
+
+    def update_amps_sylvester_laplace_factorized(self, t1, t2_act, **kwargs):
+        """Update T1 while keeping Laplace Sylvester T2 in factorized form."""
+        Xoo, Xvo, X = self.get_X(t1)
+        Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+        Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+
+        Foo_eff, Fvv_eff = self.update_F(Foo.copy(), Fvv.copy(), Fov, t1)
+        Y = self.get_sylvester_laplace_matrix_factors(Jvo, Foo_eff, Fvv_eff)
+
+        Ω = self.get_Ω_sylvester_laplace_factorized(
+            X, Xvo, Foo, Fvv, Fov, t1, Y
+        )
+        Δt2s_o, Δt2s_v, Ω = self.include_t2_active_factorized_laplace(
+            Foo_eff, Fvv_eff, Fov, t2_act, Y, Ω
+        )
+        self._t2_full = None
+
+        res1 = Ω.T / self._eris.eia
+        t1 -= res1
+
+        return np.linalg.norm(res1), t1, Δt2s_o, Δt2s_v, Y
+
+    def get_Ω_sylvester_laplace_factorized(self, X, Xvo, Foo, Fvv, Fov, t1, Y):
+        """Evaluate Omega for factorized amplitudes with t2 = -Y Y^T."""
+        Foo_tmp = Foo.copy()
+        Fvv_tmp = Fvv.copy()
+
+        Foo_tmp += lib.einsum("ic,jc->ij", Fov, t1) * 0.5
+        Fvv_tmp -= lib.einsum("lb,la->ab", Fov, t1) * 0.5
+
+        Ω = self._eris.fov.T.copy()
+
+        Ω -= lib.einsum("Laj,Lji->ai", Xvo, self._eris.Loo)
+        Ω += lib.einsum("Lai,L->ai", self._eris.Lvo, X)
+
+        Ω += lib.einsum("ib,ab->ai", t1, Fvv_tmp)
+        Ω -= lib.einsum("ka,ki->ai", t1, Foo_tmp)
+
+        Ω_temp = lib.einsum("LRjb,bj->LR", Y, Fov)
+        Ω -= 2.0 * lib.einsum("LR,LRai->ai", Ω_temp, Y)
+
+        Ω_temp = lib.einsum("LRbi,jb->LRij", Y, Fov)
+        Ω += lib.einsum("LRij,LRaj->ai", Ω_temp, Y)
+
+        return Ω
+
+    def include_t2_active_factorized_laplace(
+            self, Foo, Fvv, Fov, t2_act, Y, Ω, tol=None, count_tol=None):
+        """Solve the Eq:T2_error boundary correction without building T2_LL."""
+        print(f'Computing active t2-correction ...')
+
+        if tol is None:
+            tol = self.ll_active_t2_tol
+        else:
+            tol = min(tol, self.ll_active_t2_tol)
+        if count_tol is None:
+            count_tol = self.ll_active_t2_max_its
+
+        Δt2s_o = []
+        Δt2s_v = []
+
+        n_aux, n_rank, n_vir, n_occ = Y.shape
+        for k, frag in enumerate(self.frags):
+            act_hole = frag[0]
+            inact_hole = np.delete(range(n_occ), act_hole)
+            act_particle = frag[1]
+            inact_particle = np.delete(range(n_vir), act_particle)
+
+            Ω[np.ix_(act_particle, act_hole)] = 0.0
+
+            δt2 = -lib.einsum(
+                "LRai,LRbj->ijab",
+                Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)],
+                Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)],
+            )
+            Δt2_active = t2_act[k] - δt2
+
+            shape_o = (
+                len(inact_hole),
+                len(act_hole),
+                len(act_particle),
+                len(act_particle),
+            )
+            shape_v = (
+                len(act_hole),
+                len(act_hole),
+                len(inact_particle),
+                len(act_particle),
+            )
+            size_o = int(np.prod(shape_o))
+            size_v = int(np.prod(shape_v))
+            size = size_o + size_v
+
+            Foo_aa = Foo[np.ix_(act_hole, act_hole)]
+            Foo_ii = Foo[np.ix_(inact_hole, inact_hole)]
+            Foo_ai = Foo[np.ix_(act_hole, inact_hole)]
+            Fvv_aa = Fvv[np.ix_(act_particle, act_particle)]
+            Fvv_ii = Fvv[np.ix_(inact_particle, inact_particle)]
+            Fvv_ia = Fvv[np.ix_(inact_particle, act_particle)]
+
+            D_o = self._eris.D[np.ix_(
+                inact_hole, act_hole, act_particle, act_particle
+            )]
+            D_v = self._eris.D[np.ix_(
+                act_hole, act_hole, inact_particle, act_particle
+            )]
+
+            def split(vector):
+                if size_o:
+                    Δt2_o = vector[:size_o].reshape(shape_o)
+                else:
+                    Δt2_o = np.zeros(shape_o, dtype=Y.dtype)
+                if size_v:
+                    Δt2_v = vector[size_o:].reshape(shape_v)
+                else:
+                    Δt2_v = np.zeros(shape_v, dtype=Y.dtype)
+                return Δt2_o, Δt2_v
+
+            def pack_scaled(res_o, res_v):
+                pieces = []
+                if size_o:
+                    pieces.append((res_o / D_o).ravel())
+                if size_v:
+                    pieces.append((res_v / D_v).ravel())
+                if not pieces:
+                    return np.empty(0, dtype=Y.dtype)
+                return np.concatenate(pieces)
+
+            def boundary_residual(Δt2_o, Δt2_v):
+                res_o = np.zeros(shape_o, dtype=Y.dtype)
+                res_v = np.zeros(shape_v, dtype=Y.dtype)
+
+                if size_o:
+                    res_o += lib.einsum("bc,Ijac->Ijab", Fvv_aa, Δt2_o)
+                    res_o += lib.einsum("ac,Ijcb->Ijab", Fvv_aa, Δt2_o)
+                    res_o -= lib.einsum("KI,Kjab->Ijab", Foo_ii, Δt2_o)
+                    res_o -= lib.einsum("kj,Ikab->Ijab", Foo_aa, Δt2_o)
+
+                if size_v:
+                    res_v += lib.einsum("bc,ijAc->ijAb", Fvv_aa, Δt2_v)
+                    res_v += lib.einsum("AC,ijCb->ijAb", Fvv_ii, Δt2_v)
+                    res_v -= lib.einsum("ki,kjAb->ijAb", Foo_aa, Δt2_v)
+                    res_v -= lib.einsum("kj,ikAb->ijAb", Foo_aa, Δt2_v)
+
+                return res_o, res_v
+
+            source_o = np.zeros(shape_o, dtype=Y.dtype)
+            source_v = np.zeros(shape_v, dtype=Y.dtype)
+            if size_o:
+                source_o -= lib.einsum(
+                    "kI,kjab->Ijab", Foo_ai, Δt2_active
+                )
+            if size_v:
+                source_v += lib.einsum(
+                    "Ac,jibc->ijAb", Fvv_ia, Δt2_active
+                )
+
+            rhs = -pack_scaled(source_o, source_v)
+            rhs_norm = np.linalg.norm(rhs)
+
+            if size and rhs_norm > tol:
+                operator = scipy.sparse.linalg.LinearOperator(
+                    (size, size),
+                    matvec=lambda vector: pack_scaled(
+                        *boundary_residual(*split(vector))
+                    ),
+                    dtype=Y.dtype,
+                )
+                residual_history = []
+                correction, info = scipy.sparse.linalg.gmres(
+                    operator,
+                    rhs,
+                    rtol=min(1.0e-8, tol),
+                    atol=tol,
+                    restart=min(size, 50),
+                    maxiter=count_tol,
+                    callback=residual_history.append,
+                    callback_type="pr_norm",
+                )
+                Δt2_o, Δt2_v = split(correction)
+                res_o, res_v = boundary_residual(Δt2_o, Δt2_v)
+                acc = np.linalg.norm(pack_scaled(
+                    res_o + source_o, res_v + source_v
+                ))
+                if info != 0:
+                    raise RuntimeError(
+                        "Factorized active T2 correction did not converge: "
+                        f"info={info}, residual={acc:.3e}, target={tol:.3e}"
+                    )
+                print(
+                    f'    GMRES T2 correction converged in '
+                    f'{len(residual_history)} iterations with final accuracy '
+                    f'{acc:.2e}'
+                )
+            else:
+                Δt2_o = np.zeros(shape_o, dtype=Y.dtype)
+                Δt2_v = np.zeros(shape_v, dtype=Y.dtype)
+                acc = rhs_norm
+                print(
+                    f'    T2 correction already converged with final accuracy '
+                    f'{acc:.2e}'
+                )
+
+            Δt2s_o.append(Δt2_o)
+            Δt2s_v.append(Δt2_v)
+
+            if size_o:
+                t2_antisym = 2.0 * Δt2_o - np.transpose(Δt2_o, (0, 1, 3, 2))
+                Ω[np.ix_(act_particle, inact_hole)] += lib.einsum(
+                    "Ijab,jb->aI",
+                    t2_antisym,
+                    Fov[np.ix_(act_hole, act_particle)],
+                )
+
+            if size_v:
+                t2_antisym = 2.0 * Δt2_v - np.transpose(Δt2_v, (1, 0, 2, 3))
+                Ω[np.ix_(inact_particle, act_hole)] += lib.einsum(
+                    "ijAb,jb->Ai",
+                    t2_antisym,
+                    Fov[np.ix_(act_hole, act_particle)],
+                )
+
+            Ω[np.ix_(act_particle, act_hole)] = 0.0
+
+        return Δt2s_o, Δt2s_v, Ω
 
     def update_amps_factorized(self, t1, t2_act, Y, **kwargs):
         """
@@ -727,9 +1307,6 @@ class MPCC_LL:
             res = np.sqrt(res_o**2 + res_v**2)
             #res = res_o + res_v
             print(f'    Initial residual for t2 correction: {res:.3e}')
-            #unit test this residual calculation, to match it with a precalculated residual value  1.13262e-01
-            if abs(res - 1.13262e-01) > 1e-3:
-                print(f'    WARNING: Residual calculation does not match expected value! Computed: {abs(res - 1.13262e-01):.5e}, Expected: 1.13262e-01')
 
             Δt2_o_it_save = np.copy(Δt2_o)
             Δt2_v_it_save = np.copy(Δt2_v)
@@ -850,6 +1427,96 @@ class MPCC_LL:
             Ω[np.ix_(inact_particle, act_hole)] += np.einsum("ijAb,jb -> Ai", t2_antisym, Fov[np.ix_(act_hole, act_particle)])
 
         return Δt2s_o, Δt2s_v , Ω
+
+    def include_t2_active_dense(self, Foo, Fvv, Fov, t2_act, t2_ll, Ω, tol=None, count_tol=None):
+
+        print(f'Computing active t2-correction ...')
+
+        if tol is None:
+            tol = self.ll_active_t2_tol
+        else:
+            tol = min(tol, self.ll_active_t2_tol)
+        if count_tol is None:
+            count_tol = self.ll_active_t2_max_its
+
+        active_mask = np.zeros(t2_ll.shape, dtype=bool)
+        Δt2 = np.zeros_like(t2_ll)
+
+        for k, frag in enumerate(self.frags):
+            act_hole = frag[0]
+            act_particle = frag[1]
+            active = np.ix_(act_hole, act_hole, act_particle, act_particle)
+            active_mask[active] = True
+            Δt2[active] = t2_act[k] - t2_ll[active]
+
+        def t2_error_residual(delta):
+            tmp = lib.einsum("bc,ijac->ijab", Fvv, delta)
+            tmp -= lib.einsum("mi,mjab->ijab", Foo, delta)
+            return tmp + tmp.transpose(1, 0, 3, 2)
+
+        nonactive = np.flatnonzero((~active_mask).ravel())
+
+        def pack(tensor):
+            return tensor.ravel()[nonactive]
+
+        def unpack(vector):
+            tensor = np.zeros_like(t2_ll)
+            tensor.ravel()[nonactive] = vector
+            return tensor
+
+        rhs = -pack(t2_error_residual(Δt2) / self._eris.D)
+        rhs_norm = np.linalg.norm(rhs)
+        if nonactive.size and rhs_norm > tol:
+            operator = scipy.sparse.linalg.LinearOperator(
+                (nonactive.size, nonactive.size),
+                matvec=lambda vector: pack(
+                    t2_error_residual(unpack(vector)) / self._eris.D
+                ),
+                dtype=t2_ll.dtype,
+            )
+            residual_history = []
+            correction, info = scipy.sparse.linalg.gmres(
+                operator,
+                rhs,
+                rtol=min(1.0e-8, tol),
+                atol=tol,
+                restart=min(nonactive.size, 50),
+                maxiter=count_tol,
+                callback=residual_history.append,
+                callback_type="pr_norm",
+            )
+            Δt2.ravel()[nonactive] += correction
+            acc = np.linalg.norm(pack(t2_error_residual(Δt2) / self._eris.D))
+            if info != 0:
+                raise RuntimeError(
+                    "Dense active T2 correction did not converge: "
+                    f"info={info}, residual={acc:.3e}, target={tol:.3e}"
+                )
+            print(
+                f'    GMRES T2 correction converged in {len(residual_history)} '
+                f'iterations with final accuracy {acc:.2e}'
+            )
+        else:
+            acc = rhs_norm
+            print(f'    T2 correction already converged with final accuracy {acc:.2e}')
+
+        t2_new = t2_ll + Δt2
+        for k, frag in enumerate(self.frags):
+            act_hole = frag[0]
+            act_particle = frag[1]
+            active = np.ix_(act_hole, act_hole, act_particle, act_particle)
+            t2_new[active] = t2_act[k]
+            Ω[np.ix_(act_particle, act_hole)] = 0.0
+
+        Δt2_antisym = 2.0 * Δt2 - np.transpose(Δt2, (0, 1, 3, 2))
+        Ω += lib.einsum("ijab,jb->ai", Δt2_antisym, Fov)
+
+        for frag in self.frags:
+            act_hole = frag[0]
+            act_particle = frag[1]
+            Ω[np.ix_(act_particle, act_hole)] = 0.0
+
+        return t2_new, Ω
 
 
     def include_t2_active_stupid(self, Foo, Fvv, Fov, t2_act, Y, Ω, tol = 1e-6, count_tol = 1000):
@@ -1018,6 +1685,48 @@ class MPCC_LL:
 
             t2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = t2_act[k]
 
+            t2[np.ix_(inact_hole, act_hole, act_particle, act_particle)] += Δt2s_o[k]
+            t2[np.ix_(act_hole, act_hole, inact_particle, act_particle)] += Δt2s_v[k]
+
+        return t2
+
+    def get_t2_factorized_laplace(self, Y, t2_act, Δt2s_o, Δt2s_v):
+
+        t2 = -lib.einsum("LRai, LRbj -> ijab", Y, Y)
+        n_aux, n_rank, n_vir, n_occ = Y.shape
+        for k, frag in enumerate(self.frags):
+            act_hole = frag[0]
+            inact_hole = np.delete(range(n_occ), act_hole)
+            act_particle = frag[1]
+            inact_particle = np.delete(range(n_vir), act_particle)
+
+            t2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = t2_act[k]
+
+            if Δt2s_o[k].size:
+                t2[np.ix_(inact_hole, act_hole, act_particle, act_particle)] += Δt2s_o[k]
+                t2[np.ix_(act_hole, inact_hole, act_particle, act_particle)] += (
+                    Δt2s_o[k].transpose(1, 0, 3, 2)
+                )
+
+            if Δt2s_v[k].size:
+                t2[np.ix_(act_hole, act_hole, inact_particle, act_particle)] += Δt2s_v[k]
+                t2[np.ix_(act_hole, act_hole, act_particle, inact_particle)] += (
+                    Δt2s_v[k].transpose(1, 0, 3, 2)
+                )
+
+        return t2
+
+    def get_t2_dense(self, t2_ll, t2_act, Δt2s_o, Δt2s_v):
+
+        t2 = t2_ll.copy()
+        n_occ, _, n_vir, _ = t2.shape
+        for k, frag in enumerate(self.frags):
+            act_hole = frag[0]
+            inact_hole = np.delete(range(n_occ), act_hole)
+            act_particle = frag[1]
+            inact_particle = np.delete(range(n_vir), act_particle)
+
+            t2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = t2_act[k]
             t2[np.ix_(inact_hole, act_hole, act_particle, act_particle)] += Δt2s_o[k]
             t2[np.ix_(act_hole, act_hole, inact_particle, act_particle)] += Δt2s_v[k]
 

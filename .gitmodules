@@ -1,0 +1,3 @@
+[submodule "external/laplace-minimax"]
+	path = external/laplace-minimax
+	url = https://github.com/bhelmichparis/laplace-minimax.git
