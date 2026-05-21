@@ -88,7 +88,6 @@ class MPCC_HL:
 # first construct intermediates:
 #      
         Moo_aa = Moo[0]
-        Moo_ia = Moo[1]
         Mvo_aa = Mvo[0]
 #       Mvo_ai = Mvo[1]
 #      JOO (active-active)
@@ -157,18 +156,16 @@ class MPCC_HL:
 
         #Moo
         Moo_aa = lib.einsum("Lic,jc->Lij", self.Lov_aa, t1)
-        Moo_ia = lib.einsum("Lic,jc->Lij", self.Lov_ia, t1)
-
+      
         #Mvo
         Mvo_aa = lib.einsum("Lac,ic->Lai", self.Lvv_aa, t1)
-        Mvo_ia = lib.einsum("Lac,ic->Lai", self.Lvv_ia, t1)
 
         #construct antisymmetrized t2:
         t2_antisym = 2.0*t2 - t2.transpose(0, 1, 3, 2)
         Mvo_t2 = lib.einsum("Lme, imae -> Lai", self.Lov_aa, t2_antisym)
 
-        Moo = [Moo_aa, Moo_ia]
-        Mvo = [Mvo_aa, Mvo_ia]
+        Moo = [Moo_aa]
+        Mvo = [Mvo_aa]
         return M0, Moo, Mvo, Mvo_t2
 
 

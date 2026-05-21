@@ -41,8 +41,8 @@ MEMORYMIN = getattr(__config__, 'cc_ccsd_memorymin', 2000)
 
 # t1: ia
 # t2: ijab
-def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
-           tolnormt=1e-6, verbose=None, callback=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None):
+def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-7,
+           tolnormt=1e-5, verbose=None, callback=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None, oomp2_variant=None):
     log = logger.new_logger(mycc, verbose)
     if eris is None:
         eris = mycc.ao2mo(mycc.mo_coeff)
@@ -86,8 +86,6 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
           adiis_t3 = None
 
 
-    conv = False
-
     converged = False
     mycc.cycles = 0
     for istep in range(max_cycle):
@@ -95,9 +93,12 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
             t1new, t2new = mycc.update_amps(t1, t2, eris, act_hole, act_particle, idx_s, idx_d)
         elif act_particle is not None and pert_triples:
             t1new, t2new, t3act = mycc.update_amps(t1, t2, eris, act_hole, act_particle, idx_s, idx_d, pert_triples, t3old)
-            t3old = t3act
         elif oo_mp2:
-            t1new, t2new = mycc.update_amps_oomp2(t1, t2, eris, act_hole, act_particle, idx_s, idx_d)
+
+        # I want to call 3 different variants of oomp2 update functions:
+
+
+            t1new, t2new = mycc.select_update_amps_oomp2(t1, t2, eris, act_hole, act_particle, idx_s, idx_d, oomp2_variant)
         else:
             t1new, t2new = mycc.update_amps(t1, t2, eris)
         if callback is not None:
@@ -108,6 +109,7 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
 
         if act_particle is not None and pert_triples:
            tmpvec = mycc.amplitudes_to_vector_t3(t3act)
+           tmpvec -= mycc.amplitudes_to_vector_t3(t3old)
            normt_t3 = numpy.linalg.norm(tmpvec)
 
         tmpvec = None
@@ -126,6 +128,10 @@ def kernel(mycc, eris=None, t1=None, t2=None, max_cycle=50, tol=1e-8,
         t1new = t2new = None
         t1, t2 = mycc.run_diis(t1, t2, istep, normt, eccsd-eold, adiis)
         if act_particle is not None and pert_triples:
+
+            print("we are here to extrapolate t3 amplitudes")
+
+            t3old = t3act
             t3act = None
             t3old = mycc.run_diis_t3(t3old, istep, normt_t3, eccsd-eold, adiis_t3)
 
@@ -1125,9 +1131,9 @@ class CCSDBase(lib.StreamObject):
     _add_vvvv = _add_vvvv
     update_amps = update_amps
 
-    def kernel(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None):
-        return self.ccsd(t1, t2, eris, act_particle, act_hole, idx_s, idx_d, oo_mp2, pert_triples, t3old)
-    def ccsd(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None):
+    def kernel(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None, oomp2_variant=None):
+        return self.ccsd(t1, t2, eris, act_particle, act_hole, idx_s, idx_d, oo_mp2, pert_triples, t3old, oomp2_variant)
+    def ccsd(self, t1=None, t2=None, eris=None, act_particle=None, act_hole=None, idx_s=None, idx_d=None, oo_mp2 = False, pert_triples=False, t3old=None, oomp2_variant=None):
         assert (self.mo_coeff is not None)
         assert (self.mo_occ is not None)
 
@@ -1145,13 +1151,13 @@ class CCSDBase(lib.StreamObject):
                  kernel(self, eris, t1, t2, max_cycle=self.max_cycle,
                        tol=self.conv_tol, tolnormt=self.conv_tol_normt,
                        verbose=self.verbose, callback=self.callback, act_particle=act_particle, 
-                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples, t3old=t3old)
+                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples, t3old=t3old,oomp2_variant=oomp2_variant)
         else:
             self.converged, self.e_corr, self.t1, self.t2 = \
                  kernel(self, eris, t1, t2, max_cycle=self.max_cycle,
                        tol=self.conv_tol, tolnormt=self.conv_tol_normt,
                        verbose=self.verbose, callback=self.callback, act_particle=act_particle, 
-                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples, t3old=t3old)
+                       act_hole=act_hole, idx_s=idx_s, idx_d=idx_d, oo_mp2 = oo_mp2, pert_triples=pert_triples, t3old=t3old,oomp2_variant=oomp2_variant)
 
         self._finalize()
         if pert_triples:
@@ -1338,14 +1344,7 @@ class CCSDBase(lib.StreamObject):
     def nuc_grad_method(self):
         raise NotImplementedError
 
-    # to_gpu can be reused only when __init__ still takes mf
-    def to_gpu(self):
-        mf = self.base.to_gpu()
-        from importlib import import_module
-        mod = import_module(self.__module__.replace('pyscf', 'gpu4pyscf'))
-        cls = getattr(mod, self.__class__.__name__)
-        obj = cls(mf)
-        return obj
+    to_gpu = lib.to_gpu
 
 class CCSD(CCSDBase):
     __doc__ = CCSDBase.__doc__

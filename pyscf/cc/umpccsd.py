@@ -73,6 +73,25 @@ def get_index_tuples(act_hole, act_particle, nocc, nvir):
 
     return singles, doubles
 
+def select_update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles,oomp2_variant=None):
+    # call individual functions based on variant string input
+
+    variants = {
+    'standard': update_amps_oomp2,
+    't2_all': update_amps_oomp2_t2,
+    't2_fock': update_amps_oomp2_t2_fock,
+    't2act': update_amps_oomp2_t2act,
+   }
+
+
+    if oomp2_variant not in variants:
+        raise ValueError(
+            f"Invalid variant '{oomp2_variant}'. Must be one of: {list(variants.keys())}"
+        )
+        
+    return variants[oomp2_variant](cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles)
+
+
 
 def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles):
 
@@ -89,15 +108,34 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
 
     u1a = np.zeros_like(t1a)
     u1b = np.zeros_like(t1b)
- 
+
+
     Fooa =  .5 * lib.einsum('me,ie->mi', fova, t1a)
     Foob =  .5 * lib.einsum('me,ie->mi', fovb, t1b)
     Fvva = -.5 * lib.einsum('me,ma->ae', fova, t1a)
     Fvvb = -.5 * lib.einsum('me,ma->ae', fovb, t1b)
-    Fooa += eris.focka[:nocca,:nocca] - np.diag(mo_ea_o)
-    Foob += eris.fockb[:noccb,:noccb] - np.diag(mo_eb_o)
-    Fvva += eris.focka[nocca:,nocca:] - np.diag(mo_ea_v)
-    Fvvb += eris.fockb[noccb:,noccb:] - np.diag(mo_eb_v)
+#   Fooa += eris.focka[:nocca,:nocca] - np.diag(mo_ea_o)
+#   Foob += eris.fockb[:noccb,:noccb] - np.diag(mo_eb_o)
+#   Fvva += eris.focka[nocca:,nocca:] - np.diag(mo_ea_v)
+#   Fvvb += eris.fockb[noccb:,noccb:] - np.diag(mo_eb_v)
+
+    tmp = eris.focka[:nocca, :nocca].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fooa += tmp
+
+    tmp = eris.fockb[:noccb, :noccb].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Foob += tmp
+
+    tmp = eris.focka[nocca:, nocca:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvva += tmp
+
+    tmp = eris.fockb[noccb:, noccb:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvvb += tmp
+
+    tmp = None
 
     dtype = t1[0].dtype
     wovvo = np.zeros((nocca,nvira,nvira,nocca), dtype=dtype)
@@ -109,6 +147,7 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
 
     tauaa, tauab, taubb = make_tau((0*t2[0],0*t2[1],0*t2[2]) , t1, t1)
     u2aa, u2ab, u2bb = cc._add_vvvv(None, (tauaa,tauab,taubb), eris)
+
     u2aa *= .5
     u2bb *= .5
 
@@ -122,6 +161,8 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
             ovvv = ovvv - ovvv.transpose(0,3,2,1)
             Fvva += np.einsum('mf,mfae->ae', t1a[p0:p1], ovvv)
             wovvo[p0:p1] += lib.einsum('jf,mebf->mbej', t1a, ovvv)
+
+
             u2aa[:,p0:p1] += lib.einsum('ie,mbea->imab', t1a, ovvv.conj())
 
             tmp1aa = lib.einsum('ijef,mebf->ijmb', tauaa, ovvv)
@@ -134,8 +175,8 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
             OVVV = OVVV - OVVV.transpose(0,3,2,1)
             Fvvb += np.einsum('mf,mfae->ae', t1b[p0:p1], OVVV)
             wOVVO[p0:p1] = lib.einsum('jf,mebf->mbej', t1b, OVVV)
-            u2bb[:,p0:p1] += lib.einsum('ie,mbea->imab', t1b, OVVV.conj())
 
+            u2bb[:,p0:p1] += lib.einsum('ie,mbea->imab', t1b, OVVV.conj())
             tmp1bb = lib.einsum('ijef,mebf->ijmb', taubb, OVVV)
             u2bb -= lib.einsum('ijmb,ma->ijab', tmp1bb, t1b[p0:p1]*.5)
 
@@ -147,6 +188,9 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
             Fvvb += np.einsum('mf,mfAE->AE', t1a[p0:p1], ovVV)
             woVvO[p0:p1] = lib.einsum('JF,meBF->mBeJ', t1b, ovVV)
             woVVo[p0:p1] = lib.einsum('jf,mfBE->mBEj',-t1a, ovVV)
+
+
+
             u2ab[p0:p1] += lib.einsum('IE,maEB->mIaB', t1b, ovVV.conj())
 
             tmp1ab = lib.einsum('iJeF,meBF->iJmB', tauab, ovVV)
@@ -160,6 +204,7 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
             Fvva += np.einsum('MF,MFae->ae', t1b[p0:p1], OVvv)
             wOvVo[p0:p1] = lib.einsum('jf,MEbf->MbEj', t1a, OVvv)
             wOvvO[p0:p1] = lib.einsum('JF,MFbe->MbeJ',-t1b, OVvv)
+
             u2ab[:,p0:p1] += lib.einsum('ie,MBea->iMaB', t1a, OVvv.conj())
 
             tmp1abba = lib.einsum('iJeF,MFbe->iJbM', tauab, OVvv)
@@ -177,9 +222,13 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     Woooo = None #tauaa = None
     ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
     Fooa += np.einsum('ne,nemi->mi', t1a, ovoo)
-    # u1a += 0.5*lib.einsum('mnae,meni->ia', t2aa, ovoo)
+#Implementation of the additional terms [V, T2^act] to singles residue
+
     wovvo += lib.einsum('nb,nemj->mbej', t1a, ovoo)
     ovoo = eris_ovoo = None
+
+
+#we are using the full t2 transformed fock operator: 
 
     tilaa = make_tau_aa(0*t2[0], t1a, t1a, fac=0.5)
     ovov = eris_ovov - eris_ovov.transpose(0,3,2,1)
@@ -204,11 +253,14 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     WOOOO = taubb = None
     OVOO = eris_OVOO - eris_OVOO.transpose(2,1,0,3)
     Foob += np.einsum('ne,nemi->mi', t1b, OVOO)
-    # u1b += 0.5*lib.einsum('mnae,meni->ia', t2bb, OVOO)
+
+#Implementation of the additional terms [V, T2^act] to singles residue
     wOVVO += lib.einsum('nb,nemj->mbej', t1b, OVOO)
     OVOO = eris_OVOO = None
 
+#we are using the full t2 transformed fock operator: 
     tilbb = make_tau_aa(0*t2[2], t1b, t1b, fac=0.5)
+
     OVOV = eris_OVOV - eris_OVOV.transpose(0,3,2,1)
     Fvvb -= .5 * lib.einsum('MNAF,MENF->AE', tilbb, OVOV)
     Foob += .5 * lib.einsum('inef,menf->mi', tilbb, OVOV)
@@ -224,11 +276,15 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     eris_OVoo = np.asarray(eris.OVoo)
     eris_ovOO = np.asarray(eris.ovOO)
     Fooa += np.einsum('NE,NEmi->mi', t1b, eris_OVoo)
-    # u1a -= lib.einsum('nMaE,MEni->ia', t2ab, eris_OVoo)
+
+
+#Implementation of the additional terms [V, T2^act] to singles residue
+
     wOvVo -= lib.einsum('nb,MEnj->MbEj', t1a, eris_OVoo)
     woVVo += lib.einsum('NB,NEmj->mBEj', t1b, eris_OVoo)
     Foob += np.einsum('ne,neMI->MI', t1a, eris_ovOO)
-    # u1b -= lib.einsum('mNeA,meNI->IA', t2ab, eris_ovOO)
+
+#Implementation of the additional terms [V, T2^act] to singles residue
     woVvO -= lib.einsum('NB,meNJ->mBeJ', t1b, eris_ovOO)
     wOvvO += lib.einsum('nb,neMJ->MbeJ', t1a, eris_ovOO)
     WoOoO = lib.einsum('JE,NEmi->mNiJ', t1b, eris_OVoo)
@@ -241,7 +297,10 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     u2ab += lib.einsum('mNaB,mNiJ->iJaB', tauab, WoOoO)
     WoOoO = None
 
+
+#we are using the full t2 transformed fock operator: 
     tilab = make_tau_ab(0*t2[1], t1 , t1 , fac=0.5)
+
     Fvva -= lib.einsum('mNaF,meNF->ae', tilab, eris_ovOV)
     Fvvb -= lib.einsum('nMfA,nfME->AE', tilab, eris_ovOV)
     Fooa += lib.einsum('iNeF,meNF->mi', tilab, eris_ovOV)
@@ -335,17 +394,6 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     u2ab -= lib.einsum('MA,MbIj->jIbA', t1b, tmp1ba)
     eris_OOvv = eris_OVvo = tmp1ba = None
 
-    # u2aa += 2*lib.einsum('imae,mbej->ijab', t2aa, wovvo)
-    # u2aa += 2*lib.einsum('iMaE,MbEj->ijab', t2ab, wOvVo)
-    # u2bb += 2*lib.einsum('imae,mbej->ijab', t2bb, wOVVO)
-    # u2bb += 2*lib.einsum('mIeA,mBeJ->IJAB', t2ab, woVvO)
-    # u2ab += lib.einsum('imae,mBeJ->iJaB', t2aa, woVvO)
-    # u2ab += lib.einsum('iMaE,MBEJ->iJaB', t2ab, wOVVO)
-    # u2ab += lib.einsum('iMeA,MbeJ->iJbA', t2ab, wOvvO)
-    # u2ab += lib.einsum('IMAE,MbEj->jIbA', t2bb, wOvVo)
-    # u2ab += lib.einsum('mIeA,mbej->jIbA', t2ab, wovvo)
-    # u2ab += lib.einsum('mIaE,mBEj->jIaB', t2ab, woVVo)
-    wovvo = wOVVO = woVvO = wOvVo = woVVo = wOvvO = None
 
     Ftmpa = Fvva - .5*lib.einsum('mb,me->be', t1a, Fova)
     Ftmpb = Fvvb - .5*lib.einsum('mb,me->be', t1b, Fovb)
@@ -372,6 +420,7 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     u2ab -= lib.einsum('MA,ibJM->iJbA', t1b, eris_ovOO)
     eris_ovoo = eris_OVoo = eris_OVOO = eris_ovOO = None
 
+
     u2aa *= .5
     u2bb *= .5
     u2aa = u2aa - u2aa.transpose(0,1,3,2)
@@ -379,8 +428,12 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     u2bb = u2bb - u2bb.transpose(0,1,3,2)
     u2bb = u2bb - u2bb.transpose(1,0,2,3)
 
-    eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
-    eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+#   eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
+#   eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+
+    eia_a = lib.direct_sum('i-a->ia', np.diag(eris.focka[:nocca,:nocca]), np.diag(eris.focka[nocca:,nocca:]))
+    eia_b = lib.direct_sum('i-a->ia', np.diag(eris.fockb[:noccb,:noccb]), np.diag(eris.fockb[noccb:,noccb:]))
+
     u1a /= eia_a
     u1b /= eia_b
 
@@ -437,6 +490,1331 @@ def update_amps_oomp2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx
     return t1new, t2new
 
 
+def update_amps_oomp2_t2(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles):
+
+    t1a, t1b = t1
+    t2aa, t2ab, t2bb = t2
+     
+    nocca, noccb, nvira, nvirb = t2ab.shape
+    mo_ea_o = eris.mo_energy[0][:nocca]
+    mo_ea_v = eris.mo_energy[0][nocca:] + cc.level_shift
+    mo_eb_o = eris.mo_energy[1][:noccb]
+    mo_eb_v = eris.mo_energy[1][noccb:] + cc.level_shift
+    fova = eris.focka[:nocca,nocca:]
+    fovb = eris.fockb[:noccb,noccb:]
+
+    u1a = np.zeros_like(t1a)
+    u1b = np.zeros_like(t1b)
+
+
+    Fooa =  .5 * lib.einsum('me,ie->mi', fova, t1a)
+    Foob =  .5 * lib.einsum('me,ie->mi', fovb, t1b)
+    Fvva = -.5 * lib.einsum('me,ma->ae', fova, t1a)
+    Fvvb = -.5 * lib.einsum('me,ma->ae', fovb, t1b)
+#   Fooa += eris.focka[:nocca,:nocca] - np.diag(mo_ea_o)
+#   Foob += eris.fockb[:noccb,:noccb] - np.diag(mo_eb_o)
+#   Fvva += eris.focka[nocca:,nocca:] - np.diag(mo_ea_v)
+#   Fvvb += eris.fockb[noccb:,noccb:] - np.diag(mo_eb_v)
+
+    tmp = eris.focka[:nocca, :nocca].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fooa += tmp
+
+    tmp = eris.fockb[:noccb, :noccb].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Foob += tmp
+
+    tmp = eris.focka[nocca:, nocca:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvva += tmp
+
+    tmp = eris.fockb[noccb:, noccb:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvvb += tmp
+
+    tmp = None
+
+    dtype = t1[0].dtype
+    wovvo = np.zeros((nocca,nvira,nvira,nocca), dtype=dtype)
+    wOVVO = np.zeros((noccb,nvirb,nvirb,noccb), dtype=dtype)
+    woVvO = np.zeros((nocca,nvirb,nvira,noccb), dtype=dtype)
+    woVVo = np.zeros((nocca,nvirb,nvirb,nocca), dtype=dtype)
+    wOvVo = np.zeros((noccb,nvira,nvirb,nocca), dtype=dtype)
+    wOvvO = np.zeros((noccb,nvira,nvira,noccb), dtype=dtype)
+
+    tauaa, tauab, taubb = make_tau((t2aa,t2ab,t2bb) , t1, t1)
+    u2aa, u2ab, u2bb = cc._add_vvvv(None, (tauaa,tauab,taubb), eris)
+    
+    tauaa = tauab = taubb = None
+
+    u2aa *= .5
+    u2bb *= .5
+
+    tauaa, tauab, taubb = make_tau((0*t2[0],0*t2[1],0*t2[2]) , t1, t1)
+
+    # u2aa = np.zeros_like(t2aa)
+    # u2bb = np.zeros_like(t2ab)
+    # u2ab = np.zeros_like(t2ab)
+
+    if nvira > 0 and nocca > 0:
+        for p0,p1 in lib.prange(0, nocca, nvira):
+            ovvv = eris.get_ovvv(slice(p0,p1))  # ovvv = eris.ovvv[p0:p1]
+            ovvv = ovvv - ovvv.transpose(0,3,2,1)
+            Fvva += np.einsum('mf,mfae->ae', t1a[p0:p1], ovvv)
+            wovvo[p0:p1] += lib.einsum('jf,mebf->mbej', t1a, ovvv)
+
+            u1a += 0.5*lib.einsum('mief,meaf->ia', t2aa[p0:p1], ovvv)
+
+            u2aa[:,p0:p1] += lib.einsum('ie,mbea->imab', t1a, ovvv.conj())
+
+            tmp1aa = lib.einsum('ijef,mebf->ijmb', tauaa, ovvv)
+            tmp1aa += lib.einsum('ijef,mebf->ijmb', t2aa, ovvv)
+            u2aa -= lib.einsum('ijmb,ma->ijab', tmp1aa, t1a[p0:p1]*.5)
+            ovvv = tmp1aa = None
+
+    if nvirb > 0 and noccb > 0:
+        for p0,p1 in lib.prange(0, noccb, nvirb):
+            OVVV = eris.get_OVVV(slice(p0,p1))  # OVVV = eris.OVVV[p0:p1]
+            OVVV = OVVV - OVVV.transpose(0,3,2,1)
+            Fvvb += np.einsum('mf,mfae->ae', t1b[p0:p1], OVVV)
+            wOVVO[p0:p1] = lib.einsum('jf,mebf->mbej', t1b, OVVV)
+
+
+            u1b += 0.5*lib.einsum('MIEF,MEAF->IA', t2bb[p0:p1], OVVV)
+
+            u2bb[:,p0:p1] += lib.einsum('ie,mbea->imab', t1b, OVVV.conj())
+
+            tmp1bb = lib.einsum('ijef,mebf->ijmb', taubb, OVVV)
+            tmp1bb += lib.einsum('ijef,mebf->ijmb', t2bb, OVVV)
+            u2bb -= lib.einsum('ijmb,ma->ijab', tmp1bb, t1b[p0:p1]*.5)
+
+            OVVV = tmp1bb = None
+
+    if nvirb > 0 and nocca > 0:
+        for p0,p1 in lib.prange(0, nocca, nvira*nvirb):
+            ovVV = eris.get_ovVV(slice(p0,p1))  # ovVV = eris.ovVV[p0:p1]
+            Fvvb += np.einsum('mf,mfAE->AE', t1a[p0:p1], ovVV)
+            woVvO[p0:p1] = lib.einsum('JF,meBF->mBeJ', t1b, ovVV)
+            woVVo[p0:p1] = lib.einsum('jf,mfBE->mBEj',-t1a, ovVV)
+
+
+            u1b += lib.einsum('mIeF,meAF->IA', t2ab[p0:p1], ovVV)
+
+            u2ab[p0:p1] += lib.einsum('IE,maEB->mIaB', t1b, ovVV.conj())
+
+            tmp1ab = lib.einsum('iJeF,meBF->iJmB', tauab, ovVV)
+            tmp1ab += lib.einsum('iJeF,meBF->iJmB', t2ab, ovVV)
+            u2ab -= lib.einsum('iJmB,ma->iJaB', tmp1ab, t1a[p0:p1])
+
+            ovVV = tmp1ab = None
+
+    if nvira > 0 and noccb > 0:
+        for p0,p1 in lib.prange(0, noccb, nvirb * nvira):
+            OVvv = eris.get_OVvv(slice(p0,p1))  # OVvv = eris.OVvv[p0:p1]
+            Fvva += np.einsum('MF,MFae->ae', t1b[p0:p1], OVvv)
+            wOvVo[p0:p1] = lib.einsum('jf,MEbf->MbEj', t1a, OVvv)
+            wOvvO[p0:p1] = lib.einsum('JF,MFbe->MbeJ',-t1b, OVvv)
+
+            u1a += lib.einsum('iMfE,MEaf->ia', t2ab[:,p0:p1], OVvv)
+
+            u2ab[:,p0:p1] += lib.einsum('ie,MBea->iMaB', t1a, OVvv.conj())
+
+            tmp1abba = lib.einsum('iJeF,MFbe->iJbM', tauab, OVvv)
+            tmp1abba += lib.einsum('iJeF,MFbe->iJbM', t2ab, OVvv) #additional term
+            u2ab -= lib.einsum('iJbM,MA->iJbA', tmp1abba, t1b[p0:p1])
+
+            OVvv = tmp1abba = None
+
+    eris_ovov = np.asarray(eris.ovov)
+    eris_ovoo = np.asarray(eris.ovoo)
+    Woooo = lib.einsum('je,nemi->mnij', t1a, eris_ovoo)
+    Woooo = Woooo - Woooo.transpose(0,1,3,2)
+    Woooo += np.asarray(eris.oooo).transpose(0,2,1,3)
+    Woooo += lib.einsum('ijef,menf->mnij', tauaa, eris_ovov) * .5
+    u2aa += lib.einsum('mnab,mnij->ijab', tauaa, Woooo*.5)
+    u2aa += lib.einsum('mnab,mnij->ijab', t2aa, Woooo*.5) #additional term
+    Woooo = None #tauaa = None
+    ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
+    Fooa += np.einsum('ne,nemi->mi', t1a, ovoo)
+#Implementation of the additional terms [V, T2^act] to singles residue
+    u1a += 0.5*lib.einsum('mnae,meni->ia', t2aa, ovoo)
+
+    wovvo += lib.einsum('nb,nemj->mbej', t1a, ovoo)
+    ovoo = eris_ovoo = None
+
+
+#we are using the full t2 transformed fock operator: 
+
+    tilaa = make_tau_aa(t2aa, t1a, t1a, fac=0.5)
+
+#   tilaa = make_tau_aa(0*t2[0], t1a, t1a, fac=0.5)
+    ovov = eris_ovov - eris_ovov.transpose(0,3,2,1)
+    Fvva -= .5 * lib.einsum('mnaf,menf->ae', tilaa, ovov)
+    Fooa += .5 * lib.einsum('inef,menf->mi', tilaa, ovov)
+    Fova = np.einsum('nf,menf->me',t1a, ovov)
+    u2aa += ovov.conj().transpose(0,2,1,3) * .5
+    # wovvo -= 0.5*lib.einsum('jnfb,menf->mbej', t2aa, ovov)
+    # woVvO += 0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, ovov)
+    tmpaa = lib.einsum('jf,menf->mnej', t1a, ovov)
+    wovvo -= lib.einsum('nb,mnej->mbej', t1a, tmpaa)
+    eris_ovov = ovov = tmpaa = None 
+    tilaa = None
+
+    eris_OVOV = np.asarray(eris.OVOV)
+    eris_OVOO = np.asarray(eris.OVOO)
+    WOOOO = lib.einsum('je,nemi->mnij', t1b, eris_OVOO)
+    WOOOO = WOOOO - WOOOO.transpose(0,1,3,2)
+    WOOOO += np.asarray(eris.OOOO).transpose(0,2,1,3)
+    WOOOO += lib.einsum('ijef,menf->mnij', taubb, eris_OVOV) * .5
+    u2bb += lib.einsum('mnab,mnij->ijab', taubb, WOOOO*.5)
+    u2bb += lib.einsum('mnab,mnij->ijab', t2bb, WOOOO*.5) #additional term..
+    WOOOO = taubb = None
+    OVOO = eris_OVOO - eris_OVOO.transpose(2,1,0,3)
+    Foob += np.einsum('ne,nemi->mi', t1b, OVOO)
+
+#Implementation of the additional terms [V, T2^act] to singles residue
+#   u1b += 0.5*lib.einsum('mnae,meni->ia', t2bb_act, OVOO)
+    u1b += 0.5*lib.einsum('mnae,meni->ia', t2bb, OVOO)
+
+    wOVVO += lib.einsum('nb,nemj->mbej', t1b, OVOO)
+    OVOO = eris_OVOO = None
+
+#we are using the full t2 transformed fock operator: 
+#   tilbb = make_tau_aa(t2bb_act, t1b, t1b, fac=0.5)
+    tilbb = make_tau_aa(t2bb, t1b, t1b, fac=0.5)
+#   tilbb = make_tau_aa(0*t2[2], t1b, t1b, fac=0.5)
+
+
+    OVOV = eris_OVOV - eris_OVOV.transpose(0,3,2,1)
+    Fvvb -= .5 * lib.einsum('MNAF,MENF->AE', tilbb, OVOV)
+    Foob += .5 * lib.einsum('inef,menf->mi', tilbb, OVOV)
+    Fovb = np.einsum('nf,menf->me',t1b, OVOV)
+    u2bb += OVOV.conj().transpose(0,2,1,3) * .5
+    # wOVVO -= 0.5*lib.einsum('jnfb,menf->mbej', t2bb, OVOV)
+    # wOvVo += 0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, OVOV)
+    tmpbb = lib.einsum('jf,menf->mnej', t1b, OVOV)
+    wOVVO -= lib.einsum('nb,mnej->mbej', t1b, tmpbb)
+    eris_OVOV = OVOV = tmpbb = None 
+    tilbb = None
+
+    eris_OVoo = np.asarray(eris.OVoo)
+    eris_ovOO = np.asarray(eris.ovOO)
+    Fooa += np.einsum('NE,NEmi->mi', t1b, eris_OVoo)
+
+
+#Implementation of the additional terms [V, T2^act] to singles residue
+#   u1a -= lib.einsum('nMaE,MEni->ia', t2ab_act, eris_OVoo)
+    u1a -= lib.einsum('nMaE,MEni->ia', t2ab, eris_OVoo)
+
+    wOvVo -= lib.einsum('nb,MEnj->MbEj', t1a, eris_OVoo)
+    woVVo += lib.einsum('NB,NEmj->mBEj', t1b, eris_OVoo)
+    Foob += np.einsum('ne,neMI->MI', t1a, eris_ovOO)
+
+#Implementation of the additional terms [V, T2^act] to singles residue
+#   u1b -= lib.einsum('mNeA,meNI->IA', t2ab_act, eris_ovOO)
+    u1b -= lib.einsum('mNeA,meNI->IA', t2ab, eris_ovOO)
+    woVvO -= lib.einsum('NB,meNJ->mBeJ', t1b, eris_ovOO)
+    wOvvO += lib.einsum('nb,neMJ->MbeJ', t1a, eris_ovOO)
+    WoOoO = lib.einsum('JE,NEmi->mNiJ', t1b, eris_OVoo)
+    WoOoO+= lib.einsum('je,neMI->nMjI', t1a, eris_ovOO)
+    WoOoO += np.asarray(eris.ooOO).transpose(0,2,1,3)
+    eris_OVoo = eris_ovOO = None
+
+    eris_ovOV = np.asarray(eris.ovOV)
+    WoOoO += lib.einsum('iJeF,meNF->mNiJ', tauab, eris_ovOV)
+    u2ab += lib.einsum('mNaB,mNiJ->iJaB', tauab, WoOoO)
+    u2ab += lib.einsum('mNaB,mNiJ->iJaB', t2ab, WoOoO) #additional term..
+    WoOoO = None
+
+
+#we are using the full t2 transformed fock operator: 
+#   tilab = make_tau_ab(t2ab_act, t1 , t1 , fac=0.5)
+    tilab = make_tau_ab(t2ab, t1 , t1 , fac=0.5)
+
+#   tilab = make_tau_ab(0*t2[1], t1 , t1 , fac=0.5)
+
+    Fvva -= lib.einsum('mNaF,meNF->ae', tilab, eris_ovOV)
+    Fvvb -= lib.einsum('nMfA,nfME->AE', tilab, eris_ovOV)
+    Fooa += lib.einsum('iNeF,meNF->mi', tilab, eris_ovOV)
+    Foob += lib.einsum('nIfE,nfME->MI', tilab, eris_ovOV)
+    Fova += np.einsum('NF,meNF->me',t1b, eris_ovOV)
+    Fovb += np.einsum('nf,nfME->ME',t1a, eris_ovOV)
+    u2ab += eris_ovOV.conj().transpose(0,2,1,3)
+    # wovvo += 0.5*lib.einsum('jNbF,meNF->mbej', t2ab, eris_ovOV)
+    # wOVVO += 0.5*lib.einsum('nJfB,nfME->MBEJ', t2ab, eris_ovOV)
+    # wOvVo -= 0.5*lib.einsum('jnfb,nfME->MbEj', t2aa, eris_ovOV)
+    # woVvO -= 0.5*lib.einsum('JNFB,meNF->mBeJ', t2bb, eris_ovOV)
+    # woVVo += 0.5*lib.einsum('jNfB,mfNE->mBEj', t2ab, eris_ovOV)
+    # wOvvO += 0.5*lib.einsum('nJbF,neMF->MbeJ', t2ab, eris_ovOV)
+    tmpabab = lib.einsum('JF,meNF->mNeJ', t1b, eris_ovOV)
+    tmpbaba = lib.einsum('jf,nfME->MnEj', t1a, eris_ovOV)
+    woVvO -= lib.einsum('NB,mNeJ->mBeJ', t1b, tmpabab)
+    wOvVo -= lib.einsum('nb,MnEj->MbEj', t1a, tmpbaba)
+    woVVo += lib.einsum('NB,NmEj->mBEj', t1b, tmpbaba)
+    wOvvO += lib.einsum('nb,nMeJ->MbeJ', t1a, tmpabab)
+    tmpabab = tmpbaba = None
+    tilab = None
+
+    Fova += fova
+    Fovb += fovb
+    u1a += fova.conj()
+    u1a += np.einsum('ie,ae->ia', t1a, Fvva)
+    u1a -= np.einsum('ma,mi->ia', t1a, Fooa)
+    u1a -= np.einsum('imea,me->ia', t2aa, Fova)
+    u1a += np.einsum('iMaE,ME->ia', t2ab, Fovb)
+    u1b += fovb.conj()
+    u1b += np.einsum('ie,ae->ia',t1b,Fvvb)
+    u1b -= np.einsum('ma,mi->ia',t1b,Foob)
+    u1b -= np.einsum('imea,me->ia', t2bb, Fovb)
+    u1b += np.einsum('mIeA,me->IA', t2ab, Fova)
+
+    eris_oovv = np.asarray(eris.oovv)
+    eris_ovvo = np.asarray(eris.ovvo)
+    wovvo -= eris_oovv.transpose(0,2,3,1)
+    wovvo += eris_ovvo.transpose(0,2,1,3)
+    oovv = eris_oovv - eris_ovvo.transpose(0,3,2,1)
+    u1a-= np.einsum('nf,niaf->ia', t1a,      oovv)
+    tmp1aa = lib.einsum('ie,mjbe->mbij', t1a,      oovv)
+    u2aa += 2*lib.einsum('ma,mbij->ijab', t1a, tmp1aa)
+    eris_ovvo = eris_oovv = oovv = tmp1aa = None
+
+    eris_OOVV = np.asarray(eris.OOVV)
+    eris_OVVO = np.asarray(eris.OVVO)
+    wOVVO -= eris_OOVV.transpose(0,2,3,1)
+    wOVVO += eris_OVVO.transpose(0,2,1,3)
+    OOVV = eris_OOVV - eris_OVVO.transpose(0,3,2,1)
+    u1b-= np.einsum('nf,niaf->ia', t1b,      OOVV)
+    tmp1bb = lib.einsum('ie,mjbe->mbij', t1b,      OOVV)
+    u2bb += 2*lib.einsum('ma,mbij->ijab', t1b, tmp1bb)
+    eris_OVVO = eris_OOVV = OOVV = None
+
+    eris_ooVV = np.asarray(eris.ooVV)
+    eris_ovVO = np.asarray(eris.ovVO)
+    woVVo -= eris_ooVV.transpose(0,2,3,1)
+    woVvO += eris_ovVO.transpose(0,2,1,3)
+    u1b+= np.einsum('nf,nfAI->IA', t1a, eris_ovVO)
+    tmp1ab = lib.einsum('ie,meBJ->mBiJ', t1a, eris_ovVO)
+    tmp1ab+= lib.einsum('IE,mjBE->mBjI', t1b, eris_ooVV)
+    u2ab -= lib.einsum('ma,mBiJ->iJaB', t1a, tmp1ab)
+    eris_ooVV = eris_ovVO = tmp1ab = None
+
+##
+##  add the disconnected contribution to the T2 amplitude equation 
+##
+
+   #tmp = np.einsum('ia,jb->ijab', u1b, t1b)
+   #tmp = tmp - tmp.transpose(1,0,2,3)
+   #u2bb += tmp - tmp.transpose(0,1,3,2)
+
+   #tmp = np.einsum('ia,jb->ijab', u1a, t1a)
+   #tmp = tmp - tmp.transpose(1,0,2,3)
+   #u2aa += tmp - tmp.transpose(0,1,3,2)
+
+   #u2ab += np.einsum('ia,jb->jiba', u1b, t1a)
+   #u2ab += np.einsum('ia,JB->iJaB', u1a, t1b)
+
+##  end of disconnected terms
+
+
+    eris_OOvv = np.asarray(eris.OOvv)
+    eris_OVvo = np.asarray(eris.OVvo)
+    wOvvO -= eris_OOvv.transpose(0,2,3,1)
+    wOvVo += eris_OVvo.transpose(0,2,1,3)
+    u1a+= np.einsum('NF,NFai->ia', t1b, eris_OVvo)
+    tmp1ba = lib.einsum('IE,MEbj->MbIj', t1b, eris_OVvo)
+    tmp1ba+= lib.einsum('ie,MJbe->MbJi', t1a, eris_OOvv)
+    u2ab -= lib.einsum('MA,MbIj->jIbA', t1b, tmp1ba)
+    eris_OOvv = eris_OVvo = tmp1ba = None
+
+#Implementation of the additional terms [V, T2^act] to doubles residue
+
+#   u2aa += 2*lib.einsum('imae,mbej->ijab', t2aa_act, wovvo)
+#   u2aa += 2*lib.einsum('iMaE,MbEj->ijab', t2ab_act, wOvVo)
+#   u2bb += 2*lib.einsum('imae,mbej->ijab', t2bb_act, wOVVO)
+#   u2bb += 2*lib.einsum('mIeA,mBeJ->IJAB', t2ab_act, woVvO)
+#   u2ab += lib.einsum('imae,mBeJ->iJaB', t2aa_act, woVvO)
+#   u2ab += lib.einsum('iMaE,MBEJ->iJaB', t2ab_act, wOVVO)
+#   u2ab += lib.einsum('iMeA,MbeJ->iJbA', t2ab_act, wOvvO)
+#   u2ab += lib.einsum('IMAE,MbEj->jIbA', t2bb_act, wOvVo)
+#   u2ab += lib.einsum('mIeA,mbej->jIbA', t2ab_act, wovvo)
+#   u2ab += lib.einsum('mIaE,mBEj->jIaB', t2ab_act, woVVo)
+#   wovvo = wOVVO = woVvO = wOvVo = woVVo = wOvvO = None
+
+    u2aa += 2*lib.einsum('imae,mbej->ijab', t2aa, wovvo)
+    u2aa += 2*lib.einsum('iMaE,MbEj->ijab', t2ab, wOvVo)
+    u2bb += 2*lib.einsum('imae,mbej->ijab', t2bb, wOVVO)
+    u2bb += 2*lib.einsum('mIeA,mBeJ->IJAB', t2ab, woVvO)
+    u2ab += lib.einsum('imae,mBeJ->iJaB', t2aa, woVvO)
+    u2ab += lib.einsum('iMaE,MBEJ->iJaB', t2ab, wOVVO)
+    u2ab += lib.einsum('iMeA,MbeJ->iJbA', t2ab, wOvvO)
+    u2ab += lib.einsum('IMAE,MbEj->jIbA', t2bb, wOvVo)
+    u2ab += lib.einsum('mIeA,mbej->jIbA', t2ab, wovvo)
+    u2ab += lib.einsum('mIaE,mBEj->jIaB', t2ab, woVVo)
+    wovvo = wOVVO = woVvO = wOvVo = woVVo = wOvvO = None
+
+
+
+    Ftmpa = Fvva - .5*lib.einsum('mb,me->be', t1a, Fova)
+    Ftmpb = Fvvb - .5*lib.einsum('mb,me->be', t1b, Fovb)
+    u2aa += lib.einsum('ijae,be->ijab', t2aa, Ftmpa)
+    u2bb += lib.einsum('ijae,be->ijab', t2bb, Ftmpb)
+    u2ab += lib.einsum('iJaE,BE->iJaB', t2ab, Ftmpb)
+    u2ab += lib.einsum('iJeA,be->iJbA', t2ab, Ftmpa)
+    Ftmpa = Fooa + 0.5*lib.einsum('je,me->mj', t1a, Fova)
+    Ftmpb = Foob + 0.5*lib.einsum('je,me->mj', t1b, Fovb)
+    u2aa -= lib.einsum('imab,mj->ijab', t2aa, Ftmpa)
+    u2bb -= lib.einsum('imab,mj->ijab', t2bb, Ftmpb)
+    u2ab -= lib.einsum('iMaB,MJ->iJaB', t2ab, Ftmpb)
+    u2ab -= lib.einsum('mIaB,mj->jIaB', t2ab, Ftmpa)
+
+    eris_ovoo = np.asarray(eris.ovoo).conj()
+    eris_OVOO = np.asarray(eris.OVOO).conj()
+    eris_OVoo = np.asarray(eris.OVoo).conj()
+    eris_ovOO = np.asarray(eris.ovOO).conj()
+    ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
+    OVOO = eris_OVOO - eris_OVOO.transpose(2,1,0,3)
+    u2aa -= lib.einsum('ma,jbim->ijab', t1a, ovoo)
+    u2bb -= lib.einsum('ma,jbim->ijab', t1b, OVOO)
+    u2ab -= lib.einsum('ma,JBim->iJaB', t1a, eris_OVoo)
+    u2ab -= lib.einsum('MA,ibJM->iJbA', t1b, eris_ovOO)
+    eris_ovoo = eris_OVoo = eris_OVOO = eris_ovOO = None
+
+
+    u2aa *= .5
+    u2bb *= .5
+    u2aa = u2aa - u2aa.transpose(0,1,3,2)
+    u2aa = u2aa - u2aa.transpose(1,0,2,3)
+    u2bb = u2bb - u2bb.transpose(0,1,3,2)
+    u2bb = u2bb - u2bb.transpose(1,0,2,3)
+
+#   eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
+#   eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+
+    eia_a = lib.direct_sum('i-a->ia', np.diag(eris.focka[:nocca,:nocca]), np.diag(eris.focka[nocca:,nocca:]))
+    eia_b = lib.direct_sum('i-a->ia', np.diag(eris.fockb[:noccb,:noccb]), np.diag(eris.fockb[noccb:,noccb:]))
+
+    u1a /= eia_a
+    u1b /= eia_b
+
+    u2aa /= lib.direct_sum('ia+jb->ijab', eia_a, eia_a)
+    u2ab /= lib.direct_sum('ia+jb->ijab', eia_a, eia_b)
+    u2bb /= lib.direct_sum('ia+jb->ijab', eia_b, eia_b)
+
+    # NOTE we only update the inactive orbitals!
+   
+    idx_s_a_super = []
+    idx_s_b_super = []
+    idx_d_a_super = []
+    idx_d_b_super = []
+    idx_d_ab_super = []
+ 
+    for f in range(len(act_hole)):
+       idx_s_a, idx_d_a = get_index_tuples(act_hole[f][0], act_particle[f][0], nocca, nvira)
+       idx_s_b, idx_d_b = get_index_tuples(act_hole[f][1], act_particle[f][1], noccb, nvirb)
+
+       idx_d_ab = [(elem_a[0], elem_b[1],elem_a[2],elem_b[3]) for elem_a, elem_b in zip(idx_d_a,idx_d_b)]
+       idx_s_a_super.append(idx_s_a)
+       idx_s_b_super.append(idx_s_b)
+       idx_d_a_super.append(idx_d_a)
+       idx_d_b_super.append(idx_d_b)
+       idx_d_ab_super.append(idx_d_ab)
+
+    # NOTE that we have to pass the active indices in order to only
+    #      update the inactive orbitals
+    # u1a_c = np.copy(u1a)
+    # u1b_c = np.copy(u1b)
+    # u2aa_c = np.copy(u2aa)
+    # u2bb_c = np.copy(u2bb)
+    # u2ab_c = np.copy(u2ab)
+
+
+    for f in range(len(act_hole)):
+    
+        for s in idx_singles[0]:
+            u1a[idx_s_a_super[f][s]] = t1[0][idx_s_a_super[f][s]]
+        for d in idx_doubles[0]:
+            u2aa[idx_d_a_super[f][d]] = t2[0][idx_d_a_super[f][d]]  
+
+        for s in idx_singles[1]:
+            u1b[idx_s_b_super[f][s]] = t1[1][idx_s_b_super[f][s]]
+        for d in idx_doubles[1]: 
+            u2ab[idx_d_ab_super[f][d]] = t2[1][idx_d_ab_super[f][d]]  
+
+        for d in idx_doubles[2]: 
+            u2bb[idx_d_b_super[f][d]] = t2[2][idx_d_b_super[f][d]]  
+
+    t1new = u1a, u1b
+    t2new = u2aa, u2ab, u2bb
+
+    return t1new, t2new
+
+
+
+def update_amps_oomp2_t2_fock(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles):
+
+    t1a, t1b = t1
+    t2aa, t2ab, t2bb = t2
+     
+    nocca, noccb, nvira, nvirb = t2ab.shape
+    mo_ea_o = eris.mo_energy[0][:nocca]
+    mo_ea_v = eris.mo_energy[0][nocca:] + cc.level_shift
+    mo_eb_o = eris.mo_energy[1][:noccb]
+    mo_eb_v = eris.mo_energy[1][noccb:] + cc.level_shift
+    fova = eris.focka[:nocca,nocca:]
+    fovb = eris.fockb[:noccb,noccb:]
+
+    u1a = np.zeros_like(t1a)
+    u1b = np.zeros_like(t1b)
+
+
+    Fooa =  .5 * lib.einsum('me,ie->mi', fova, t1a)
+    Foob =  .5 * lib.einsum('me,ie->mi', fovb, t1b)
+    Fvva = -.5 * lib.einsum('me,ma->ae', fova, t1a)
+    Fvvb = -.5 * lib.einsum('me,ma->ae', fovb, t1b)
+#   Fooa += eris.focka[:nocca,:nocca] - np.diag(mo_ea_o)
+#   Foob += eris.fockb[:noccb,:noccb] - np.diag(mo_eb_o)
+#   Fvva += eris.focka[nocca:,nocca:] - np.diag(mo_ea_v)
+#   Fvvb += eris.fockb[noccb:,noccb:] - np.diag(mo_eb_v)
+
+    tmp = eris.focka[:nocca, :nocca].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fooa += tmp
+
+    tmp = eris.fockb[:noccb, :noccb].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Foob += tmp
+
+    tmp = eris.focka[nocca:, nocca:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvva += tmp
+
+    tmp = eris.fockb[noccb:, noccb:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvvb += tmp
+
+    tmp = None
+
+    dtype = t1[0].dtype
+    wovvo = np.zeros((nocca,nvira,nvira,nocca), dtype=dtype)
+    wOVVO = np.zeros((noccb,nvirb,nvirb,noccb), dtype=dtype)
+    woVvO = np.zeros((nocca,nvirb,nvira,noccb), dtype=dtype)
+    woVVo = np.zeros((nocca,nvirb,nvirb,nocca), dtype=dtype)
+    wOvVo = np.zeros((noccb,nvira,nvirb,nocca), dtype=dtype)
+    wOvvO = np.zeros((noccb,nvira,nvira,noccb), dtype=dtype)
+
+    tauaa, tauab, taubb = make_tau((0*t2[0],0*t2[1],0*t2[2]) , t1, t1)
+    u2aa, u2ab, u2bb = cc._add_vvvv(None, (tauaa,tauab,taubb), eris)
+    
+    u2aa *= .5
+    u2bb *= .5
+
+
+    # u2aa = np.zeros_like(t2aa)
+    # u2bb = np.zeros_like(t2ab)
+    # u2ab = np.zeros_like(t2ab)
+
+    if nvira > 0 and nocca > 0:
+        for p0,p1 in lib.prange(0, nocca, nvira):
+            ovvv = eris.get_ovvv(slice(p0,p1))  # ovvv = eris.ovvv[p0:p1]
+            ovvv = ovvv - ovvv.transpose(0,3,2,1)
+            Fvva += np.einsum('mf,mfae->ae', t1a[p0:p1], ovvv)
+            wovvo[p0:p1] += lib.einsum('jf,mebf->mbej', t1a, ovvv)
+
+            u1a += 0.5*lib.einsum('mief,meaf->ia', t2aa[p0:p1], ovvv)
+
+            u2aa[:,p0:p1] += lib.einsum('ie,mbea->imab', t1a, ovvv.conj())
+
+            tmp1aa = lib.einsum('ijef,mebf->ijmb', tauaa, ovvv)
+            u2aa -= lib.einsum('ijmb,ma->ijab', tmp1aa, t1a[p0:p1]*.5)
+            ovvv = tmp1aa = None
+
+    if nvirb > 0 and noccb > 0:
+        for p0,p1 in lib.prange(0, noccb, nvirb):
+            OVVV = eris.get_OVVV(slice(p0,p1))  # OVVV = eris.OVVV[p0:p1]
+            OVVV = OVVV - OVVV.transpose(0,3,2,1)
+            Fvvb += np.einsum('mf,mfae->ae', t1b[p0:p1], OVVV)
+            wOVVO[p0:p1] = lib.einsum('jf,mebf->mbej', t1b, OVVV)
+
+
+            u1b += 0.5*lib.einsum('MIEF,MEAF->IA', t2bb[p0:p1], OVVV)
+
+            u2bb[:,p0:p1] += lib.einsum('ie,mbea->imab', t1b, OVVV.conj())
+
+            tmp1bb = lib.einsum('ijef,mebf->ijmb', taubb, OVVV)
+            u2bb -= lib.einsum('ijmb,ma->ijab', tmp1bb, t1b[p0:p1]*.5)
+
+            OVVV = tmp1bb = None
+
+    if nvirb > 0 and nocca > 0:
+        for p0,p1 in lib.prange(0, nocca, nvira*nvirb):
+            ovVV = eris.get_ovVV(slice(p0,p1))  # ovVV = eris.ovVV[p0:p1]
+            Fvvb += np.einsum('mf,mfAE->AE', t1a[p0:p1], ovVV)
+            woVvO[p0:p1] = lib.einsum('JF,meBF->mBeJ', t1b, ovVV)
+            woVVo[p0:p1] = lib.einsum('jf,mfBE->mBEj',-t1a, ovVV)
+
+
+            u1b += lib.einsum('mIeF,meAF->IA', t2ab[p0:p1], ovVV)
+
+            u2ab[p0:p1] += lib.einsum('IE,maEB->mIaB', t1b, ovVV.conj())
+
+            tmp1ab = lib.einsum('iJeF,meBF->iJmB', tauab, ovVV)
+            u2ab -= lib.einsum('iJmB,ma->iJaB', tmp1ab, t1a[p0:p1])
+
+            ovVV = tmp1ab = None
+
+    if nvira > 0 and noccb > 0:
+        for p0,p1 in lib.prange(0, noccb, nvirb * nvira):
+            OVvv = eris.get_OVvv(slice(p0,p1))  # OVvv = eris.OVvv[p0:p1]
+            Fvva += np.einsum('MF,MFae->ae', t1b[p0:p1], OVvv)
+            wOvVo[p0:p1] = lib.einsum('jf,MEbf->MbEj', t1a, OVvv)
+            wOvvO[p0:p1] = lib.einsum('JF,MFbe->MbeJ',-t1b, OVvv)
+
+            u1a += lib.einsum('iMfE,MEaf->ia', t2ab[:,p0:p1], OVvv)
+
+            u2ab[:,p0:p1] += lib.einsum('ie,MBea->iMaB', t1a, OVvv.conj())
+
+            tmp1abba = lib.einsum('iJeF,MFbe->iJbM', tauab, OVvv)
+            u2ab -= lib.einsum('iJbM,MA->iJbA', tmp1abba, t1b[p0:p1])
+
+            OVvv = tmp1abba = None
+
+    eris_ovov = np.asarray(eris.ovov)
+    eris_ovoo = np.asarray(eris.ovoo)
+    Woooo = lib.einsum('je,nemi->mnij', t1a, eris_ovoo)
+    Woooo = Woooo - Woooo.transpose(0,1,3,2)
+    Woooo += np.asarray(eris.oooo).transpose(0,2,1,3)
+    Woooo += lib.einsum('ijef,menf->mnij', tauaa, eris_ovov) * .5
+    u2aa += lib.einsum('mnab,mnij->ijab', tauaa, Woooo*.5)
+    Woooo = None #tauaa = None
+    ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
+    Fooa += np.einsum('ne,nemi->mi', t1a, ovoo)
+#Implementation of the additional terms [V, T2^act] to singles residue
+    u1a += 0.5*lib.einsum('mnae,meni->ia', t2aa, ovoo)
+
+    wovvo += lib.einsum('nb,nemj->mbej', t1a, ovoo)
+    ovoo = eris_ovoo = None
+
+
+#we are using the full t2 transformed fock operator: 
+
+    tilaa = make_tau_aa(t2aa, t1a, t1a, fac=0.5)
+
+#   tilaa = make_tau_aa(0*t2[0], t1a, t1a, fac=0.5)
+    ovov = eris_ovov - eris_ovov.transpose(0,3,2,1)
+    Fvva -= .5 * lib.einsum('mnaf,menf->ae', tilaa, ovov)
+    Fooa += .5 * lib.einsum('inef,menf->mi', tilaa, ovov)
+    Fova = np.einsum('nf,menf->me',t1a, ovov)
+    u2aa += ovov.conj().transpose(0,2,1,3) * .5
+    # wovvo -= 0.5*lib.einsum('jnfb,menf->mbej', t2aa, ovov)
+    # woVvO += 0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, ovov)
+    tmpaa = lib.einsum('jf,menf->mnej', t1a, ovov)
+    wovvo -= lib.einsum('nb,mnej->mbej', t1a, tmpaa)
+    eris_ovov = ovov = tmpaa = None 
+    tilaa = None
+
+    eris_OVOV = np.asarray(eris.OVOV)
+    eris_OVOO = np.asarray(eris.OVOO)
+    WOOOO = lib.einsum('je,nemi->mnij', t1b, eris_OVOO)
+    WOOOO = WOOOO - WOOOO.transpose(0,1,3,2)
+    WOOOO += np.asarray(eris.OOOO).transpose(0,2,1,3)
+    WOOOO += lib.einsum('ijef,menf->mnij', taubb, eris_OVOV) * .5
+    u2bb += lib.einsum('mnab,mnij->ijab', taubb, WOOOO*.5)
+    WOOOO = taubb = None
+    OVOO = eris_OVOO - eris_OVOO.transpose(2,1,0,3)
+    Foob += np.einsum('ne,nemi->mi', t1b, OVOO)
+
+#Implementation of the additional terms [V, T2^act] to singles residue
+#   u1b += 0.5*lib.einsum('mnae,meni->ia', t2bb_act, OVOO)
+    u1b += 0.5*lib.einsum('mnae,meni->ia', t2bb, OVOO)
+
+    wOVVO += lib.einsum('nb,nemj->mbej', t1b, OVOO)
+    OVOO = eris_OVOO = None
+
+#we are using the full t2 transformed fock operator: 
+#   tilbb = make_tau_aa(t2bb_act, t1b, t1b, fac=0.5)
+    tilbb = make_tau_aa(t2bb, t1b, t1b, fac=0.5)
+#   tilbb = make_tau_aa(0*t2[2], t1b, t1b, fac=0.5)
+
+
+    OVOV = eris_OVOV - eris_OVOV.transpose(0,3,2,1)
+    Fvvb -= .5 * lib.einsum('MNAF,MENF->AE', tilbb, OVOV)
+    Foob += .5 * lib.einsum('inef,menf->mi', tilbb, OVOV)
+    Fovb = np.einsum('nf,menf->me',t1b, OVOV)
+    u2bb += OVOV.conj().transpose(0,2,1,3) * .5
+    # wOVVO -= 0.5*lib.einsum('jnfb,menf->mbej', t2bb, OVOV)
+    # wOvVo += 0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, OVOV)
+    tmpbb = lib.einsum('jf,menf->mnej', t1b, OVOV)
+    wOVVO -= lib.einsum('nb,mnej->mbej', t1b, tmpbb)
+    eris_OVOV = OVOV = tmpbb = None 
+    tilbb = None
+
+    eris_OVoo = np.asarray(eris.OVoo)
+    eris_ovOO = np.asarray(eris.ovOO)
+    Fooa += np.einsum('NE,NEmi->mi', t1b, eris_OVoo)
+
+
+#Implementation of the additional terms [V, T2^act] to singles residue
+#   u1a -= lib.einsum('nMaE,MEni->ia', t2ab_act, eris_OVoo)
+    u1a -= lib.einsum('nMaE,MEni->ia', t2ab, eris_OVoo)
+
+    wOvVo -= lib.einsum('nb,MEnj->MbEj', t1a, eris_OVoo)
+    woVVo += lib.einsum('NB,NEmj->mBEj', t1b, eris_OVoo)
+    Foob += np.einsum('ne,neMI->MI', t1a, eris_ovOO)
+
+#Implementation of the additional terms [V, T2^act] to singles residue
+#   u1b -= lib.einsum('mNeA,meNI->IA', t2ab_act, eris_ovOO)
+    u1b -= lib.einsum('mNeA,meNI->IA', t2ab, eris_ovOO)
+    woVvO -= lib.einsum('NB,meNJ->mBeJ', t1b, eris_ovOO)
+    wOvvO += lib.einsum('nb,neMJ->MbeJ', t1a, eris_ovOO)
+    WoOoO = lib.einsum('JE,NEmi->mNiJ', t1b, eris_OVoo)
+    WoOoO+= lib.einsum('je,neMI->nMjI', t1a, eris_ovOO)
+    WoOoO += np.asarray(eris.ooOO).transpose(0,2,1,3)
+    eris_OVoo = eris_ovOO = None
+
+    eris_ovOV = np.asarray(eris.ovOV)
+    WoOoO += lib.einsum('iJeF,meNF->mNiJ', tauab, eris_ovOV)
+    u2ab += lib.einsum('mNaB,mNiJ->iJaB', tauab, WoOoO)
+    WoOoO = None
+
+
+#we are using the full t2 transformed fock operator: 
+#   tilab = make_tau_ab(t2ab_act, t1 , t1 , fac=0.5)
+    tilab = make_tau_ab(t2ab, t1 , t1 , fac=0.5)
+
+#   tilab = make_tau_ab(0*t2[1], t1 , t1 , fac=0.5)
+
+    Fvva -= lib.einsum('mNaF,meNF->ae', tilab, eris_ovOV)
+    Fvvb -= lib.einsum('nMfA,nfME->AE', tilab, eris_ovOV)
+    Fooa += lib.einsum('iNeF,meNF->mi', tilab, eris_ovOV)
+    Foob += lib.einsum('nIfE,nfME->MI', tilab, eris_ovOV)
+    Fova += np.einsum('NF,meNF->me',t1b, eris_ovOV)
+    Fovb += np.einsum('nf,nfME->ME',t1a, eris_ovOV)
+    u2ab += eris_ovOV.conj().transpose(0,2,1,3)
+    # wovvo += 0.5*lib.einsum('jNbF,meNF->mbej', t2ab, eris_ovOV)
+    # wOVVO += 0.5*lib.einsum('nJfB,nfME->MBEJ', t2ab, eris_ovOV)
+    # wOvVo -= 0.5*lib.einsum('jnfb,nfME->MbEj', t2aa, eris_ovOV)
+    # woVvO -= 0.5*lib.einsum('JNFB,meNF->mBeJ', t2bb, eris_ovOV)
+    # woVVo += 0.5*lib.einsum('jNfB,mfNE->mBEj', t2ab, eris_ovOV)
+    # wOvvO += 0.5*lib.einsum('nJbF,neMF->MbeJ', t2ab, eris_ovOV)
+    tmpabab = lib.einsum('JF,meNF->mNeJ', t1b, eris_ovOV)
+    tmpbaba = lib.einsum('jf,nfME->MnEj', t1a, eris_ovOV)
+    woVvO -= lib.einsum('NB,mNeJ->mBeJ', t1b, tmpabab)
+    wOvVo -= lib.einsum('nb,MnEj->MbEj', t1a, tmpbaba)
+    woVVo += lib.einsum('NB,NmEj->mBEj', t1b, tmpbaba)
+    wOvvO += lib.einsum('nb,nMeJ->MbeJ', t1a, tmpabab)
+    tmpabab = tmpbaba = None
+    tilab = None
+
+    Fova += fova
+    Fovb += fovb
+    u1a += fova.conj()
+    u1a += np.einsum('ie,ae->ia', t1a, Fvva)
+    u1a -= np.einsum('ma,mi->ia', t1a, Fooa)
+    u1a -= np.einsum('imea,me->ia', t2aa, Fova)
+    u1a += np.einsum('iMaE,ME->ia', t2ab, Fovb)
+    u1b += fovb.conj()
+    u1b += np.einsum('ie,ae->ia',t1b,Fvvb)
+    u1b -= np.einsum('ma,mi->ia',t1b,Foob)
+    u1b -= np.einsum('imea,me->ia', t2bb, Fovb)
+    u1b += np.einsum('mIeA,me->IA', t2ab, Fova)
+
+    eris_oovv = np.asarray(eris.oovv)
+    eris_ovvo = np.asarray(eris.ovvo)
+    wovvo -= eris_oovv.transpose(0,2,3,1)
+    wovvo += eris_ovvo.transpose(0,2,1,3)
+    oovv = eris_oovv - eris_ovvo.transpose(0,3,2,1)
+    u1a-= np.einsum('nf,niaf->ia', t1a,      oovv)
+    tmp1aa = lib.einsum('ie,mjbe->mbij', t1a,      oovv)
+    u2aa += 2*lib.einsum('ma,mbij->ijab', t1a, tmp1aa)
+    eris_ovvo = eris_oovv = oovv = tmp1aa = None
+
+    eris_OOVV = np.asarray(eris.OOVV)
+    eris_OVVO = np.asarray(eris.OVVO)
+    wOVVO -= eris_OOVV.transpose(0,2,3,1)
+    wOVVO += eris_OVVO.transpose(0,2,1,3)
+    OOVV = eris_OOVV - eris_OVVO.transpose(0,3,2,1)
+    u1b-= np.einsum('nf,niaf->ia', t1b,      OOVV)
+    tmp1bb = lib.einsum('ie,mjbe->mbij', t1b,      OOVV)
+    u2bb += 2*lib.einsum('ma,mbij->ijab', t1b, tmp1bb)
+    eris_OVVO = eris_OOVV = OOVV = None
+
+    eris_ooVV = np.asarray(eris.ooVV)
+    eris_ovVO = np.asarray(eris.ovVO)
+    woVVo -= eris_ooVV.transpose(0,2,3,1)
+    woVvO += eris_ovVO.transpose(0,2,1,3)
+    u1b+= np.einsum('nf,nfAI->IA', t1a, eris_ovVO)
+    tmp1ab = lib.einsum('ie,meBJ->mBiJ', t1a, eris_ovVO)
+    tmp1ab+= lib.einsum('IE,mjBE->mBjI', t1b, eris_ooVV)
+    u2ab -= lib.einsum('ma,mBiJ->iJaB', t1a, tmp1ab)
+    eris_ooVV = eris_ovVO = tmp1ab = None
+
+##
+##  add the disconnected contribution to the T2 amplitude equation 
+##
+
+   #tmp = np.einsum('ia,jb->ijab', u1b, t1b)
+   #tmp = tmp - tmp.transpose(1,0,2,3)
+   #u2bb += tmp - tmp.transpose(0,1,3,2)
+
+   #tmp = np.einsum('ia,jb->ijab', u1a, t1a)
+   #tmp = tmp - tmp.transpose(1,0,2,3)
+   #u2aa += tmp - tmp.transpose(0,1,3,2)
+
+   #u2ab += np.einsum('ia,jb->jiba', u1b, t1a)
+   #u2ab += np.einsum('ia,JB->iJaB', u1a, t1b)
+
+##  end of disconnected terms
+
+
+    eris_OOvv = np.asarray(eris.OOvv)
+    eris_OVvo = np.asarray(eris.OVvo)
+    wOvvO -= eris_OOvv.transpose(0,2,3,1)
+    wOvVo += eris_OVvo.transpose(0,2,1,3)
+    u1a+= np.einsum('NF,NFai->ia', t1b, eris_OVvo)
+    tmp1ba = lib.einsum('IE,MEbj->MbIj', t1b, eris_OVvo)
+    tmp1ba+= lib.einsum('ie,MJbe->MbJi', t1a, eris_OOvv)
+    u2ab -= lib.einsum('MA,MbIj->jIbA', t1b, tmp1ba)
+    eris_OOvv = eris_OVvo = tmp1ba = None
+
+#Implementation of the additional terms [V, T2^act] to doubles residue
+
+
+    Ftmpa = Fvva - .5*lib.einsum('mb,me->be', t1a, Fova)
+    Ftmpb = Fvvb - .5*lib.einsum('mb,me->be', t1b, Fovb)
+    u2aa += lib.einsum('ijae,be->ijab', t2aa, Ftmpa)
+    u2bb += lib.einsum('ijae,be->ijab', t2bb, Ftmpb)
+    u2ab += lib.einsum('iJaE,BE->iJaB', t2ab, Ftmpb)
+    u2ab += lib.einsum('iJeA,be->iJbA', t2ab, Ftmpa)
+    Ftmpa = Fooa + 0.5*lib.einsum('je,me->mj', t1a, Fova)
+    Ftmpb = Foob + 0.5*lib.einsum('je,me->mj', t1b, Fovb)
+    u2aa -= lib.einsum('imab,mj->ijab', t2aa, Ftmpa)
+    u2bb -= lib.einsum('imab,mj->ijab', t2bb, Ftmpb)
+    u2ab -= lib.einsum('iMaB,MJ->iJaB', t2ab, Ftmpb)
+    u2ab -= lib.einsum('mIaB,mj->jIaB', t2ab, Ftmpa)
+
+    eris_ovoo = np.asarray(eris.ovoo).conj()
+    eris_OVOO = np.asarray(eris.OVOO).conj()
+    eris_OVoo = np.asarray(eris.OVoo).conj()
+    eris_ovOO = np.asarray(eris.ovOO).conj()
+    ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
+    OVOO = eris_OVOO - eris_OVOO.transpose(2,1,0,3)
+    u2aa -= lib.einsum('ma,jbim->ijab', t1a, ovoo)
+    u2bb -= lib.einsum('ma,jbim->ijab', t1b, OVOO)
+    u2ab -= lib.einsum('ma,JBim->iJaB', t1a, eris_OVoo)
+    u2ab -= lib.einsum('MA,ibJM->iJbA', t1b, eris_ovOO)
+    eris_ovoo = eris_OVoo = eris_OVOO = eris_ovOO = None
+
+
+    u2aa *= .5
+    u2bb *= .5
+    u2aa = u2aa - u2aa.transpose(0,1,3,2)
+    u2aa = u2aa - u2aa.transpose(1,0,2,3)
+    u2bb = u2bb - u2bb.transpose(0,1,3,2)
+    u2bb = u2bb - u2bb.transpose(1,0,2,3)
+
+#   eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
+#   eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+
+    eia_a = lib.direct_sum('i-a->ia', np.diag(eris.focka[:nocca,:nocca]), np.diag(eris.focka[nocca:,nocca:]))
+    eia_b = lib.direct_sum('i-a->ia', np.diag(eris.fockb[:noccb,:noccb]), np.diag(eris.fockb[noccb:,noccb:]))
+
+    u1a /= eia_a
+    u1b /= eia_b
+
+    u2aa /= lib.direct_sum('ia+jb->ijab', eia_a, eia_a)
+    u2ab /= lib.direct_sum('ia+jb->ijab', eia_a, eia_b)
+    u2bb /= lib.direct_sum('ia+jb->ijab', eia_b, eia_b)
+
+    # NOTE we only update the inactive orbitals!
+   
+    idx_s_a_super = []
+    idx_s_b_super = []
+    idx_d_a_super = []
+    idx_d_b_super = []
+    idx_d_ab_super = []
+ 
+    for f in range(len(act_hole)):
+       idx_s_a, idx_d_a = get_index_tuples(act_hole[f][0], act_particle[f][0], nocca, nvira)
+       idx_s_b, idx_d_b = get_index_tuples(act_hole[f][1], act_particle[f][1], noccb, nvirb)
+
+       idx_d_ab = [(elem_a[0], elem_b[1],elem_a[2],elem_b[3]) for elem_a, elem_b in zip(idx_d_a,idx_d_b)]
+       idx_s_a_super.append(idx_s_a)
+       idx_s_b_super.append(idx_s_b)
+       idx_d_a_super.append(idx_d_a)
+       idx_d_b_super.append(idx_d_b)
+       idx_d_ab_super.append(idx_d_ab)
+
+    # NOTE that we have to pass the active indices in order to only
+    #      update the inactive orbitals
+    # u1a_c = np.copy(u1a)
+    # u1b_c = np.copy(u1b)
+    # u2aa_c = np.copy(u2aa)
+    # u2bb_c = np.copy(u2bb)
+    # u2ab_c = np.copy(u2ab)
+
+
+    for f in range(len(act_hole)):
+    
+        for s in idx_singles[0]:
+            u1a[idx_s_a_super[f][s]] = t1[0][idx_s_a_super[f][s]]
+        for d in idx_doubles[0]:
+            u2aa[idx_d_a_super[f][d]] = t2[0][idx_d_a_super[f][d]]  
+
+        for s in idx_singles[1]:
+            u1b[idx_s_b_super[f][s]] = t1[1][idx_s_b_super[f][s]]
+        for d in idx_doubles[1]: 
+            u2ab[idx_d_ab_super[f][d]] = t2[1][idx_d_ab_super[f][d]]  
+
+        for d in idx_doubles[2]: 
+            u2bb[idx_d_b_super[f][d]] = t2[2][idx_d_b_super[f][d]]  
+
+    t1new = u1a, u1b
+    t2new = u2aa, u2ab, u2bb
+
+    return t1new, t2new
+
+
+def update_amps_oomp2_t2act(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles):
+
+    t1a, t1b = t1
+    t2aa, t2ab, t2bb = t2
+     
+    nocca, noccb, nvira, nvirb = t2ab.shape
+    mo_ea_o = eris.mo_energy[0][:nocca]
+    mo_ea_v = eris.mo_energy[0][nocca:] + cc.level_shift
+    mo_eb_o = eris.mo_energy[1][:noccb]
+    mo_eb_v = eris.mo_energy[1][noccb:] + cc.level_shift
+    fova = eris.focka[:nocca,nocca:]
+    fovb = eris.fockb[:noccb,noccb:]
+
+    u1a = np.zeros_like(t1a)
+    u1b = np.zeros_like(t1b)
+
+#extract active t2:
+
+    t2aa_act = np.zeros_like(t2aa)   
+    t2bb_act = np.zeros_like(t2bb)   
+    t2ab_act = np.zeros_like(t2ab)   
+
+    t2aa_act[np.ix_(act_hole[0][0], act_hole[0][0], act_particle[0][0], act_particle[0][0])]  += t2aa[np.ix_(act_hole[0][0], act_hole[0][0], act_particle[0][0], act_particle[0][0])]
+    t2ab_act[np.ix_(act_hole[0][0], act_hole[0][1], act_particle[0][0], act_particle[0][1])]  += t2ab[np.ix_(act_hole[0][0], act_hole[0][1], act_particle[0][0], act_particle[0][1])]
+    t2bb_act[np.ix_(act_hole[0][1], act_hole[0][1], act_particle[0][1], act_particle[0][1])]  += t2bb[np.ix_(act_hole[0][1], act_hole[0][1], act_particle[0][1], act_particle[0][1])]
+
+    Fooa =  .5 * lib.einsum('me,ie->mi', fova, t1a)
+    Foob =  .5 * lib.einsum('me,ie->mi', fovb, t1b)
+    Fvva = -.5 * lib.einsum('me,ma->ae', fova, t1a)
+    Fvvb = -.5 * lib.einsum('me,ma->ae', fovb, t1b)
+#   Fooa += eris.focka[:nocca,:nocca] - np.diag(mo_ea_o)
+#   Foob += eris.fockb[:noccb,:noccb] - np.diag(mo_eb_o)
+#   Fvva += eris.focka[nocca:,nocca:] - np.diag(mo_ea_v)
+#   Fvvb += eris.fockb[noccb:,noccb:] - np.diag(mo_eb_v)
+
+    tmp = eris.focka[:nocca, :nocca].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fooa += tmp
+
+    tmp = eris.fockb[:noccb, :noccb].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Foob += tmp
+
+    tmp = eris.focka[nocca:, nocca:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvva += tmp
+
+    tmp = eris.fockb[noccb:, noccb:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvvb += tmp
+
+    tmp = None
+
+    dtype = t1[0].dtype
+    wovvo = np.zeros((nocca,nvira,nvira,nocca), dtype=dtype)
+    wOVVO = np.zeros((noccb,nvirb,nvirb,noccb), dtype=dtype)
+    woVvO = np.zeros((nocca,nvirb,nvira,noccb), dtype=dtype)
+    woVVo = np.zeros((nocca,nvirb,nvirb,nocca), dtype=dtype)
+    wOvVo = np.zeros((noccb,nvira,nvirb,nocca), dtype=dtype)
+    wOvvO = np.zeros((noccb,nvira,nvira,noccb), dtype=dtype)
+
+    tauaa, tauab, taubb = make_tau((t2aa_act,t2ab_act,t2bb_act) , t1, t1)
+    u2aa, u2ab, u2bb = cc._add_vvvv(None, (tauaa,tauab,taubb), eris)
+    
+    tauaa = tauab = taubb = None
+
+    u2aa *= .5
+    u2bb *= .5
+
+    tauaa, tauab, taubb = make_tau((0*t2[0],0*t2[1],0*t2[2]) , t1, t1)
+
+    # u2aa = np.zeros_like(t2aa)
+    # u2bb = np.zeros_like(t2ab)
+    # u2ab = np.zeros_like(t2ab)
+
+    if nvira > 0 and nocca > 0:
+        for p0,p1 in lib.prange(0, nocca, nvira):
+            ovvv = eris.get_ovvv(slice(p0,p1))  # ovvv = eris.ovvv[p0:p1]
+            ovvv = ovvv - ovvv.transpose(0,3,2,1)
+            Fvva += np.einsum('mf,mfae->ae', t1a[p0:p1], ovvv)
+            wovvo[p0:p1] += lib.einsum('jf,mebf->mbej', t1a, ovvv)
+
+            u1a += 0.5*lib.einsum('mief,meaf->ia', t2aa_act[p0:p1], ovvv)
+
+            u2aa[:,p0:p1] += lib.einsum('ie,mbea->imab', t1a, ovvv.conj())
+            tmp1aa = lib.einsum('ijef,mebf->ijmb', tauaa, ovvv)
+            tmp1aa += lib.einsum('ijef,mebf->ijmb', t2aa_act, ovvv)
+            u2aa -= lib.einsum('ijmb,ma->ijab', tmp1aa, t1a[p0:p1]*.5)
+            ovvv = tmp1aa = None
+
+    if nvirb > 0 and noccb > 0:
+        for p0,p1 in lib.prange(0, noccb, nvirb):
+            OVVV = eris.get_OVVV(slice(p0,p1))  # OVVV = eris.OVVV[p0:p1]
+            OVVV = OVVV - OVVV.transpose(0,3,2,1)
+            Fvvb += np.einsum('mf,mfae->ae', t1b[p0:p1], OVVV)
+            wOVVO[p0:p1] = lib.einsum('jf,mebf->mbej', t1b, OVVV)
+
+            u1b += 0.5*lib.einsum('MIEF,MEAF->IA', t2bb_act[p0:p1], OVVV)
+            u2bb[:,p0:p1] += lib.einsum('ie,mbea->imab', t1b, OVVV.conj())
+            tmp1bb = lib.einsum('ijef,mebf->ijmb', taubb, OVVV)
+            tmp1bb += lib.einsum('ijef,mebf->ijmb', t2bb_act, OVVV)
+            u2bb -= lib.einsum('ijmb,ma->ijab', tmp1bb, t1b[p0:p1]*.5)
+
+            OVVV = tmp1bb = None
+
+    if nvirb > 0 and nocca > 0:
+        for p0,p1 in lib.prange(0, nocca, nvira*nvirb):
+            ovVV = eris.get_ovVV(slice(p0,p1))  # ovVV = eris.ovVV[p0:p1]
+            Fvvb += np.einsum('mf,mfAE->AE', t1a[p0:p1], ovVV)
+            woVvO[p0:p1] = lib.einsum('JF,meBF->mBeJ', t1b, ovVV)
+            woVVo[p0:p1] = lib.einsum('jf,mfBE->mBEj',-t1a, ovVV)
+
+            u1b += lib.einsum('mIeF,meAF->IA', t2ab_act[p0:p1], ovVV)
+            u2ab[p0:p1] += lib.einsum('IE,maEB->mIaB', t1b, ovVV.conj())
+            tmp1ab = lib.einsum('iJeF,meBF->iJmB', tauab, ovVV)
+            tmp1ab += lib.einsum('iJeF,meBF->iJmB', t2ab_act, ovVV)
+            u2ab -= lib.einsum('iJmB,ma->iJaB', tmp1ab, t1a[p0:p1])
+
+            ovVV = tmp1ab = None
+
+    if nvira > 0 and noccb > 0:
+        for p0,p1 in lib.prange(0, noccb, nvirb * nvira):
+            OVvv = eris.get_OVvv(slice(p0,p1))  # OVvv = eris.OVvv[p0:p1]
+            Fvva += np.einsum('MF,MFae->ae', t1b[p0:p1], OVvv)
+            wOvVo[p0:p1] = lib.einsum('jf,MEbf->MbEj', t1a, OVvv)
+            wOvvO[p0:p1] = lib.einsum('JF,MFbe->MbeJ',-t1b, OVvv)
+
+            u1a += lib.einsum('iMfE,MEaf->ia', t2ab_act[:,p0:p1], OVvv)
+
+            u2ab[:,p0:p1] += lib.einsum('ie,MBea->iMaB', t1a, OVvv.conj())
+
+            tmp1abba = lib.einsum('iJeF,MFbe->iJbM', tauab, OVvv)
+            tmp1abba += lib.einsum('iJeF,MFbe->iJbM', t2ab_act, OVvv) #additional term
+            u2ab -= lib.einsum('iJbM,MA->iJbA', tmp1abba, t1b[p0:p1])
+
+            OVvv = tmp1abba = None
+
+    eris_ovov = np.asarray(eris.ovov)
+    eris_ovoo = np.asarray(eris.ovoo)
+    Woooo = lib.einsum('je,nemi->mnij', t1a, eris_ovoo)
+    Woooo = Woooo - Woooo.transpose(0,1,3,2)
+    Woooo += np.asarray(eris.oooo).transpose(0,2,1,3)
+    Woooo += lib.einsum('ijef,menf->mnij', tauaa, eris_ovov) * .5
+    u2aa += lib.einsum('mnab,mnij->ijab', tauaa, Woooo*.5)
+    u2aa += lib.einsum('mnab,mnij->ijab', t2aa_act, Woooo*.5) #additional term
+    Woooo = None #tauaa = None
+    ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
+    Fooa += np.einsum('ne,nemi->mi', t1a, ovoo)
+#Implementation of the additional terms [V, T2^act] to singles residue
+    u1a += 0.5*lib.einsum('mnae,meni->ia', t2aa_act, ovoo)
+
+    wovvo += lib.einsum('nb,nemj->mbej', t1a, ovoo)
+    ovoo = eris_ovoo = None
+
+
+#we are using the full t2 transformed fock operator: 
+
+    tilaa = make_tau_aa(t2aa_act, t1a, t1a, fac=0.5)
+
+    ovov = eris_ovov - eris_ovov.transpose(0,3,2,1)
+    Fvva -= .5 * lib.einsum('mnaf,menf->ae', tilaa, ovov)
+    Fooa += .5 * lib.einsum('inef,menf->mi', tilaa, ovov)
+    Fova = np.einsum('nf,menf->me',t1a, ovov)
+    u2aa += ovov.conj().transpose(0,2,1,3) * .5
+    # wovvo -= 0.5*lib.einsum('jnfb,menf->mbej', t2aa, ovov)
+    # woVvO += 0.5*lib.einsum('nJfB,menf->mBeJ', t2ab, ovov)
+    tmpaa = lib.einsum('jf,menf->mnej', t1a, ovov)
+    wovvo -= lib.einsum('nb,mnej->mbej', t1a, tmpaa)
+    eris_ovov = ovov = tmpaa = None 
+    tilaa = None
+
+    eris_OVOV = np.asarray(eris.OVOV)
+    eris_OVOO = np.asarray(eris.OVOO)
+    WOOOO = lib.einsum('je,nemi->mnij', t1b, eris_OVOO)
+    WOOOO = WOOOO - WOOOO.transpose(0,1,3,2)
+    WOOOO += np.asarray(eris.OOOO).transpose(0,2,1,3)
+    WOOOO += lib.einsum('ijef,menf->mnij', taubb, eris_OVOV) * .5
+    u2bb += lib.einsum('mnab,mnij->ijab', taubb, WOOOO*.5)
+    u2bb += lib.einsum('mnab,mnij->ijab', t2bb_act, WOOOO*.5) #additional term..
+    WOOOO = taubb = None
+    OVOO = eris_OVOO - eris_OVOO.transpose(2,1,0,3)
+    Foob += np.einsum('ne,nemi->mi', t1b, OVOO)
+
+#Implementation of the additional terms [V, T2^act] to singles residue
+    u1b += 0.5*lib.einsum('mnae,meni->ia', t2bb_act, OVOO)
+
+    wOVVO += lib.einsum('nb,nemj->mbej', t1b, OVOO)
+    OVOO = eris_OVOO = None
+
+#we are using the full t2 transformed fock operator: 
+    tilbb = make_tau_aa(t2bb_act, t1b, t1b, fac=0.5)
+#   tilbb = make_tau_aa(0*t2[2], t1b, t1b, fac=0.5)
+
+    OVOV = eris_OVOV - eris_OVOV.transpose(0,3,2,1)
+    Fvvb -= .5 * lib.einsum('MNAF,MENF->AE', tilbb, OVOV)
+    Foob += .5 * lib.einsum('inef,menf->mi', tilbb, OVOV)
+    Fovb = np.einsum('nf,menf->me',t1b, OVOV)
+    u2bb += OVOV.conj().transpose(0,2,1,3) * .5
+    # wOVVO -= 0.5*lib.einsum('jnfb,menf->mbej', t2bb, OVOV)
+    # wOvVo += 0.5*lib.einsum('jNbF,MENF->MbEj', t2ab, OVOV)
+    tmpbb = lib.einsum('jf,menf->mnej', t1b, OVOV)
+    wOVVO -= lib.einsum('nb,mnej->mbej', t1b, tmpbb)
+    eris_OVOV = OVOV = tmpbb = None 
+    tilbb = None
+
+    eris_OVoo = np.asarray(eris.OVoo)
+    eris_ovOO = np.asarray(eris.ovOO)
+    Fooa += np.einsum('NE,NEmi->mi', t1b, eris_OVoo)
+
+
+#Implementation of the additional terms [V, T2^act] to singles residue
+    u1a -= lib.einsum('nMaE,MEni->ia', t2ab_act, eris_OVoo)
+
+    wOvVo -= lib.einsum('nb,MEnj->MbEj', t1a, eris_OVoo)
+    woVVo += lib.einsum('NB,NEmj->mBEj', t1b, eris_OVoo)
+    Foob += np.einsum('ne,neMI->MI', t1a, eris_ovOO)
+
+#Implementation of the additional terms [V, T2^act] to singles residue
+    u1b -= lib.einsum('mNeA,meNI->IA', t2ab_act, eris_ovOO)
+    woVvO -= lib.einsum('NB,meNJ->mBeJ', t1b, eris_ovOO)
+    wOvvO += lib.einsum('nb,neMJ->MbeJ', t1a, eris_ovOO)
+    WoOoO = lib.einsum('JE,NEmi->mNiJ', t1b, eris_OVoo)
+    WoOoO+= lib.einsum('je,neMI->nMjI', t1a, eris_ovOO)
+    WoOoO += np.asarray(eris.ooOO).transpose(0,2,1,3)
+    eris_OVoo = eris_ovOO = None
+
+    eris_ovOV = np.asarray(eris.ovOV)
+    WoOoO += lib.einsum('iJeF,meNF->mNiJ', tauab, eris_ovOV)
+    u2ab += lib.einsum('mNaB,mNiJ->iJaB', tauab, WoOoO)
+    u2ab += lib.einsum('mNaB,mNiJ->iJaB', t2ab_act, WoOoO) #additional term..
+    WoOoO = None
+
+
+#we are using the full t2 transformed fock operator: 
+    tilab = make_tau_ab(t2ab_act, t1 , t1 , fac=0.5)
+
+#   tilab = make_tau_ab(0*t2[1], t1 , t1 , fac=0.5)
+
+    Fvva -= lib.einsum('mNaF,meNF->ae', tilab, eris_ovOV)
+    Fvvb -= lib.einsum('nMfA,nfME->AE', tilab, eris_ovOV)
+    Fooa += lib.einsum('iNeF,meNF->mi', tilab, eris_ovOV)
+    Foob += lib.einsum('nIfE,nfME->MI', tilab, eris_ovOV)
+    Fova += np.einsum('NF,meNF->me',t1b, eris_ovOV)
+    Fovb += np.einsum('nf,nfME->ME',t1a, eris_ovOV)
+    u2ab += eris_ovOV.conj().transpose(0,2,1,3)
+    # wovvo += 0.5*lib.einsum('jNbF,meNF->mbej', t2ab, eris_ovOV)
+    # wOVVO += 0.5*lib.einsum('nJfB,nfME->MBEJ', t2ab, eris_ovOV)
+    # wOvVo -= 0.5*lib.einsum('jnfb,nfME->MbEj', t2aa, eris_ovOV)
+    # woVvO -= 0.5*lib.einsum('JNFB,meNF->mBeJ', t2bb, eris_ovOV)
+    # woVVo += 0.5*lib.einsum('jNfB,mfNE->mBEj', t2ab, eris_ovOV)
+    # wOvvO += 0.5*lib.einsum('nJbF,neMF->MbeJ', t2ab, eris_ovOV)
+    tmpabab = lib.einsum('JF,meNF->mNeJ', t1b, eris_ovOV)
+    tmpbaba = lib.einsum('jf,nfME->MnEj', t1a, eris_ovOV)
+    woVvO -= lib.einsum('NB,mNeJ->mBeJ', t1b, tmpabab)
+    wOvVo -= lib.einsum('nb,MnEj->MbEj', t1a, tmpbaba)
+    woVVo += lib.einsum('NB,NmEj->mBEj', t1b, tmpbaba)
+    wOvvO += lib.einsum('nb,nMeJ->MbeJ', t1a, tmpabab)
+    tmpabab = tmpbaba = None
+    tilab = None
+
+    Fova += fova
+    Fovb += fovb
+    u1a += fova.conj()
+    u1a += np.einsum('ie,ae->ia', t1a, Fvva)
+    u1a -= np.einsum('ma,mi->ia', t1a, Fooa)
+    u1a -= np.einsum('imea,me->ia', t2aa, Fova)
+    u1a += np.einsum('iMaE,ME->ia', t2ab, Fovb)
+    u1b += fovb.conj()
+    u1b += np.einsum('ie,ae->ia',t1b,Fvvb)
+    u1b -= np.einsum('ma,mi->ia',t1b,Foob)
+    u1b -= np.einsum('imea,me->ia', t2bb, Fovb)
+    u1b += np.einsum('mIeA,me->IA', t2ab, Fova)
+
+    eris_oovv = np.asarray(eris.oovv)
+    eris_ovvo = np.asarray(eris.ovvo)
+    wovvo -= eris_oovv.transpose(0,2,3,1)
+    wovvo += eris_ovvo.transpose(0,2,1,3)
+    oovv = eris_oovv - eris_ovvo.transpose(0,3,2,1)
+    u1a-= np.einsum('nf,niaf->ia', t1a,      oovv)
+    tmp1aa = lib.einsum('ie,mjbe->mbij', t1a,      oovv)
+    u2aa += 2*lib.einsum('ma,mbij->ijab', t1a, tmp1aa)
+    eris_ovvo = eris_oovv = oovv = tmp1aa = None
+
+    eris_OOVV = np.asarray(eris.OOVV)
+    eris_OVVO = np.asarray(eris.OVVO)
+    wOVVO -= eris_OOVV.transpose(0,2,3,1)
+    wOVVO += eris_OVVO.transpose(0,2,1,3)
+    OOVV = eris_OOVV - eris_OVVO.transpose(0,3,2,1)
+    u1b-= np.einsum('nf,niaf->ia', t1b,      OOVV)
+    tmp1bb = lib.einsum('ie,mjbe->mbij', t1b,      OOVV)
+    u2bb += 2*lib.einsum('ma,mbij->ijab', t1b, tmp1bb)
+    eris_OVVO = eris_OOVV = OOVV = None
+
+    eris_ooVV = np.asarray(eris.ooVV)
+    eris_ovVO = np.asarray(eris.ovVO)
+    woVVo -= eris_ooVV.transpose(0,2,3,1)
+    woVvO += eris_ovVO.transpose(0,2,1,3)
+    u1b+= np.einsum('nf,nfAI->IA', t1a, eris_ovVO)
+    tmp1ab = lib.einsum('ie,meBJ->mBiJ', t1a, eris_ovVO)
+    tmp1ab+= lib.einsum('IE,mjBE->mBjI', t1b, eris_ooVV)
+    u2ab -= lib.einsum('ma,mBiJ->iJaB', t1a, tmp1ab)
+    eris_ooVV = eris_ovVO = tmp1ab = None
+
+##
+##  add the disconnected contribution to the T2 amplitude equation 
+##
+
+   #tmp = np.einsum('ia,jb->ijab', u1b, t1b)
+   #tmp = tmp - tmp.transpose(1,0,2,3)
+   #u2bb += tmp - tmp.transpose(0,1,3,2)
+
+   #tmp = np.einsum('ia,jb->ijab', u1a, t1a)
+   #tmp = tmp - tmp.transpose(1,0,2,3)
+   #u2aa += tmp - tmp.transpose(0,1,3,2)
+
+   #u2ab += np.einsum('ia,jb->jiba', u1b, t1a)
+   #u2ab += np.einsum('ia,JB->iJaB', u1a, t1b)
+
+##  end of disconnected terms
+
+
+    eris_OOvv = np.asarray(eris.OOvv)
+    eris_OVvo = np.asarray(eris.OVvo)
+    wOvvO -= eris_OOvv.transpose(0,2,3,1)
+    wOvVo += eris_OVvo.transpose(0,2,1,3)
+    u1a+= np.einsum('NF,NFai->ia', t1b, eris_OVvo)
+    tmp1ba = lib.einsum('IE,MEbj->MbIj', t1b, eris_OVvo)
+    tmp1ba+= lib.einsum('ie,MJbe->MbJi', t1a, eris_OOvv)
+    u2ab -= lib.einsum('MA,MbIj->jIbA', t1b, tmp1ba)
+    eris_OOvv = eris_OVvo = tmp1ba = None
+
+#Implementation of the additional terms [V, T2^act] to doubles residue
+    u2aa += 2*lib.einsum('imae,mbej->ijab', t2aa_act, wovvo)
+    u2aa += 2*lib.einsum('iMaE,MbEj->ijab', t2ab_act, wOvVo)
+    u2bb += 2*lib.einsum('imae,mbej->ijab', t2bb_act, wOVVO)
+    u2bb += 2*lib.einsum('mIeA,mBeJ->IJAB', t2ab_act, woVvO)
+    u2ab += lib.einsum('imae,mBeJ->iJaB', t2aa_act, woVvO)
+    u2ab += lib.einsum('iMaE,MBEJ->iJaB', t2ab_act, wOVVO)
+    u2ab += lib.einsum('iMeA,MbeJ->iJbA', t2ab_act, wOvvO)
+    u2ab += lib.einsum('IMAE,MbEj->jIbA', t2bb_act, wOvVo)
+    u2ab += lib.einsum('mIeA,mbej->jIbA', t2ab_act, wovvo)
+    u2ab += lib.einsum('mIaE,mBEj->jIaB', t2ab_act, woVVo)
+    wovvo = wOVVO = woVvO = wOvVo = woVVo = wOvvO = None
+
+
+    Ftmpa = Fvva - .5*lib.einsum('mb,me->be', t1a, Fova)
+    Ftmpb = Fvvb - .5*lib.einsum('mb,me->be', t1b, Fovb)
+    u2aa += lib.einsum('ijae,be->ijab', t2aa, Ftmpa)
+    u2bb += lib.einsum('ijae,be->ijab', t2bb, Ftmpb)
+    u2ab += lib.einsum('iJaE,BE->iJaB', t2ab, Ftmpb)
+    u2ab += lib.einsum('iJeA,be->iJbA', t2ab, Ftmpa)
+    Ftmpa = Fooa + 0.5*lib.einsum('je,me->mj', t1a, Fova)
+    Ftmpb = Foob + 0.5*lib.einsum('je,me->mj', t1b, Fovb)
+    u2aa -= lib.einsum('imab,mj->ijab', t2aa, Ftmpa)
+    u2bb -= lib.einsum('imab,mj->ijab', t2bb, Ftmpb)
+    u2ab -= lib.einsum('iMaB,MJ->iJaB', t2ab, Ftmpb)
+    u2ab -= lib.einsum('mIaB,mj->jIaB', t2ab, Ftmpa)
+
+    eris_ovoo = np.asarray(eris.ovoo).conj()
+    eris_OVOO = np.asarray(eris.OVOO).conj()
+    eris_OVoo = np.asarray(eris.OVoo).conj()
+    eris_ovOO = np.asarray(eris.ovOO).conj()
+    ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
+    OVOO = eris_OVOO - eris_OVOO.transpose(2,1,0,3)
+    u2aa -= lib.einsum('ma,jbim->ijab', t1a, ovoo)
+    u2bb -= lib.einsum('ma,jbim->ijab', t1b, OVOO)
+    u2ab -= lib.einsum('ma,JBim->iJaB', t1a, eris_OVoo)
+    u2ab -= lib.einsum('MA,ibJM->iJbA', t1b, eris_ovOO)
+    eris_ovoo = eris_OVoo = eris_OVOO = eris_ovOO = None
+
+
+    u2aa *= .5
+    u2bb *= .5
+    u2aa = u2aa - u2aa.transpose(0,1,3,2)
+    u2aa = u2aa - u2aa.transpose(1,0,2,3)
+    u2bb = u2bb - u2bb.transpose(0,1,3,2)
+    u2bb = u2bb - u2bb.transpose(1,0,2,3)
+
+#   eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
+#   eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+
+    eia_a = lib.direct_sum('i-a->ia', np.diag(eris.focka[:nocca,:nocca]), np.diag(eris.focka[nocca:,nocca:]))
+    eia_b = lib.direct_sum('i-a->ia', np.diag(eris.fockb[:noccb,:noccb]), np.diag(eris.fockb[noccb:,noccb:]))
+
+    u1a /= eia_a
+    u1b /= eia_b
+
+    u2aa /= lib.direct_sum('ia+jb->ijab', eia_a, eia_a)
+    u2ab /= lib.direct_sum('ia+jb->ijab', eia_a, eia_b)
+    u2bb /= lib.direct_sum('ia+jb->ijab', eia_b, eia_b)
+
+    # NOTE we only update the inactive orbitals!
+   
+    idx_s_a_super = []
+    idx_s_b_super = []
+    idx_d_a_super = []
+    idx_d_b_super = []
+    idx_d_ab_super = []
+ 
+    for f in range(len(act_hole)):
+       idx_s_a, idx_d_a = get_index_tuples(act_hole[f][0], act_particle[f][0], nocca, nvira)
+       idx_s_b, idx_d_b = get_index_tuples(act_hole[f][1], act_particle[f][1], noccb, nvirb)
+
+       idx_d_ab = [(elem_a[0], elem_b[1],elem_a[2],elem_b[3]) for elem_a, elem_b in zip(idx_d_a,idx_d_b)]
+       idx_s_a_super.append(idx_s_a)
+       idx_s_b_super.append(idx_s_b)
+       idx_d_a_super.append(idx_d_a)
+       idx_d_b_super.append(idx_d_b)
+       idx_d_ab_super.append(idx_d_ab)
+
+    # NOTE that we have to pass the active indices in order to only
+    #      update the inactive orbitals
+    # u1a_c = np.copy(u1a)
+    # u1b_c = np.copy(u1b)
+    # u2aa_c = np.copy(u2aa)
+    # u2bb_c = np.copy(u2bb)
+    # u2ab_c = np.copy(u2ab)
+
+
+    for f in range(len(act_hole)):
+    
+        for s in idx_singles[0]:
+            u1a[idx_s_a_super[f][s]] = t1[0][idx_s_a_super[f][s]]
+        for d in idx_doubles[0]:
+            u2aa[idx_d_a_super[f][d]] = t2[0][idx_d_a_super[f][d]]  
+
+        for s in idx_singles[1]:
+            u1b[idx_s_b_super[f][s]] = t1[1][idx_s_b_super[f][s]]
+        for d in idx_doubles[1]: 
+            u2ab[idx_d_ab_super[f][d]] = t2[1][idx_d_ab_super[f][d]]  
+
+        for d in idx_doubles[2]: 
+            u2bb[idx_d_b_super[f][d]] = t2[2][idx_d_b_super[f][d]]  
+
+    t1new = u1a, u1b
+    t2new = u2aa, u2ab, u2bb
+
+    return t1new, t2new
+
+
+
 def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubles, pert_triples=False, t3old=None):
 
     time0 = logger.process_clock(), logger.perf_counter()
@@ -472,10 +1850,30 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     Foob =  .5 * lib.einsum('me,ie->mi', fovb, t1b)
     Fvva = -.5 * lib.einsum('me,ma->ae', fova, t1a)
     Fvvb = -.5 * lib.einsum('me,ma->ae', fovb, t1b)
-    Fooa += eris.focka[:nocca,:nocca] - np.diag(mo_ea_o)
-    Foob += eris.fockb[:noccb,:noccb] - np.diag(mo_eb_o)
-    Fvva += eris.focka[nocca:,nocca:] - np.diag(mo_ea_v)
-    Fvvb += eris.fockb[noccb:,noccb:] - np.diag(mo_eb_v)
+#    Fooa += eris.focka[:nocca,:nocca] - np.diag(mo_ea_o)
+#    Foob += eris.fockb[:noccb,:noccb] - np.diag(mo_eb_o)
+#    Fvva += eris.focka[nocca:,nocca:] - np.diag(mo_ea_v)
+#    Fvvb += eris.fockb[noccb:,noccb:] - np.diag(mo_eb_v)
+
+
+    tmp = eris.focka[:nocca, :nocca].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fooa += tmp
+
+    tmp = eris.fockb[:noccb, :noccb].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Foob += tmp
+
+    tmp = eris.focka[nocca:, nocca:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvva += tmp
+
+    tmp = eris.fockb[noccb:, noccb:].copy()
+    np.fill_diagonal(tmp, 0.0)
+    Fvvb += tmp
+
+    tmp = None
+
     dtype = u2aa.dtype
     wovvo = np.zeros((nocca,nvira,nvira,nocca), dtype=dtype)
     wOVVO = np.zeros((noccb,nvirb,nvirb,noccb), dtype=dtype)
@@ -544,7 +1942,7 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     Woooo = Woooo - Woooo.transpose(0,1,3,2)
     Woooo += np.asarray(eris.oooo).transpose(0,2,1,3)
     Woooo += lib.einsum('ijef,menf->mnij', tauaa, eris_ovov) * .5
-    u2aa += lib.einsum('mnab,mnij->ijab', tauaa, Woooo*.5)
+    u2aa += lib.einsum('mnab,mnij->ijab', tauaa, Woooo*.5) # t2 should be included
     Woooo = tauaa = None
     ovoo = eris_ovoo - eris_ovoo.transpose(2,1,0,3)
     Fooa += np.einsum('ne,nemi->mi', t1a, ovoo)
@@ -779,9 +2177,12 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
     u2bb = u2bb - u2bb.transpose(0,1,3,2)
     u2bb = u2bb - u2bb.transpose(1,0,2,3)
 
+
     if (pert_triples):
 
        u3new, u2_active, u1_active = umpcc_t_slow.iterative_update_amps_t3(cc, t1, t2, t3old, eris, act_hole, act_particle)
+#      u3new, u2_active, u1_active = umpcc_t_slow.iterative_update_amps_ccsdt3(cc, t1, t2, t3old, eris, act_hole, act_particle)
+#      u3new, u2_active, u1_active = umpcc_t_slow.update_amps_t3(cc, t1, t2, t3old, eris, act_hole, act_particle)
 
        u2_active_aa, u2_active_ab, u2_active_bb = u2_active
        u1a_active, u1b_active = u1_active 
@@ -793,8 +2194,13 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
        u1a[np.ix_(act_hole[0], act_particle[0])] +=u1a_active
        u1b[np.ix_(act_hole[1], act_particle[1])] +=u1b_active 
 
-    eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
-    eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+#    eia_a = lib.direct_sum('i-a->ia', mo_ea_o, mo_ea_v)
+#    eia_b = lib.direct_sum('i-a->ia', mo_eb_o, mo_eb_v)
+
+
+    eia_a = lib.direct_sum('i-a->ia', np.diag(eris.focka[:nocca,:nocca]), np.diag(eris.focka[nocca:,nocca:]))
+    eia_b = lib.direct_sum('i-a->ia', np.diag(eris.fockb[:noccb,:noccb]), np.diag(eris.fockb[noccb:,noccb:]))
+
     u1a /= eia_a
     u1b /= eia_b
 
@@ -828,7 +2234,6 @@ def update_amps(cc, t1, t2, eris, act_hole, act_particle, idx_singles, idx_doubl
 
     t1new = u1a, u1b
     t2new = u2aa, u2ab, u2bb
-
 
     if (pert_triples):
        return t1new, t2new, u3new
@@ -1087,6 +2492,11 @@ class UCCSD(ccsd.CCSD):
     def __init__(self, mf, frozen=None, mo_coeff=None, mo_occ=None):
         assert isinstance(mf, scf.uhf.UHF)
         ccsd.CCSD.__init__(self, mf, frozen, mo_coeff, mo_occ)
+#       self.with_df = mf.with_df
+        self.with_df = False
+        if getattr(mf, 'with_df', None):
+            self.with_df = mf.with_df
+
 
     get_nocc = get_nocc
     get_nmo = get_nmo
@@ -1131,13 +2541,13 @@ class UCCSD(ccsd.CCSD):
 
     energy = energy
     update_amps = update_amps
-    update_amps_oomp2 = update_amps_oomp2
+    select_update_amps_oomp2 = select_update_amps_oomp2
     _add_vvvv = _add_vvvv
     _add_vvVV = _add_vvVV
 
-    def kernel(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples=False, t1=None, t2=None, eris=None, mbpt2=False, t3old=None):
-        return self.ccsd(act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples, t1, t2, eris, mbpt2, t3old)
-    def ccsd(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples=False, t1=None, t2=None, eris=None, mbpt2=False, t3old=None):
+    def kernel(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples=False, t1=None, t2=None, eris=None, mbpt2=False, t3old=None, oomp2_variant=None):
+        return self.ccsd(act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples, t1, t2, eris, mbpt2, t3old, oomp2_variant)
+    def ccsd(self, act_hole, act_particle, idx_s, idx_d, oo_mp2, pert_triples=False, t1=None, t2=None, eris=None, mbpt2=False, t3old=None, oomp2_variant=None):
         '''Ground-state unrestricted (U)CCSD.
 
         Kwargs:
@@ -1158,7 +2568,7 @@ class UCCSD(ccsd.CCSD):
                                 idx_s = idx_s, 
                                 idx_d = idx_d,
                                 oo_mp2 = oo_mp2,
-                                pert_triples = pert_triples, t3old=t3old)
+                                pert_triples = pert_triples, t3old=t3old, oomp2_variant=oomp2_variant)
 
     def solve_lambda(self, act_hole, act_particle, t1=None, t2=None, l1=None, l2=None,
                      eris=None):
@@ -1176,14 +2586,63 @@ class UCCSD(ccsd.CCSD):
         return self.l1, self.l2
 
     def ccsd_t(self, act_hole, act_particle, t3, t1=None, t2=None, l1=None, l2=None, eris=None):
+        from pyscf.cc import uccsd_t_inactive_iterative
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if l1 is None: l1 = self.l1
+        if l2 is None: l2 = self.l2
+        if eris is None: eris = self.ao2mo(self.mo_coeff)
+#       return uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+#       t3_env, energy = uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+#       return uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+        t3_env, energy = uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+#       energy = uccsd_t_inactive_iterative.inactive_energy(self, eris, t1, t2, t3, act_hole, act_particle)
+        return energy
+#       return uccsd_t_inactive_iterative.kernel_bareV(self, eris, act_hole, act_particle, t1, t2)
+    uccsd_t = ccsd_t
+
+
+    def ccsd_t_amplitudes(self, act_hole, act_particle, t3, t1=None, t2=None, l1=None, l2=None, eris=None):
+        from pyscf.cc import uccsd_t_inactive_iterative
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if l1 is None: l1 = self.l1
+        if l2 is None: l2 = self.l2
+        if eris is None: eris = self.ao2mo(self.mo_coeff)
+#       t3_env, energy = uccsd_t_inactive_iterative.iterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+        t3_env, energy = uccsd_t_inactive_iterative.noniterative_kernel(self, eris, t1, t2, t3, act_hole, act_particle)
+        return t3_env
+
+
+    def save_env_imds(self, act_hole, act_particle, t3, t1=None, t2=None, eris=None):
         from pyscf.cc import umpcc_t_slow
         if t1 is None: t1 = self.t1
         if t2 is None: t2 = self.t2
-        if l1 is None: t1 = self.l1
-        if l2 is None: t2 = self.l2
         if eris is None: eris = self.ao2mo(self.mo_coeff)
-        return umpcc_t_slow.lhs_umpcc_triples(self, t1, t2, l1, l2, t3, eris, act_hole, act_particle)
-    uccsd_t = ccsd_t
+        umpcc_t_slow.get_t3_to_imds_inactive(self, t3, t1, eris, act_hole, act_particle)
+        umpcc_t_slow.update_t3_res_inactive(self, t1, t2, t3, eris, act_hole, act_particle)
+        return 0
+
+
+#here I will write a few functions that account for perturbative corrections..  
+
+    def ccsd_pert_t(self, act_hole, act_particle, t1=None, t2=None, l1=None, l2=None, eris=None):
+        from pyscf.cc import umpcc_t_slow
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if l1 is None: l1 = self.l1
+        if l2 is None: l2 = self.l2
+        if eris is None: eris = self.ao2mo(self.mo_coeff)
+        return umpcc_t_slow._iterative_kernel(self, t1, t2, l1, l2, eris, act_hole, act_particle)
+
+    def ccsd_inactive_t(self, act_hole, act_particle, t3, t1=None, t2=None, l1=None, l2=None, eris=None):
+        from pyscf.cc import umpcc_t_slow
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if l1 is None: l1 = self.l1
+        if l2 is None: l2 = self.l2
+        if eris is None: eris = self.ao2mo(self.mo_coeff)
+        return umpcc_t_slow.lhs_umpcc_triples_inactive(self, t1, t2, l1, l2, t3, eris, act_hole, act_particle)
 
     def make_rdm1(self, t1=None, t2=None, l1=None, l2=None, ao_repr=False,
                   with_frozen=True, with_mf=True):

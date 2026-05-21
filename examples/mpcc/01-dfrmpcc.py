@@ -3,6 +3,7 @@ from pyscf.mp.dfmp2_native import DFMP2
 
 from pyscf.mcscf import avas
 from pyscf.data.elements import chemcore
+from pathlib import Path
 
 import numpy as np
 
@@ -17,7 +18,7 @@ if __name__ == "__main__":
         [1, (0.0, -0.757, 0.587)],
         [1, (0.0, 0.757, 0.587)],
     ]
-    mol.basis = "cc-pvdz"
+    mol.basis = "cc-pvtz"
     mol.build()
 
     mf = scf.RHF(mol).density_fit().run()
@@ -58,16 +59,23 @@ if __name__ == "__main__":
     print ("dimension of active part", len(act_part)) 
 
     frag = [[act_hole, act_part]]
+    laplace_root = Path(__file__).resolve().parents[2] / "external" / "laplace-minimax"
 
-    kwargs = {'frag'            : [[act_hole, act_part]],
-                'll_con_tol'    : 1e-6, 
-                'll_max_its'    : 80,
-                'll_kernel_type': 'factorized',
-                'lo_coeff'      : c_lo
+    kwargs = {'frag'                    : [[act_hole, act_part]],
+                'll_con_tol'            : 1e-6, 
+                'll_max_its'            : 50,
+              #'ll_kernel_type'        : 'sylvester_laplace_factorized',
+              #'ll_laplace_root'       : laplace_root,
+              #'ll_laplace_npoints'    : 16,
+                'll_kernel_type'        : 'unfactorized',
+                'll_method'             : 'T1_transform',
+              'll_chol_tol'           : 1e-8,
+                'lo_coeff'              : c_lo
+
             }
 
     mympcc = mpcc.MPCC(mf, **kwargs)
-    mympcc.kernel()
+    mympcc.kernel(tol=1e-8)
 
     print("Finished MPCC!")
 
@@ -76,5 +84,3 @@ if __name__ == "__main__":
     print(f'CCSD:\n Total energy: {mycc.e_tot} Correlation energ: {mycc.e_corr}')
     print(f'DF-MPCCSD:\n Total energy: {mympcc.lowlevel.e_tot} Correlation energ: {mympcc.lowlevel.e_corr}')
     print(f'Difference:\n Total energy: {float(mympcc.lowlevel.e_tot - mycc.e_tot)} Correlation energ: {mympcc.lowlevel.e_corr - mycc.e_corr}')
-    breakpoint()
-

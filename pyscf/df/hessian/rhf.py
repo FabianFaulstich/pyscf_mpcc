@@ -480,10 +480,13 @@ def _load_dim0(dat, p0, p1):
 
 class Hessian(rhf_hess.Hessian):
     '''Non-relativistic restricted Hartree-Fock hessian'''
+
+    _keys = {'auxbasis_response',}
+
     def __init__(self, mf):
         rhf_hess.Hessian.__init__(self, mf)
 
-    auxbasis_response = 1
+    auxbasis_response = 2
     partial_hess_elec = partial_hess_elec
     make_h1 = make_h1
 
