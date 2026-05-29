@@ -49,7 +49,10 @@ class MPCC(lib.StreamObject):
 #           if (count > 1):
 #              t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
 
+            time_start = time()
             t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
+            time_end = time()
+            print(f'LL kernel calculated in {time_end - time_start:.4f} seconds')
 #           if (count > 1):
 #               print(f'Starting low-level MPCC iteration. Low-level kernel type {self.lowlevel.kernel_type}')
 #               t1, t2 = self.lowlevel.kernel(t1, t2_act, **kwargs) 
@@ -68,8 +71,7 @@ class MPCC(lib.StreamObject):
                time_start = time()
                imds = self.screened.kernel(t1, t2)
                time_end = time()
-               print(f'MPCC: Screened kernel calculated for fragment {frag} in {time_end - time_start:.4f} seconds')
-               print('MPCC: Screened kernel calculated for fragment:', frag)
+               print(f'MPCC: Screened kernel calculated in {time_end - time_start:.4f} seconds')
 
                # NOTE can we remove the t2 dependence? 
                # YES, remove t2!
