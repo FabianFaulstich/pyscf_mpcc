@@ -56,7 +56,7 @@ class MPCC_LL:
             'll_laplace_npoints', kwargs.get('ll_laplace_nlap', 16)
         )
         self.ll_active_t2_tol = kwargs.get(
-            'll_active_t2_tol', min(self.ll_con_tol, 1.0e-8)
+            'll_active_t2_tol', min(self.ll_con_tol, 1.0e-7)
         )
         self.ll_active_t2_max_its = kwargs.get('ll_active_t2_max_its', 1000)
 
@@ -588,6 +588,8 @@ class MPCC_LL:
 
     def _sylvester_laplace_factorized_noniterative_kernel(self, t1=None, t2=None, **kwargs):
         
+        t_kernel_start = time.time()
+
         res = np.inf
         count = 0
         adiis = lib.diis.DIIS()
@@ -602,17 +604,21 @@ class MPCC_LL:
             t2_act.append(t2[np.ix_(act_hole, act_hole, act_particle, act_particle)])
 
         #if file exists, load Y, Δt2s_o, Δt2s_v from disk for later use:
+        t_load_start = time.time()
         if os.path.exists("Y.npy"):
             Y_old = np.load("Y.npy")
             Δt2s_o_old = np.load("Δt2s_o.npy")
             Δt2s_v_old = np.load("Δt2s_v.npy")
+            print(f"Loaded Y, Δt2s_o, Δt2s_v from disk in {time.time() - t_load_start:.3f}s")
         else:
             Y_old = None
             Δt2s_o_old = None
             Δt2s_v_old = None
 
+        t_iter_total = 0.0
         while res > self.ll_con_tol and count < self.ll_max_its:
             #update t1
+            t_iter_start = time.time()
             res, t1_new = self.update_t1(t1, Y_old, Δt2s_o_old, Δt2s_v_old)
             
             if self.diis:
@@ -620,21 +626,32 @@ class MPCC_LL:
 
             t1 = t1_new 
             count += 1
-            print(f"It {count}; residual {res:.6e}")
+            t_iter = time.time() - t_iter_start
+            t_iter_total += t_iter
+            print(f"It {count}; residual {res:.6e}; iter time {t_iter:.3f}s")
+
+        print(f"T1 iterations total time: {t_iter_total:.3f}s ({count} iterations)")
 
         #get Y, Δt2s_o, Δt2s_v
-        
+        t_Y_start = time.time()
         Y, Δt2s_o, Δt2s_v = self.update_Y_Dt2(t1, t2_act)
+        print(f"update_Y_Dt2 time: {time.time() - t_Y_start:.3f}s")
 
         #dump Y, Δt2s_o, Δt2s_v to disk for later use:
+        t_save_start = time.time()
         np.save("Y.npy", Y)
         np.save("Δt2s_o.npy", Δt2s_o)
         np.save("Δt2s_v.npy", Δt2s_v)
+        print(f"Save Y, Δt2s_o, Δt2s_v to disk time: {time.time() - t_save_start:.3f}s")
 
+        t_t2_start = time.time()
         if self._t2_full is None:
             t2 = self.get_t2_factorized_laplace(Y, t2_act, Δt2s_o, Δt2s_v)
         else:
             t2 = self._t2_full
+        print(f"T2 reconstruction time: {time.time() - t_t2_start:.3f}s")
+
+        print(f"_sylvester_laplace_factorized_noniterative_kernel total time: {time.time() - t_kernel_start:.3f}s")
 
         return t1, t2
 
@@ -763,6 +780,19 @@ class MPCC_LL:
         Δt2s_o = []
         Δt2s_v = []
 
+        # Try to load previous Δt2s from disk to warm-start GMRES (x0)
+        _x0_o_prev = None
+        _x0_v_prev = None
+        if os.path.exists("Δt2s_o.npy") and os.path.exists("Δt2s_v.npy"):
+            try:
+                _x0_o_prev = np.load("Δt2s_o.npy", allow_pickle=True)
+                _x0_v_prev = np.load("Δt2s_v.npy", allow_pickle=True)
+                print("Loaded Δt2s_o, Δt2s_v from disk for GMRES warm start")
+            except Exception as e:
+                print(f"Could not load Δt2s warm-start files: {e}")
+                _x0_o_prev = None
+                _x0_v_prev = None
+
         n_aux, n_rank, n_vir, n_occ = Y.shape
         for k, frag in enumerate(self.frags):
             act_hole = frag[0]
@@ -861,6 +891,26 @@ class MPCC_LL:
             rhs_norm = np.linalg.norm(rhs)
 
             if size and rhs_norm > tol:
+                # Build GMRES initial guess (x0) from previously saved Δt2s
+                x0 = None
+                if (
+                    _x0_o_prev is not None
+                    and _x0_v_prev is not None
+                    and k < len(_x0_o_prev)
+                    and k < len(_x0_v_prev)
+                ):
+                    prev_o = np.asarray(_x0_o_prev[k])
+                    prev_v = np.asarray(_x0_v_prev[k])
+                    if prev_o.shape == shape_o and prev_v.shape == shape_v:
+                        x0_pieces = []
+                        if size_o:
+                            x0_pieces.append(prev_o.ravel())
+                        if size_v:
+                            x0_pieces.append(prev_v.ravel())
+                        if x0_pieces:
+                            x0 = np.concatenate(x0_pieces).astype(Y.dtype)
+                            print(f"    Fragment {k}: using warm-start x0 from Δt2s .npy files")
+
                 operator = scipy.sparse.linalg.LinearOperator(
                     (size, size),
                     matvec=lambda vector: pack_scaled(
@@ -872,7 +922,8 @@ class MPCC_LL:
                 correction, info = scipy.sparse.linalg.gmres(
                     operator,
                     rhs,
-                    rtol=min(1.0e-8, tol),
+                    x0=x0,
+                    rtol=min(1.0e-7, tol),
                     atol=tol,
                     restart=min(size, 50),
                     maxiter=count_tol,
