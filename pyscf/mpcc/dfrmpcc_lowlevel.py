@@ -1,3 +1,5 @@
+import os
+
 from numpy.linalg import qr
 from pyscf import lib, df
 from pyscf.lib import logger
@@ -61,7 +63,7 @@ class MPCC_LL:
         self._kernels = {
                 'factorized': self._factorized_kernel,
                 'unfactorized': self._unfactorized_kernel, 
-                'sylvester_laplace_factorized': self._sylvester_laplace_factorized_kernel,
+                'sylvester_laplace_factorized': self._sylvester_laplace_factorized_noniterative_kernel,
                 }
 
         self.frags = frags
@@ -584,6 +586,58 @@ class MPCC_LL:
 
         return t1, t2
 
+    def _sylvester_laplace_factorized_noniterative_kernel(self, t1=None, t2=None, **kwargs):
+        
+        res = np.inf
+        count = 0
+        adiis = lib.diis.DIIS()
+        Δt2s_o = []
+        Δt2s_v = []
+        self._t2_full = None
+
+        t2_act = []
+        for frag in self.frags:
+            act_hole = frag[0]
+            act_particle = frag[1]
+            t2_act.append(t2[np.ix_(act_hole, act_hole, act_particle, act_particle)])
+
+        #if file exists, load Y, Δt2s_o, Δt2s_v from disk for later use:
+        if os.path.exists("Y.npy"):
+            Y_old = np.load("Y.npy")
+            Δt2s_o_old = np.load("Δt2s_o.npy")
+            Δt2s_v_old = np.load("Δt2s_v.npy")
+        else:
+            Y_old = None
+            Δt2s_o_old = None
+            Δt2s_v_old = None
+
+        while res > self.ll_con_tol and count < self.ll_max_its:
+            #update t1
+            res, t1_new = self.update_t1(t1, Y_old, Δt2s_o_old, Δt2s_v_old)
+            
+            if self.diis:
+                t1_new = self.run_diis(t1_new, adiis) 
+
+            t1 = t1_new 
+            count += 1
+            print(f"It {count}; residual {res:.6e}")
+
+        #get Y, Δt2s_o, Δt2s_v
+        
+        Y, Δt2s_o, Δt2s_v = self.update_Y_Dt2(t1, t2_act)
+
+        #dump Y, Δt2s_o, Δt2s_v to disk for later use:
+        np.save("Y.npy", Y)
+        np.save("Δt2s_o.npy", Δt2s_o)
+        np.save("Δt2s_v.npy", Δt2s_v)
+
+        if self._t2_full is None:
+            t2 = self.get_t2_factorized_laplace(Y, t2_act, Δt2s_o, Δt2s_v)
+        else:
+            t2 = self._t2_full
+
+        return t1, t2
+
     def update_amps_sylvester_laplace_factorized(self, t1, t2_act, **kwargs):
         """Update T1 while keeping Laplace Sylvester T2 in factorized form."""
         Xoo, Xvo, X = self.get_X(t1)
@@ -594,11 +648,13 @@ class MPCC_LL:
         Y = self.get_sylvester_laplace_matrix_factors(Jvo, Foo_eff, Fvv_eff)
 
         Ω = self.get_Ω_sylvester_laplace_factorized(
-            X, Xvo, Foo, Fvv, Fov, t1, Y
-        )
-        Δt2s_o, Δt2s_v, Ω = self.include_t2_active_factorized_laplace(
-            Foo_eff, Fvv_eff, Fov, t2_act, Y, Ω
-        )
+            X, Xvo, Foo, Fvv, Fov, t1, Y) 
+
+        Δt2s_o, Δt2s_v = self.include_t2_active_factorized_laplace(
+            Foo_eff, Fvv_eff, Fov, t2_act, Y)
+
+        Ω =self.get_t1_correction_Dt2(Fov, Δt2s_o, Δt2s_v, Ω)
+
         self._t2_full = None
 
         res1 = Ω.T / self._eris.eia
@@ -606,7 +662,39 @@ class MPCC_LL:
 
         return np.linalg.norm(res1), t1, Δt2s_o, Δt2s_v, Y
 
-    def get_Ω_sylvester_laplace_factorized(self, X, Xvo, Foo, Fvv, Fov, t1, Y):
+    
+    def update_t1(self, t1, Y=None , Δt2s_o=None, Δt2s_v=None):
+
+       Xoo, Xvo, X = self.get_X(t1)
+       Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+       Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+       
+       if Y is not None and Δt2s_o is not None and Δt2s_v is not None:
+          Ω = self.get_Ω_sylvester_laplace_factorized(
+               X, Xvo, Foo, Fvv, Fov, t1, Y, Δt2s_o, Δt2s_v) 
+       else:
+          Ω = self.get_Ω_sylvester_laplace_factorized(
+               X, Xvo, Foo, Fvv, Fov, t1) 
+       
+       res1 = Ω.T / self._eris.eia
+       t1 -= res1
+       return np.linalg.norm(res1), t1
+
+    def update_Y_Dt2(self, t1, t2_act):
+        """Update T1 while keeping Laplace Sylvester T2 in factorized form."""
+        Xoo, Xvo, X = self.get_X(t1)
+        Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+        Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+
+        Foo_eff, Fvv_eff = self.update_F(Foo.copy(), Fvv.copy(), Fov, t1)
+        Y = self.get_sylvester_laplace_matrix_factors(Jvo, Foo_eff, Fvv_eff)
+
+        Δt2s_o, Δt2s_v = self.include_t2_active_factorized_laplace(
+            Foo_eff, Fvv_eff, Fov, t2_act, Y)
+
+        return Y, Δt2s_o, Δt2s_v 
+
+    def get_Ω_sylvester_laplace_factorized(self, X, Xvo, Foo, Fvv, Fov, t1, Y=None, Δt2s_o=None, Δt2s_v=None):
         """Evaluate Omega for factorized amplitudes with t2 = -Y Y^T."""
         Foo_tmp = Foo.copy()
         Fvv_tmp = Fvv.copy()
@@ -622,19 +710,49 @@ class MPCC_LL:
         Ω += lib.einsum("ib,ab->ai", t1, Fvv_tmp)
         Ω -= lib.einsum("ka,ki->ai", t1, Foo_tmp)
 
-        Ω_temp = lib.einsum("LRjb,bj->LR", Y, Fov)
-        Ω -= 2.0 * lib.einsum("LR,LRai->ai", Ω_temp, Y)
+        if Y is not None:
+           Ω_temp = lib.einsum("LRjb,bj->LR", Y, Fov)
+           Ω -= 2.0 * lib.einsum("LR,LRai->ai", Ω_temp, Y)
 
-        Ω_temp = lib.einsum("LRbi,jb->LRij", Y, Fov)
-        Ω += lib.einsum("LRij,LRaj->ai", Ω_temp, Y)
+           Ω_temp = lib.einsum("LRbi,jb->LRij", Y, Fov)
+           Ω += lib.einsum("LRij,LRaj->ai", Ω_temp, Y)
+
+        if Δt2s_o is not None and Δt2s_v is not None:
+           Ω = self.get_t1_correction_Dt2(Fov, Δt2s_o, Δt2s_v, Ω)
 
         return Ω
 
-    def include_t2_active_factorized_laplace(
-            self, Foo, Fvv, Fov, t2_act, Y, Ω, tol=None, count_tol=None):
+    def get_t1_correction_Dt2(self, Fov, Δt2s_o, Δt2s_v, Ω):
+        """Evaluate the T1 correction from the active T2 change."""
+     
+        for k, frag in enumerate(self.frags): 
+            act_hole = frag[0]
+            inact_hole = np.delete(range(self.nocc), act_hole)
+            act_particle = frag[1]
+            inact_particle = np.delete(range(self.nvir), act_particle)
+
+            t2_antisym = 2.0 * Δt2s_o[k] - np.transpose(Δt2s_o[k], (0, 1, 3, 2))
+            Ω[np.ix_(act_particle, inact_hole)] += lib.einsum(
+                    "Ijab,jb->aI",
+                    t2_antisym,
+                    Fov[np.ix_(act_hole, act_particle)],
+                ) 
+
+            t2_antisym = 2.0 * Δt2s_v[k] - np.transpose(Δt2s_v[k], (1, 0, 2, 3))
+            Ω[np.ix_(inact_particle, act_hole)] += lib.einsum(
+                    "ijAb,jb->Ai",
+                    t2_antisym,
+                    Fov[np.ix_(act_hole, act_particle)],
+               ) 
+        Ω[np.ix_(act_particle, act_hole)] = 0.0    
+        return Ω
+
+
+    def include_t2_active_factorized_laplace(self, Foo, Fvv, Fov, t2_act, Y, tol=None, count_tol=None):
         """Solve the Eq:T2_error boundary correction without building T2_LL."""
         print(f'Computing active t2-correction ...')
 
+        print("value of tol:", tol, self.ll_active_t2_tol) 
         if tol is None:
             tol = self.ll_active_t2_tol
         else:
@@ -651,8 +769,6 @@ class MPCC_LL:
             inact_hole = np.delete(range(n_occ), act_hole)
             act_particle = frag[1]
             inact_particle = np.delete(range(n_vir), act_particle)
-
-            Ω[np.ix_(act_particle, act_hole)] = 0.0
 
             δt2 = -lib.einsum(
                 "LRai,LRbj->ijab",
@@ -790,25 +906,7 @@ class MPCC_LL:
             Δt2s_o.append(Δt2_o)
             Δt2s_v.append(Δt2_v)
 
-            if size_o:
-                t2_antisym = 2.0 * Δt2_o - np.transpose(Δt2_o, (0, 1, 3, 2))
-                Ω[np.ix_(act_particle, inact_hole)] += lib.einsum(
-                    "Ijab,jb->aI",
-                    t2_antisym,
-                    Fov[np.ix_(act_hole, act_particle)],
-                )
-
-            if size_v:
-                t2_antisym = 2.0 * Δt2_v - np.transpose(Δt2_v, (1, 0, 2, 3))
-                Ω[np.ix_(inact_particle, act_hole)] += lib.einsum(
-                    "ijAb,jb->Ai",
-                    t2_antisym,
-                    Fov[np.ix_(act_hole, act_particle)],
-                )
-
-            Ω[np.ix_(act_particle, act_hole)] = 0.0
-
-        return Δt2s_o, Δt2s_v, Ω
+        return Δt2s_o, Δt2s_v
 
     def update_amps_factorized(self, t1, t2_act, Y, **kwargs):
         """
