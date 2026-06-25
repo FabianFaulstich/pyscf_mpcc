@@ -46,18 +46,12 @@ class MPCC(lib.StreamObject):
             
             print(f'MPCC macro iteration: {count}')
 
-#           if (count > 1):
-#              t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
-
             time_start = time()
+        #    if (count > 1):
+        #       t1, t2 = self.lowlevel.kernel(t1, t2)
             t1, t2 = self.lowlevel.kernel(t1, t2) #should take infos for multiple fragments, and keep the subsequent active amplitudes unaltered..
             time_end = time()
             print(f'LL kernel calculated in {time_end - time_start:.4f} seconds')
-#           if (count > 1):
-#               print(f'Starting low-level MPCC iteration. Low-level kernel type {self.lowlevel.kernel_type}')
-#               t1, t2 = self.lowlevel.kernel(t1, t2_act, **kwargs) 
-#               t1, t2 = self.lowlevel.kernel(t1, t2, **kwargs) 
-
             t1_act = []
             t2_act = []
 

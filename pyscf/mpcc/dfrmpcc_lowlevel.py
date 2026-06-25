@@ -56,7 +56,7 @@ class MPCC_LL:
             'll_laplace_npoints', kwargs.get('ll_laplace_nlap', 16)
         )
         self.ll_active_t2_tol = kwargs.get(
-            'll_active_t2_tol', min(self.ll_con_tol, 1.0e-7)
+            'll_active_t2_tol', min(self.ll_con_tol, 1.0e-6)
         )
         self.ll_active_t2_max_its = kwargs.get('ll_active_t2_max_its', 1000)
 
@@ -315,31 +315,50 @@ class MPCC_LL:
         return factors
 
     def get_sylvester_laplace_matrix_factors(
-            self, Jvo, Foo, Fvv, quad=None, tol=1.0e-12, max_degree=200):
+            self, Jvo, Foo, Fvv, quad=None, tol=1.0e-10, max_degree=200):
         """Build Laplace factors by applying matrix exponentials to Jvo."""
-        Foo = 0.5 * (Foo + Foo.T)
-        Fvv = 0.5 * (Fvv + Fvv.T)
+        #Foo = 0.5 * (Foo + Foo.T)
+        #Fvv = 0.5 * (Fvv + Fvv.T)
 
+        t_total_start = time.time()
+
+        t_quad_start = time.time()
         if quad is None:
             ymin, ymax = self.get_sylvester_laplace_interval()
             quad = self.get_sylvester_laplace_quadrature_interval(ymin, ymax)
         if np.any(quad.weights < 0.0):
             raise ValueError("factorized Laplace Sylvester requires nonnegative weights")
+        print(f"  [get_sylvester_laplace_matrix_factors] quadrature setup: {time.time() - t_quad_start:.3f}s")
 
+        t_bounds_start = time.time()
         bounds_v = self._symmetric_spectral_bounds(Fvv)
         bounds_o = self._symmetric_spectral_bounds(Foo)
+        print(f"  [get_sylvester_laplace_matrix_factors] spectral bounds: {time.time() - t_bounds_start:.3f}s")
+
         factors = np.empty(
             (Jvo.shape[0], quad.nlap, Jvo.shape[1], Jvo.shape[2]),
             dtype=Jvo.dtype,
         )
+        t_cheb_left_total = 0.0
+        t_cheb_right_total = 0.0
         for idx, (exponent, weight) in enumerate(zip(quad.exponents, quad.weights)):
+            t_left_start = time.time()
             Jhat = self._chebyshev_exp_action_left(
                 Fvv, Jvo, -exponent, bounds_v, tol, max_degree
             )
+            t_cheb_left_total += time.time() - t_left_start
+
+            t_right_start = time.time()
             Jhat = self._chebyshev_exp_action_right(
                 Foo, Jhat, exponent, bounds_o, tol, max_degree
             )
+            t_cheb_right_total += time.time() - t_right_start
+
             factors[:, idx] = np.sqrt(weight) * Jhat
+
+        print(f"  [get_sylvester_laplace_matrix_factors] Chebyshev exp left  (all {quad.nlap} points): {t_cheb_left_total:.3f}s")
+        print(f"  [get_sylvester_laplace_matrix_factors] Chebyshev exp right (all {quad.nlap} points): {t_cheb_right_total:.3f}s")
+        print(f"  [get_sylvester_laplace_matrix_factors] total: {time.time() - t_total_start:.3f}s")
 
         return factors
 
@@ -347,6 +366,8 @@ class MPCC_LL:
     def _symmetric_spectral_bounds(matrix):
         """Return tight scalar spectral bounds without eigenvectors."""
         matrix = np.asarray(matrix)
+        #symmetrize the matrix to avoid complex eigenvalues from numerical noise
+        matrix = 0.5 * (matrix + matrix.T)
         if matrix.shape[0] == 1:
             value = float(matrix[0, 0])
             pad = max(1.0, abs(value)) * np.finfo(float).eps
@@ -381,7 +402,7 @@ class MPCC_LL:
 
     @classmethod
     def _chebyshev_exp_action_left(
-            cls, matrix, rhs, scale, bounds, tol=1.0e-12, max_degree=200):
+        cls, matrix, rhs, scale, bounds, tol=1.0e-12, max_degree=200):
         lower, upper = bounds
         center = 0.5 * (upper + lower)
         radius = 0.5 * (upper - lower)
@@ -406,7 +427,7 @@ class MPCC_LL:
 
     @classmethod
     def _chebyshev_exp_action_right(
-            cls, matrix, rhs, scale, bounds, tol=1.0e-12, max_degree=200):
+        cls, matrix, rhs, scale, bounds, tol=1.0e-12, max_degree=200):
         lower, upper = bounds
         center = 0.5 * (upper + lower)
         radius = 0.5 * (upper - lower)
@@ -607,6 +628,7 @@ class MPCC_LL:
         t_load_start = time.time()
         if os.path.exists("Y.npy"):
             Y_old = np.load("Y.npy")
+        if os.path.exists("Δt2s_o.npy") and os.path.exists("Δt2s_v.npy"):    
             Δt2s_o_old = np.load("Δt2s_o.npy")
             Δt2s_v_old = np.load("Δt2s_v.npy")
             print(f"Loaded Y, Δt2s_o, Δt2s_v from disk in {time.time() - t_load_start:.3f}s")
@@ -639,10 +661,12 @@ class MPCC_LL:
 
         #dump Y, Δt2s_o, Δt2s_v to disk for later use:
         t_save_start = time.time()
-        np.save("Y.npy", Y)
-        np.save("Δt2s_o.npy", Δt2s_o)
-        np.save("Δt2s_v.npy", Δt2s_v)
-        print(f"Save Y, Δt2s_o, Δt2s_v to disk time: {time.time() - t_save_start:.3f}s")
+        if Y is not None:
+           np.save("Y.npy", Y)
+        if Δt2s_o is not None and Δt2s_v is not None:   
+           np.save("Δt2s_o.npy", Δt2s_o)
+           np.save("Δt2s_v.npy", Δt2s_v)
+           print(f"Save Y, Δt2s_o, Δt2s_v to disk time: {time.time() - t_save_start:.3f}s")
 
         t_t2_start = time.time()
         if self._t2_full is None:
@@ -672,6 +696,11 @@ class MPCC_LL:
 
         Ω =self.get_t1_correction_Dt2(Fov, Δt2s_o, Δt2s_v, Ω)
 
+        for frag in self.frags:
+            act_hole = frag[0]
+            act_particle = frag[1]
+            Ω[np.ix_(act_particle, act_hole)] = 0.0
+
         self._t2_full = None
 
         res1 = Ω.T / self._eris.eia
@@ -693,6 +722,11 @@ class MPCC_LL:
           Ω = self.get_Ω_sylvester_laplace_factorized(
                X, Xvo, Foo, Fvv, Fov, t1) 
        
+       for frag in self.frags:
+            act_hole = frag[0]
+            act_particle = frag[1]
+            Ω[np.ix_(act_particle, act_hole)] = 0.0
+
        res1 = Ω.T / self._eris.eia
        t1 -= res1
        return np.linalg.norm(res1), t1
@@ -706,10 +740,13 @@ class MPCC_LL:
         Foo_eff, Fvv_eff = self.update_F(Foo.copy(), Fvv.copy(), Fov, t1)
         Y = self.get_sylvester_laplace_matrix_factors(Jvo, Foo_eff, Fvv_eff)
 
-        Δt2s_o, Δt2s_v = self.include_t2_active_factorized_laplace(
-            Foo_eff, Fvv_eff, Fov, t2_act, Y)
-
-        return Y, Δt2s_o, Δt2s_v 
+        #skip this if norm of t2_act is small
+        if np.linalg.norm(t2_act) < 1e-8:
+            return Y, None, None            
+        else:
+            Δt2s_o, Δt2s_v = self.include_t2_active_factorized_laplace(
+                 Foo_eff, Fvv_eff, Fov, t2_act, Y)
+            return Y, Δt2s_o, Δt2s_v 
 
     def get_Ω_sylvester_laplace_factorized(self, X, Xvo, Foo, Fvv, Fov, t1, Y=None, Δt2s_o=None, Δt2s_v=None):
         """Evaluate Omega for factorized amplitudes with t2 = -Y Y^T."""
@@ -760,8 +797,7 @@ class MPCC_LL:
                     "ijAb,jb->Ai",
                     t2_antisym,
                     Fov[np.ix_(act_hole, act_particle)],
-               ) 
-        Ω[np.ix_(act_particle, act_hole)] = 0.0    
+               )   
         return Ω
 
 
@@ -923,7 +959,7 @@ class MPCC_LL:
                     operator,
                     rhs,
                     x0=x0,
-                    rtol=min(1.0e-7, tol),
+                    rtol=min(1.0e-6, tol),
                     atol=tol,
                     restart=min(size, 50),
                     maxiter=count_tol,
@@ -1820,6 +1856,8 @@ class MPCC_LL:
         
         self._Y = Y
         self._t2 = t2
+        t1*= 0.0
+        t2*= 0.0
         return t1, t2
 
     def get_t2(self, Y, t2_act, Δt2s_o, Δt2s_v):
@@ -1839,7 +1877,7 @@ class MPCC_LL:
 
         return t2
 
-    def get_t2_factorized_laplace(self, Y, t2_act, Δt2s_o, Δt2s_v):
+    def get_t2_factorized_laplace(self, Y, t2_act, Δt2s_o=None, Δt2s_v=None):
 
         t2 = -lib.einsum("LRai, LRbj -> ijab", Y, Y)
         n_aux, n_rank, n_vir, n_occ = Y.shape
@@ -1851,18 +1889,19 @@ class MPCC_LL:
 
             t2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = t2_act[k]
 
-            if Δt2s_o[k].size:
-                t2[np.ix_(inact_hole, act_hole, act_particle, act_particle)] += Δt2s_o[k]
-                t2[np.ix_(act_hole, inact_hole, act_particle, act_particle)] += (
+            if Δt2s_o is not None and Δt2s_v is not None:
+
+              if Δt2s_o[k].size:
+                 t2[np.ix_(inact_hole, act_hole, act_particle, act_particle)] += Δt2s_o[k]
+                 t2[np.ix_(act_hole, inact_hole, act_particle, act_particle)] += (
                     Δt2s_o[k].transpose(1, 0, 3, 2)
-                )
+                 )
 
-            if Δt2s_v[k].size:
-                t2[np.ix_(act_hole, act_hole, inact_particle, act_particle)] += Δt2s_v[k]
-                t2[np.ix_(act_hole, act_hole, act_particle, inact_particle)] += (
+              if Δt2s_v[k].size:
+                 t2[np.ix_(act_hole, act_hole, inact_particle, act_particle)] += Δt2s_v[k]
+                 t2[np.ix_(act_hole, act_hole, act_particle, inact_particle)] += (
                     Δt2s_v[k].transpose(1, 0, 3, 2)
-                )
-
+                 )
         return t2
 
     def get_t2_dense(self, t2_ll, t2_act, Δt2s_o, Δt2s_v):
