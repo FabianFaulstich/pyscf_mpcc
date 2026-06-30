@@ -316,49 +316,114 @@ class MPCC_LL:
 
     def get_sylvester_laplace_matrix_factors(
             self, Jvo, Foo, Fvv, quad=None, tol=1.0e-10, max_degree=200):
-        """Build Laplace factors by applying matrix exponentials to Jvo."""
-        #Foo = 0.5 * (Foo + Foo.T)
-        #Fvv = 0.5 * (Fvv + Fvv.T)
+        """Build Laplace factors by applying matrix exponentials to Jvo.
 
+        The Chebyshev matrix sequences T_k(Fvv_scaled) and T_k(Foo_scaled)
+        depend only on the operator, not on the quadrature exponent.  They are
+        therefore precomputed once (cost O(K * n_vir^3 + K * n_occ^3)) and
+        reused for all nlap points.  Per quadrature point the cost reduces to
+        a weighted sum of small matrices plus two BLAS dgemm calls, saving a
+        factor of ~K compared to re-running the full Chebyshev recursion on the
+        large (n_aux, n_vir, n_occ) tensor for every point.
+        """
         t_total_start = time.time()
 
-        t_quad_start = time.time()
         if quad is None:
             ymin, ymax = self.get_sylvester_laplace_interval()
             quad = self.get_sylvester_laplace_quadrature_interval(ymin, ymax)
         if np.any(quad.weights < 0.0):
             raise ValueError("factorized Laplace Sylvester requires nonnegative weights")
-        print(f"  [get_sylvester_laplace_matrix_factors] quadrature setup: {time.time() - t_quad_start:.3f}s")
 
-        t_bounds_start = time.time()
         bounds_v = self._symmetric_spectral_bounds(Fvv)
         bounds_o = self._symmetric_spectral_bounds(Foo)
-        print(f"  [get_sylvester_laplace_matrix_factors] spectral bounds: {time.time() - t_bounds_start:.3f}s")
 
-        factors = np.empty(
-            (Jvo.shape[0], quad.nlap, Jvo.shape[1], Jvo.shape[2]),
-            dtype=Jvo.dtype,
-        )
-        t_cheb_left_total = 0.0
-        t_cheb_right_total = 0.0
-        for idx, (exponent, weight) in enumerate(zip(quad.exponents, quad.weights)):
-            t_left_start = time.time()
-            Jhat = self._chebyshev_exp_action_left(
-                Fvv, Jvo, -exponent, bounds_v, tol, max_degree
-            )
-            t_cheb_left_total += time.time() - t_left_start
+        n_aux, n_vir, n_occ = Jvo.shape
+        nlap = quad.nlap
 
-            t_right_start = time.time()
-            Jhat = self._chebyshev_exp_action_right(
-                Foo, Jhat, exponent, bounds_o, tol, max_degree
-            )
-            t_cheb_right_total += time.time() - t_right_start
+        lower_v, upper_v = bounds_v
+        center_v = 0.5 * (upper_v + lower_v)
+        radius_v = 0.5 * (upper_v - lower_v)
 
-            factors[:, idx] = np.sqrt(weight) * Jhat
+        lower_o, upper_o = bounds_o
+        center_o = 0.5 * (upper_o + lower_o)
+        radius_o = 0.5 * (upper_o - lower_o)
 
-        print(f"  [get_sylvester_laplace_matrix_factors] Chebyshev exp left  (all {quad.nlap} points): {t_cheb_left_total:.3f}s")
-        print(f"  [get_sylvester_laplace_matrix_factors] Chebyshev exp right (all {quad.nlap} points): {t_cheb_right_total:.3f}s")
-        print(f"  [get_sylvester_laplace_matrix_factors] total: {time.time() - t_total_start:.3f}s")
+        # --- Step 1: precompute all Chebyshev coefficient vectors ---
+        # Coefficients depend only on the exponent + scalar interval; cheap.
+        all_coeffs_v = [
+            self._chebyshev_exp_coefficients(-exp, center_v, radius_v, tol, max_degree)
+            for exp in quad.exponents
+        ]
+        all_coeffs_o = [
+            self._chebyshev_exp_coefficients(exp, center_o, radius_o, tol, max_degree)
+            for exp in quad.exponents
+        ]
+        K_max_v = max(len(c) for c in all_coeffs_v)
+        K_max_o = max(len(c) for c in all_coeffs_o)
+
+        # --- Step 2: build Chebyshev matrix sequences once ---
+        # M_v[k] = T_k(Fvv_scaled), shape (n_vir, n_vir)
+        # M_o[k] = T_k(Foo_scaled), shape (n_occ, n_occ)
+        # These are independent of the quadrature exponents.
+        t_cheb_matrices = time.time()
+        Fvv_scaled = (Fvv - center_v * np.eye(n_vir)) / radius_v
+        M_v = np.empty((K_max_v, n_vir, n_vir), dtype=Jvo.dtype)
+        M_v[0] = np.eye(n_vir, dtype=Jvo.dtype)
+        if K_max_v > 1:
+            M_v[1] = Fvv_scaled
+            for k in range(2, K_max_v):
+                M_v[k] = 2.0 * Fvv_scaled @ M_v[k - 1] - M_v[k - 2]
+
+        Foo_scaled = (Foo - center_o * np.eye(n_occ)) / radius_o
+        M_o = np.empty((K_max_o, n_occ, n_occ), dtype=Jvo.dtype)
+        M_o[0] = np.eye(n_occ, dtype=Jvo.dtype)
+        if K_max_o > 1:
+            M_o[1] = Foo_scaled
+            for k in range(2, K_max_o):
+                M_o[k] = 2.0 * Foo_scaled @ M_o[k - 1] - M_o[k - 2]
+
+        # Flatten last two dims for vectorised weighted sums
+        M_v_flat = M_v.reshape(K_max_v, n_vir * n_vir)   # (K_max_v, n_vir^2)
+        M_o_flat = M_o.reshape(K_max_o, n_occ * n_occ)   # (K_max_o, n_occ^2)
+        print(f"  [get_sylvester_laplace_matrix_factors] Chebyshev matrix sequences "
+              f"(K_v={K_max_v}, K_o={K_max_o}): {time.time() - t_cheb_matrices:.3f}s")
+
+        # --- Step 3: apply exp matrices to Jvo for each quadrature point ---
+        # Per point: two dgemm calls on the full (n_aux, n_vir, n_occ) tensor.
+        # Left  action: exp_vv @ Jvo,   exp_vv: (n_vir, n_vir)
+        # Right action: Jhat  @ exp_oo, exp_oo: (n_occ, n_occ)
+        # Use explicit reshape to guarantee single BLAS dgemm per action.
+        # Jvo: (n_aux, n_vir, n_occ) → (n_aux*n_occ, n_vir) for the left step.
+        Jvo_2d = np.ascontiguousarray(Jvo.transpose(0, 2, 1)).reshape(n_aux * n_occ, n_vir)
+
+        factors = np.empty((n_aux, nlap, n_vir, n_occ), dtype=Jvo.dtype)
+        t_apply = time.time()
+        for idx, (weight, cv, co) in enumerate(
+            zip(quad.weights, all_coeffs_v, all_coeffs_o)
+        ):
+            # Build exp(-exponent * Fvv): (n_vir, n_vir) via vector-matrix dot
+            exp_vv = (cv @ M_v_flat[:len(cv)]).reshape(n_vir, n_vir)
+
+            # Left action: exp_vv @ Jvo  — single dgemm (n_aux*n_occ, n_vir)
+            # Jvo_2d[L*n_occ+i, b] = Jvo[L, b, i]
+            # result[L*n_occ+i, a] = sum_b Jvo[L, b, i] * exp_vv[a, b]
+            Jhat_2d = Jvo_2d @ exp_vv.T              # (n_aux*n_occ, n_vir)
+
+            # Build exp(exponent * Foo): (n_occ, n_occ)
+            exp_oo = (co @ M_o_flat[:len(co)]).reshape(n_occ, n_occ)
+
+            # Right action: Jhat @ exp_oo  — single dgemm (n_aux*n_vir, n_occ)
+            Jhat = np.ascontiguousarray(
+                Jhat_2d.reshape(n_aux, n_occ, n_vir).transpose(0, 2, 1)
+            ).reshape(n_aux * n_vir, n_occ)           # (n_aux*n_vir, n_occ)
+            result = (Jhat @ exp_oo).reshape(n_aux, n_vir, n_occ)
+
+            factors[:, idx] = np.sqrt(weight) * result
+
+        print(f"  [get_sylvester_laplace_matrix_factors] apply exp matrices "
+              f"({nlap} points): {time.time() - t_apply:.3f}s")
+        print(f"  [get_sylvester_laplace_matrix_factors] total: "
+              f"{time.time() - t_total_start:.3f}s")
 
         return factors
 
@@ -410,8 +475,12 @@ class MPCC_LL:
             scale, center, radius, tol, max_degree
         )
 
+        inv_radius = 1.0 / radius
+        c_over_r = center * inv_radius
+
         def apply_scaled(x):
-            return (lib.einsum("ab,Lbi->Lai", matrix, x) - center * x) / radius
+            # matrix @ x broadcasts over the leading L dimension: (a,b) @ (L,b,i) -> (L,a,i)
+            return np.matmul(matrix, x) * inv_radius - c_over_r * x
 
         t0 = rhs
         out = coeffs[0] * t0
@@ -421,7 +490,7 @@ class MPCC_LL:
         out = out + coeffs[1] * t1
         for coeff in coeffs[2:]:
             t2 = 2.0 * apply_scaled(t1) - t0
-            out = out + coeff * t2
+            out += coeff * t2
             t0, t1 = t1, t2
         return out
 
@@ -435,8 +504,12 @@ class MPCC_LL:
             scale, center, radius, tol, max_degree
         )
 
+        inv_radius = 1.0 / radius
+        c_over_r = center * inv_radius
+
         def apply_scaled(x):
-            return (lib.einsum("Lak,ki->Lai", x, matrix) - center * x) / radius
+            # x @ matrix broadcasts over leading dims: (L,a,k) @ (k,i) -> (L,a,i)
+            return np.matmul(x, matrix) * inv_radius - c_over_r * x
 
         t0 = rhs
         out = coeffs[0] * t0
@@ -446,7 +519,7 @@ class MPCC_LL:
         out = out + coeffs[1] * t1
         for coeff in coeffs[2:]:
             t2 = 2.0 * apply_scaled(t1) - t0
-            out = out + coeff * t2
+            out += coeff * t2
             t0, t1 = t1, t2
         return out
 
