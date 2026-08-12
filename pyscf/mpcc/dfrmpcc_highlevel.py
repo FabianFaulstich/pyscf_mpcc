@@ -13,14 +13,13 @@ class MPCC_HL:
             self.with_df.auxbasis = df.make_auxbasis(mf.mol, mp2fit=True)
 
         self._eris = eris
-        self.frag = frags
     
         self.diis = True
 
         self.ll_con_tol = kwargs.get("ll_con_tol")
         self.ll_max_its = kwargs.get("ll_max_its")
 
-        self._set_integral_blocks()
+        self.set_fragment(frags)
     @property
     def nvir(self):
         return self.mf.mol.nao - self.nocc
@@ -56,6 +55,11 @@ class MPCC_HL:
     @property
     def inact_particle(self):
         return numpy.setdiff1d(numpy.arange(self.nvir), self.act_particle)
+
+    def set_fragment(self, frag):
+        """Update the fragment and refresh fragment-dependent integral blocks."""
+        self.frag = frag
+        self._set_integral_blocks()
 
         # at this point we will classify integralsi: 
 
@@ -382,4 +386,3 @@ class MPCC_HL:
         e += 2*lib.einsum('ijab,iajb', tau, eris_ovov)                                                
         e -=  lib.einsum('ijab,ibja', tau, eris_ovov)                                                
         return e.real                       
-

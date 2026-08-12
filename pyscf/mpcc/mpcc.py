@@ -58,8 +58,8 @@ class MPCC(lib.StreamObject):
             #the following loop is parallelizable over fragments
             for frag in self.frags: 
                #modified the self.screened object
-               self.screened.frag = frag
-               self.highlevel.frag = frag
+               self.screened.set_fragment(frag)
+               self.highlevel.set_fragment(frag)
 
                # NOTE can we remove the t2 dependence? 
                time_start = time()
