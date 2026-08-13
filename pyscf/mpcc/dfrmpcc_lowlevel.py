@@ -150,6 +150,7 @@ class MPCC_LL:
             # NOTE change this to logger!
             print(f"It {count}; correlation energy {e_corr:.6e}; residual {res:.6e}")
 
+        del adiis
         self._e_corr = self.get_energy(t1, t2)
         self._e_tot = self.mf.e_tot + self._e_corr
 
@@ -276,8 +277,10 @@ class MPCC_LL:
         inv_denom_laplace = np.zeros_like(denom)
         for exponent, weight in zip(quad.exponents, quad.weights):
             inv_denom_laplace += weight * np.exp(-exponent * denom)
+        del denom
 
         t2 = -lib.einsum("LAI,LBJ,IJAB->IJAB", Jvo, Jvo, inv_denom_laplace)
+        del inv_denom_laplace
         return lib.einsum("iI,jJ,aA,bB,IJAB->ijab", Uo, Uo, Uv, Uv, t2)
 
     def get_sylvester_laplace_factors(self, Jvo, Foo, Fvv, quad=None):
@@ -300,6 +303,7 @@ class MPCC_LL:
         interval_tol = 100.0 * np.finfo(float).eps * max(1.0, quad.ymax)
         if np.min(denom) < quad.ymin - interval_tol or np.max(denom) > quad.ymax + interval_tol:
             raise ValueError("Laplace quadrature interval does not cover denominators")
+        del denom
 
         factors = np.empty(
             (Jvo.shape[0], quad.nlap, Jvo.shape[1], Jvo.shape[2]),
@@ -425,6 +429,7 @@ class MPCC_LL:
         print(f"  [get_sylvester_laplace_matrix_factors] total: "
               f"{time.time() - t_total_start:.3f}s")
 
+        del M_v_flat, M_o_flat, Jvo_2d, all_coeffs_v, all_coeffs_o
         return factors
 
     @staticmethod
@@ -635,7 +640,7 @@ class MPCC_LL:
             # NOTE change this to logger!
             print(f"It {count}; residual {res:.6e}")
 
-
+        del adiis
         # NOTE non-iterative N^5 cost!
         t2 = self.get_t2(Y, t2_act, Δt2s_o, Δt2s_v)
         self._e_corr = self.get_energy(t1, t2) 
@@ -672,6 +677,7 @@ class MPCC_LL:
             count += 1
             print(f"It {count}; residual {res:.6e}")
 
+        del adiis
         if self._t2_full is None:
             t2 = self.get_t2_factorized_laplace(Y, t2_act, Δt2s_o, Δt2s_v)
         else:
@@ -681,7 +687,10 @@ class MPCC_LL:
         return t1, t2
 
     def _sylvester_laplace_factorized_noniterative_kernel(self, t1=None, t2=None, **kwargs):
-        
+        # free init_amps allocations that this kernel does not use
+        self._Y = None
+        self._t2 = None
+
         t_kernel_start = time.time()
 
         res = np.inf
@@ -727,6 +736,8 @@ class MPCC_LL:
 
         print(f"T1 iterations total time: {t_iter_total:.3f}s ({count} iterations)")
 
+        del adiis
+        Y_old = Δt2s_o_old = Δt2s_v_old = None
         #get Y, Δt2s_o, Δt2s_v
         t_Y_start = time.time()
         Y, Δt2s_o, Δt2s_v = self.update_Y_Dt2(t1, t2_act)
@@ -755,7 +766,7 @@ class MPCC_LL:
     def update_amps_sylvester_laplace_factorized(self, t1, t2_act, **kwargs):
         """Update T1 while keeping Laplace Sylvester T2 in factorized form."""
         Xoo, Xvo, X = self.get_X(t1)
-        Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+        _, Jvo = self.get_J(Xoo, Xvo, t1)
         Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
 
         Foo_eff, Fvv_eff = self.update_F(Foo.copy(), Fvv.copy(), Fov, t1)
@@ -785,7 +796,7 @@ class MPCC_LL:
     def update_t1(self, t1, Y=None , Δt2s_o=None, Δt2s_v=None):
 
        Xoo, Xvo, X = self.get_X(t1)
-       Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+       _, Jvo = self.get_J(Xoo, Xvo, t1)
        Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
        
        if Y is not None and Δt2s_o is not None and Δt2s_v is not None:
@@ -807,7 +818,7 @@ class MPCC_LL:
     def update_Y_Dt2(self, t1, t2_act):
         """Update T1 while keeping Laplace Sylvester T2 in factorized form."""
         Xoo, Xvo, X = self.get_X(t1)
-        Joo, Jvo = self.get_J(Xoo, Xvo, t1)
+        _, Jvo = self.get_J(Xoo, Xvo, t1)
         Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
 
         Foo_eff, Fvv_eff = self.update_F(Foo.copy(), Fvv.copy(), Fov, t1)
@@ -915,6 +926,7 @@ class MPCC_LL:
                 Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)],
             )
             Δt2_active = t2_act[k] - δt2
+            del δt2
 
             shape_o = (
                 len(inact_hole),
@@ -1066,6 +1078,7 @@ class MPCC_LL:
             Δt2s_o.append(Δt2_o)
             Δt2s_v.append(Δt2_v)
 
+        del _x0_o_prev, _x0_v_prev
         return Δt2s_o, Δt2s_v
 
     def update_amps_factorized(self, t1, t2_act, Y, **kwargs):
@@ -1776,142 +1789,7 @@ class MPCC_LL:
 
         return t2_new, Ω
 
-
-    def include_t2_active_stupid(self, Foo, Fvv, Fov, t2_act, Y, Ω, tol = 1e-6, count_tol = 1000):
-       
-        print(f'Computing active t2-correction ...')   
-        Δt2s_o = [] 
-        Δt2s_v = [] 
-
-        n_aux, n_rank, n_vir, n_occ = Y.shape
-        for k, frag in enumerate(self.frags):
-
-            # FIXME once fragmentation is assigned, compute these once!!!
-            act_hole = frag[0]
-            inact_hole = np.delete(range(n_occ), act_hole)
-            act_particle = frag[1]
-            inact_particle = np.delete(range(n_vir), act_particle)
- 
-            eia_o = lib.direct_sum("Ia+jb->Ijab", 
-                                   self._eris.eia[np.ix_(inact_hole, act_particle)], 
-                                   self._eris.eia[np.ix_(act_hole, act_particle)])
-            eia_v = lib.direct_sum("iA+jb->ijAb", 
-                                   self._eris.eia[np.ix_(act_hole, inact_particle)], 
-                                   self._eris.eia[np.ix_(act_hole, act_particle)])
-
-            # NOTE This is the truly iterative part
-            # Step 10  
-            Ω[np.ix_(act_particle, act_hole)] = 0.0
-
-            δt2 = -lib.einsum("LRai, LRbj -> ijab", 
-                               Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)], 
-                               Y[np.ix_(range(n_aux), range(n_rank), act_particle, act_hole)])    
-            Δt2 = t2_act[k] - δt2 
-
-            dt2_all = np.zeros((n_occ, n_occ, n_vir, n_vir)) 
-
-            dt2_all[np.ix_(act_hole, act_hole, act_particle, act_particle)] = Δt2
-
-            tmp  = lib.einsum("bc,ijac->ijab", Fvv, dt2_all)
-            tmp -= lib.einsum("mi,mjab->ijab", Foo, dt2_all)
-
-            res2 = tmp + tmp.transpose(1,0,3,2)
-
-
-   # set active part to zero before iteration, we will add it back after convergence
-            res2[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
-
-
-            print(f'Initial residual norm before iteration: {np.linalg.norm(res2):.5e}')   
-
-            Δt2_it_save = np.copy(res2)
-
-  #         Δt2_o_it = np.copy(Δt2_o)
-  #         Δt2_v_it = np.copy(Δt2_v)
-
-
-            #dt2_all = 0.0*dt2_all
-            dt2_all = res2/self._eris.D
-
-           #set active part to zero
-            dt2_all[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
-    #       Δt2_o[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
-   #        Δt2_v[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
-
-
-            count = 0 
-            acc = np.inf 
-            acc_prev = np.inf
-
-            adiis = lib.diis.DIIS()
-            adiis.min_space = 2
-            adiis.space = 15
-            
-            diis_start = 4
-            damp_init = 0.1
-            damp_final = 0.8
-            use_diis = True
-
-            while (acc > tol and count< count_tol):
-                Δt2_it = Δt2_it_save.copy()
-
-                res2 = -lib.einsum("mi,mjab->ijab", Foo, dt2_all)
-                res2 += lib.einsum("bc,ijac->ijab", Fvv, dt2_all)
-
-                Δt2_it += res2 + res2.transpose(1,0,3,2)
-
-                Δt2_it /= self._eris.D
-
-                # Zero out active-active part before computing residual
-                Δt2_it[np.ix_(act_hole, act_hole, act_particle, act_particle)] = 0.0
-                acc = np.linalg.norm(Δt2_it)
-
-                # Adaptive damping: stronger early, weaker later
-                damp = damp_init + (damp_final - damp_init) * (count / count_tol) ** 1.5
-
-                if use_diis and count >= diis_start:
-                    # Apply DIIS to the full residual
-                    #dt2_all = self.run_diis_Δt2(dt2_all - (1.0 - damp) * Δt2_it, adiis)
-                    dt2_all = self.run_diis_Δt2(dt2_all - Δt2_it, adiis)
-                else:
-                    # Standard damped update without DIIS
-                    dt2_all = dt2_all - (1.0 - damp) * Δt2_it
-                    dt2_all = dt2_all - Δt2_it
-
-                count += 1
-
-                # Check relative convergence
-                if acc_prev != 0:
-                    rel_improvement = (acc_prev - acc) / acc_prev
-                else:
-                    rel_improvement = 0.0
-
-                print(f'    It: {count},  acc: {acc:.2e},  rel_impr: {rel_improvement:.2e},  damp: {damp:.2f}')
-                
-                acc_prev = acc
-            
-            print(f'    Iter. T2 correction finished in {count}/{count_tol} steps at {acc:.2e} accuracy.')
-
-
-            Δt2_o = Δt2_it[np.ix_(inact_hole, act_hole, act_particle, act_particle)] 
-            Δt2_v = Δt2_it[np.ix_(act_hole, act_hole, inact_particle, act_particle)]
-
-
-            Δt2s_o.append(Δt2_o)
-            Δt2s_v.append(Δt2_v)
-
-            # Step 11 use t2 active correction to improve Ω
-
-            t2_antisym = 2.0*Δt2_o - np.transpose(Δt2_o, (0, 1, 3, 2))
-            Ω[np.ix_(act_particle, inact_hole)] += np.einsum("Ijab,jb -> aI", t2_antisym, Fov[np.ix_(act_hole, act_particle)])
-  
-            t2_antisym = 2.0*Δt2_v - np.transpose(Δt2_v, (1, 0, 2, 3))
-            Ω[np.ix_(inact_particle, act_hole)] += np.einsum("ijAb,jb -> Ai", t2_antisym, Fov[np.ix_(act_hole, act_particle)])
-
-        return Δt2s_o, Δt2s_v , Ω
-
-
-            
+        
     def init_amps_fact(self):
        
         Y = self._eris.Lov[:, None, :, :] *self._eris.dD.transpose(2, 0, 1)[None, :, :, :]

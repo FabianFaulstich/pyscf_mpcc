@@ -71,11 +71,14 @@ class MPCC(lib.StreamObject):
                # YES, remove t2!
                t1_act_tmp, t2_act_tmp = self.highlevel.kernel(imds, t1, t2)
 #              t1_act_tmp, t2_act_tmp = self.highlevel.kernel(t1, t2)
+               del imds
 
                t1_act.append(t1_act_tmp)    
                t2_act.append(t2_act_tmp) 
 
                print('MPCC: High-level kernel calculated for fragment:')
+               self.screened.clear_integral_blocks()
+               self.highlevel.clear_integral_blocks()
         #NOTE: when we will use T3 amplitudes, we can directly return it here. we don't need to reuse them for any other purposes. Therefore
         #we can update them using diis only in the high level solver
         #store active amplitudes in a container or may be in a hdf5 file for later use:

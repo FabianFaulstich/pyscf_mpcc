@@ -65,22 +65,20 @@ class MPCC_HL:
 
     def _set_integral_blocks(self):
 
-        inact_hole = self.inact_hole
         act_hole = self.act_hole
-        inact_particle = self.inact_particle
         act_particle = self.act_particle
         naux_idx = numpy.arange(self.naux)
         
-        self.Loo_ia = self._eris.Loo[numpy.ix_(naux_idx, inact_hole, act_hole)]
         self.Loo_aa = self._eris.Loo[numpy.ix_(naux_idx, act_hole, act_hole)]
-
         self.Lvv_aa = self._eris.Lvv[numpy.ix_(naux_idx, act_particle, act_particle)]
-        self.Lvv_ia = self._eris.Lvv[numpy.ix_(naux_idx, inact_particle, act_particle)]
-
-        self.Lov_ia = self._eris.Lov[numpy.ix_(naux_idx, inact_hole, act_particle)]
         self.Lov_aa = self._eris.Lov[numpy.ix_(naux_idx, act_hole, act_particle)]
-        self.Lov_ai = self._eris.Lov[numpy.ix_(naux_idx, act_hole, inact_particle)]
 
+
+    def clear_integral_blocks(self):
+        """Free fragment-specific integral slices after the kernel completes."""
+        self.Loo_aa = None
+        self.Lvv_aa = None
+        self.Lov_aa = None
 
     def t1_transform(self, imds, t1, M, Moo, Mvo, Mvo_t2):
         #fetch the 3-center integrals in MO basis
@@ -235,10 +233,12 @@ class MPCC_HL:
         #PPL 
         Waebf = lib.einsum("Lae, Lbf -> abef", Jvv, Jvv)
         R2 += lib.einsum("abef, ijef -> ijab", Waebf, t2)
+        del Waebf
         
         #HHL
         Wijmn = lib.einsum("Lmi, Lnj -> mnij", Joo, Joo) + Imnij
         R2 += lib.einsum("mnij, mnab -> ijab", Wijmn, t2) #three possibilities (aa, ai, ia)
+        del Wijmn
 
         #Fock matrix contribution:
 
@@ -363,9 +363,7 @@ class MPCC_HL:
           e_cc = self.get_cc_energy(t1full, t2full, t1, t2)
           print(f'    CCSD correlation energy: {e_cc}')
 
-      #self._e_corr = e_corr
-      #self._e_tot = self.mf.e_tot + self._e_corr
-
+      del adiis
 
       return t1, t2
 
