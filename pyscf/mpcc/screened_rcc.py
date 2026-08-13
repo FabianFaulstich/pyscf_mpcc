@@ -538,8 +538,18 @@ class screened:
         if result.size == 0:
             return result
 
-        hole_groups = ((self.inact_hole, False), (self.act_hole, True))
-        particle_groups = ((self.inact_particle, False), (self.act_particle, True))
+        if exclude_all_active:
+            hole_groups = ((self.inact_hole, False), (self.act_hole, True))
+            particle_groups = (
+                (self.inact_particle, False),
+                (self.act_particle, True),
+            )
+        else:
+            # There is no need to preserve the active/inactive partition when
+            # every source contribution is retained.  One larger contraction
+            # gives BLAS the complete dense source space whenever it fits.
+            hole_groups = ((numpy.arange(self.nocc), False),)
+            particle_groups = ((numpy.arange(self.nvir), False),)
         for source_holes, holes_active in hole_groups:
             if source_holes.size == 0:
                 continue
@@ -557,7 +567,9 @@ class screened:
                     * len(target_particles)
                 )
                 itemsize = numpy.dtype(dtype).itemsize
-                available = self._available_memory_bytes(fraction=0.5)
+                # Prefer one dense source-particle contraction whenever its
+                # estimated live workspace fits the normal memory budget.
+                available = self._available_memory_bytes()
                 block_size = len(source_particles)
                 if available <= 0:
                     block_size = 1
@@ -588,8 +600,15 @@ class screened:
                             target_particles,
                         )
                     ]
-                    result += 2.0 * lib.einsum("Lkc,ikac->Lai", lov, direct)
-                    result -= lib.einsum("Lkc,ikca->Lai", lov, exchange)
+                    # Advanced indexing makes writable copies.  Form the
+                    # antisymmetrized block in place so that the direct and
+                    # exchange pieces share one dense contraction.
+                    direct = direct.astype(dtype, copy=False)
+                    direct *= 2.0
+                    direct -= exchange.transpose(0, 1, 3, 2)
+                    del exchange
+                    result += lib.einsum("Lkc,ikac->Lai", lov, direct)
+                    del lov, direct
         return result
 
     def _build_Mvo_t2_blocks(self, t2):
@@ -803,6 +822,214 @@ class screened:
             del w_abef, t2_block
         return result
 
+    def _ppl_contraction_symmetric(self, factors, t2, particles):
+        """Evaluate the equal-space PPL term in pair-packed symmetry blocks.
+
+        The symmetric and antisymmetric combinations follow Eqs. (38)-(43) of
+        J. Chem. Theory Comput. 2021, 17, 4799-4822.  Only the pair spaces
+        a >= b, e >= f, and i >= j are contracted; the dense pair-symmetric
+        result is reconstructed at the end.
+        """
+        nhole = len(self.act_hole)
+        nparticle = len(particles)
+        nout = factors.shape[1]
+        dtype = numpy.result_type(factors, t2)
+        result_shape = (nhole, nhole, nout, nout)
+        if nhole == 0 or nparticle == 0 or nout == 0:
+            return numpy.zeros(result_shape, dtype=dtype)
+
+        hole_i, hole_j = numpy.tril_indices(nhole)
+        out_a, out_b = numpy.tril_indices(nout)
+        part_e, part_f = numpy.tril_indices(nparticle)
+        nij = len(hole_i)
+        nab = len(out_a)
+        nef = len(part_e)
+
+        itemsize = numpy.dtype(dtype).itemsize
+        result_elements = numpy.prod(result_shape, dtype=numpy.intp)
+        t_pair_elements = nij * nef
+        # During construction of t+ and t-, the direct, exchange, and one
+        # combined array coexist.  Afterwards, both packed combinations remain.
+        t_build_elements = 3 * t_pair_elements
+        fixed_build_elements = result_elements + t_build_elements
+        fixed_contract_elements = result_elements + 2 * t_pair_elements
+        # Each outer-pair batch stores V+ and V-, followed by their two sigma
+        # blocks.  Assembly groups all b values belonging to one a value into
+        # a larger matrix multiplication.  The estimate includes the right
+        # factor panel, its dense (b,e,f) product, and one packed gather.
+        elements_per_ab = 2 * nef + 2 * nij
+        assembly_elements_per_b = (
+            nparticle * (factors.shape[0] + nparticle) + nef
+        )
+        grouped_assembly_elements = 0
+        for a_start in range(0, nout, 4):
+            a_stop = min(nout, a_start + 4)
+            row_count = a_stop - a_start
+            grouped_assembly_elements = max(
+                grouped_assembly_elements,
+                factors.shape[0] * nparticle * (row_count + a_stop)
+                + row_count * a_stop * nparticle * nparticle
+                + a_stop * nef,
+            )
+        available_bytes = self._available_memory_bytes(fraction=0.8)
+        minimum_elements = (
+            fixed_contract_elements + elements_per_ab + assembly_elements_per_b
+        )
+        if available_bytes < itemsize * max(fixed_build_elements, minimum_elements):
+            self._ppl_used_packed_symmetry = False
+            return self._ppl_contraction(
+                factors, factors, t2, particles, particles
+            )
+
+        self._ppl_used_packed_symmetry = True
+        available_elements = available_bytes // itemsize
+        full_required_elements = (
+            fixed_contract_elements
+            + nab * elements_per_ab
+            + grouped_assembly_elements
+        )
+        if full_required_elements <= available_elements:
+            block_size = nab
+        else:
+            large_block_budget = (
+                available_elements
+                - fixed_contract_elements
+                - nout * assembly_elements_per_b
+            )
+            large_block_size = large_block_budget // elements_per_ab
+            if large_block_size >= nout:
+                block_size = min(nab - 1, large_block_size)
+            else:
+                block_size = (
+                    available_elements - fixed_contract_elements
+                ) // (elements_per_ab + assembly_elements_per_b)
+            block_size = max(1, block_size)
+        if block_size < nab:
+            self._ppl_used_blocking = True
+        result = numpy.zeros(result_shape, dtype=dtype)
+
+        active_i = self.act_hole[hole_i]
+        active_j = self.act_hole[hole_j]
+        particle_e = particles[part_e]
+        particle_f = particles[part_f]
+        direct = t2[
+            active_i[:, None],
+            active_j[:, None],
+            particle_e[None, :],
+            particle_f[None, :],
+        ]
+        exchange = t2[
+            active_i[:, None],
+            active_j[:, None],
+            particle_f[None, :],
+            particle_e[None, :],
+        ]
+        t_minus = direct - exchange
+        off_diagonal_ef = part_e != part_f
+        exchange[:, off_diagonal_ef] += direct[:, off_diagonal_ef]
+        exchange[:, ~off_diagonal_ef] = direct[:, ~off_diagonal_ef]
+        t_plus = exchange
+        del direct
+
+        for p0, p1 in lib.prange(0, nab, block_size):
+            batch_a = out_a[p0:p1]
+            batch_b = out_b[p0:p1]
+            batch_size = p1 - p0
+            v_plus = numpy.empty((batch_size, nef), dtype=dtype)
+            v_minus = numpy.empty_like(v_plus)
+            offset = 0
+            while offset < batch_size:
+                a_start = batch_a[offset]
+                # Larger row panels improve BLAS efficiency on the full packed
+                # path.  Memory-constrained batches retain one a row at a time.
+                row_count = 4 if block_size == nab else 1
+                a_stop = min(nout, a_start + row_count)
+                end = numpy.searchsorted(batch_a, a_stop, side="left")
+                b_start = batch_b[offset]
+                b_stop = batch_b[end - 1] + 1
+                left_panel = factors[:, a_start:a_stop, :].reshape(
+                    factors.shape[0], -1
+                )
+                factor_panel = factors[:, b_start:b_stop, :].reshape(
+                    factors.shape[0], -1
+                )
+                raw_ef = lib.dot(left_panel.T, factor_panel)
+                raw_ef = raw_ef.reshape(
+                    a_stop - a_start,
+                    nparticle,
+                    b_stop - b_start,
+                    nparticle,
+                )
+                row_offset = offset
+                for a in range(a_start, a_stop):
+                    row_end = numpy.searchsorted(batch_a, a + 1, side="left")
+                    b_indices = batch_b[row_offset:row_end] - b_start
+                    row_ef = raw_ef[
+                        a - a_start,
+                        :,
+                        b_indices[0] : b_indices[-1] + 1,
+                        :,
+                    ].transpose(1, 0, 2)
+                    direct_ef = row_ef[:, part_e, part_f]
+                    v_plus[row_offset:row_end] = direct_ef
+                    v_minus[row_offset:row_end] = direct_ef
+                    del direct_ef
+                    exchange_ef = row_ef[:, part_f, part_e]
+                    v_plus[row_offset:row_end] += exchange_ef
+                    v_minus[row_offset:row_end] -= exchange_ef
+                    del row_ef, exchange_ef
+                    row_offset = row_end
+                del left_panel, factor_panel, raw_ef
+                offset = end
+
+            sigma_plus = lib.dot(t_plus, v_plus.T)
+            sigma_plus *= 0.5
+            del v_plus
+            sigma_minus = lib.dot(t_minus, v_minus.T)
+            sigma_minus *= 0.5
+            del v_minus
+            sigma_plus += sigma_minus
+            residual_ab = sigma_plus
+            sigma_minus *= -2.0
+            sigma_minus += residual_ab
+            residual_ba = sigma_minus
+
+            result[
+                hole_i[:, None],
+                hole_j[:, None],
+                batch_a[None, :],
+                batch_b[None, :],
+            ] = residual_ab
+
+            off_diagonal_ab = batch_a != batch_b
+            if numpy.any(off_diagonal_ab):
+                result[
+                    hole_i[:, None],
+                    hole_j[:, None],
+                    batch_b[None, off_diagonal_ab],
+                    batch_a[None, off_diagonal_ab],
+                ] = residual_ba[:, off_diagonal_ab]
+
+            off_diagonal_ij = hole_i != hole_j
+            if numpy.any(off_diagonal_ij):
+                result[
+                    hole_j[off_diagonal_ij, None],
+                    hole_i[off_diagonal_ij, None],
+                    batch_b[None, :],
+                    batch_a[None, :],
+                ] = residual_ab[off_diagonal_ij]
+                if numpy.any(off_diagonal_ab):
+                    result[
+                        hole_j[off_diagonal_ij, None],
+                        hole_i[off_diagonal_ij, None],
+                        batch_a[None, off_diagonal_ab],
+                        batch_b[None, off_diagonal_ab],
+                    ] = residual_ba[off_diagonal_ij][:, off_diagonal_ab]
+
+            del residual_ab, residual_ba
+
+        return result
+
     def R2_residue_active(self, t1, t2, Joo, Jvv, Jvo, Fov, Fvv, Foo):
 
         inact_hole = self.inact_hole
@@ -830,18 +1057,16 @@ class screened:
            Imbje, Imbej, Imnij = self.t2_transform_quadratic_inactive(t2)  
 
 
-        # Factorized PPL terms.  The two output virtual indices are active, so
-        # retain the faster dense path whenever its actual footprint fits.
+        # Factorized PPL terms.  Exploit full pair symmetry for the equal-space
+        # inactive/inactive contraction and retain the generic mixed-space path.
         self._ppl_used_blocking = False
-        R2 = self._ppl_contraction(
-            Jvv_ai, Jvv_ai, t2, inact_particle, inact_particle
-        )
-        R2 += self._ppl_contraction(
+        R2 = self._ppl_contraction_symmetric(Jvv_ai, t2, inact_particle)
+        mixed_ppl = self._ppl_contraction(
             Jvv_ai, Jvv_aa, t2, inact_particle, act_particle
         )
-        R2 += self._ppl_contraction(
-            Jvv_aa, Jvv_ai, t2, act_particle, inact_particle
-        )
+        R2 += mixed_ppl
+        R2 += mixed_ppl.transpose(1, 0, 3, 2)
+        del mixed_ppl
         #HHL
         Wijmn = lib.einsum("Lmi, Lnj -> mnij", Joo_ia, Joo_ia) 
         if (self.add_DCA):
