@@ -18,6 +18,7 @@ class MPCC(lib.StreamObject):
 
         self.eris = eri.ERIs(mf, self.lo_coeff)
         self.frags = kwargs.get('frag')
+        self.count_tol = kwargs.get('count_tol', 100)
         if self.frags is None:
             raise ValueError("Missing required keyword argument 'frag' in kwargs.")
 
@@ -36,12 +37,11 @@ class MPCC(lib.StreamObject):
         e_mpcc_prev = -np.inf
         e_diff = np.inf
         tol = kwargs.get('tol', 1e-6)
-        count_tol = kwargs.get('count_tol', 100)
 
         t1, t2 = self.lowlevel.init_amps()
 
         #start an iteration loop here:
-        while e_diff > tol and count < count_tol:
+        while e_diff > tol and count < self.count_tol:
             count += 1
             
             print(f'MPCC macro iteration: {count}')

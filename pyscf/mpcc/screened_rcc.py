@@ -1,6 +1,9 @@
+from time import time
+
 from pyscf import df
 from pyscf import lib
 import numpy
+import time
 from dataclasses import dataclass
 
 
@@ -1054,11 +1057,13 @@ class screened:
 
         #Non DCA terms:
         if (self.add_DCA):
+           start_time = time.time()
            Imbje, Imbej, Imnij = self.t2_transform_quadratic_inactive(t2)  
-
+           print(f"Time for DCA transformation: {time.time() - start_time:.2f} s")
 
         # Factorized PPL terms.  Exploit full pair symmetry for the equal-space
         # inactive/inactive contraction and retain the generic mixed-space path.
+        start_time = time.time()
         self._ppl_used_blocking = False
         R2 = self._ppl_contraction_symmetric(Jvv_ai, t2, inact_particle)
         mixed_ppl = self._ppl_contraction(
@@ -1066,6 +1071,7 @@ class screened:
         )
         R2 += mixed_ppl
         R2 += mixed_ppl.transpose(1, 0, 3, 2)
+        print(f"Time for PPL contraction: {time.time() - start_time:.2f} s")
         del mixed_ppl
         #HHL
         Wijmn = lib.einsum("Lmi, Lnj -> mnij", Joo_ia, Joo_ia) 
