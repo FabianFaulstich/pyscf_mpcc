@@ -96,6 +96,28 @@ class screened:
         exchange = t2[numpy.ix_(h1, h2, p2, p1)].transpose(0, 1, 3, 2)
         return 2.0 * direct - exchange
 
+    @staticmethod
+    def _contiguous_slice(indices):
+        """Return a basic slice for a sorted unit-stride index array."""
+        indices = numpy.asarray(indices)
+        if indices.size == 0:
+            return slice(0, 0)
+        start = int(indices[0])
+        stop = start + len(indices)
+        if numpy.array_equal(indices, numpy.arange(start, stop)):
+            return slice(start, stop)
+        return None
+
+    def _select_t2_block(self, t2, h1, h2, p1, p2):
+        """Select a read-only T2 block without copying contiguous spaces."""
+        index_groups = (h1, h2, p1, p2)
+        index_slices = tuple(
+            self._contiguous_slice(indices) for indices in index_groups
+        )
+        if all(index_slice is not None for index_slice in index_slices):
+            return t2[index_slices]
+        return t2[numpy.ix_(*index_groups)]
+
 
 
     def _split_moo(self, tensor):
@@ -587,23 +609,50 @@ class screened:
                     lov = self._eris.Lov[
                         numpy.ix_(self.aux_idx, source_holes, contracted_particles)
                     ]
-                    direct = t2[
-                        numpy.ix_(
-                            target_holes,
-                            source_holes,
-                            target_particles,
-                            contracted_particles,
+                    index_groups = (
+                        target_holes,
+                        source_holes,
+                        target_particles,
+                        contracted_particles,
+                    )
+                    index_slices = tuple(
+                        self._contiguous_slice(indices)
+                        for indices in index_groups
+                    )
+                    if all(index_slice is not None for index_slice in index_slices):
+                        # Basic slicing keeps the exchange block as a view of
+                        # T2.  Only the direct block needs a writable copy,
+                        # avoiding a second potentially multi-GiB advanced-
+                        # indexing allocation for contiguous orbital spaces.
+                        direct = numpy.array(
+                            t2[index_slices], dtype=dtype, copy=True, order="C"
                         )
-                    ]
-                    exchange = t2[
-                        numpy.ix_(
-                            target_holes,
-                            source_holes,
-                            contracted_particles,
-                            target_particles,
-                        )
-                    ]
-                    # Advanced indexing makes writable copies.  Form the
+                        exchange = t2[
+                            (
+                                index_slices[0],
+                                index_slices[1],
+                                index_slices[3],
+                                index_slices[2],
+                            )
+                        ]
+                    else:
+                        direct = t2[
+                            numpy.ix_(
+                                target_holes,
+                                source_holes,
+                                target_particles,
+                                contracted_particles,
+                            )
+                        ]
+                        exchange = t2[
+                            numpy.ix_(
+                                target_holes,
+                                source_holes,
+                                contracted_particles,
+                                target_particles,
+                            )
+                        ]
+                    # The direct block is writable on both paths.  Form the
                     # antisymmetrized block in place so that the direct and
                     # exchange pieces share one dense contraction.
                     direct = direct.astype(dtype, copy=False)
@@ -1059,7 +1108,7 @@ class screened:
         if (self.add_DCA):
            start_time = time.time()
            Imbje, Imbej, Imnij = self.t2_transform_quadratic_inactive(t2)  
-           print(f"Time for DCA transformation: {time.time() - start_time:.2f} s")
+           print(f"Time for DCA transformation: {time.time() - start_time:.4f} s")
 
         # Factorized PPL terms.  Exploit full pair symmetry for the equal-space
         # inactive/inactive contraction and retain the generic mixed-space path.
@@ -1071,7 +1120,7 @@ class screened:
         )
         R2 += mixed_ppl
         R2 += mixed_ppl.transpose(1, 0, 3, 2)
-        print(f"Time for PPL contraction: {time.time() - start_time:.2f} s")
+        print(f"Time for PPL contraction: {time.time() - start_time:.4f} s")
         del mixed_ppl
         #HHL
         Wijmn = lib.einsum("Lmi, Lnj -> mnij", Joo_ia, Joo_ia) 
@@ -1296,73 +1345,67 @@ class screened:
         Imnij = self._df_imnij(
             self.Lov_ai,
             self.Lov_aa,
-            t2[
-                numpy.ix_(
-                    self.act_hole,
-                    self.act_hole,
-                    self.inact_particle,
-                    self.act_particle,
-                )
-            ],
+            self._select_t2_block(
+                t2,
+                self.act_hole,
+                self.act_hole,
+                self.inact_particle,
+                self.act_particle,
+            ),
         )
         Imnij += self._df_imnij(
             self.Lov_aa,
             self.Lov_ai,
-            t2[
-                numpy.ix_(
-                    self.act_hole,
-                    self.act_hole,
-                    self.act_particle,
-                    self.inact_particle,
-                )
-            ],
+            self._select_t2_block(
+                t2,
+                self.act_hole,
+                self.act_hole,
+                self.act_particle,
+                self.inact_particle,
+            ),
         )
         Imnij += self._df_imnij(
             self.Lov_ai,
             self.Lov_ai,
-            t2[
-                numpy.ix_(
-                    self.act_hole,
-                    self.act_hole,
-                    self.inact_particle,
-                    self.inact_particle,
-                )
-            ],
+            self._select_t2_block(
+                t2,
+                self.act_hole,
+                self.act_hole,
+                self.inact_particle,
+                self.inact_particle,
+            ),
         )
 
         Imbej = self._df_mbej(
             self.Lov_ia,
             self.Lov_ai,
-            t2[
-                numpy.ix_(
-                    self.act_hole,
-                    self.inact_hole,
-                    self.act_particle,
-                    self.inact_particle,
-                )
-            ],
+            self._select_t2_block(
+                t2,
+                self.act_hole,
+                self.inact_hole,
+                self.act_particle,
+                self.inact_particle,
+            ),
         )
         Imbje = self._df_mbej(
             self.Lov_ia,
             self.Lov_ai,
-            t2[
-                numpy.ix_(
-                    self.act_hole,
-                    self.inact_hole,
-                    self.inact_particle,
-                    self.act_particle,
-                )
-            ],
-            exchange_output=True,
-        )
-        t2_aiaa = t2[
-            numpy.ix_(
+            self._select_t2_block(
+                t2,
                 self.act_hole,
                 self.inact_hole,
+                self.inact_particle,
                 self.act_particle,
-                self.act_particle,
-            )
-        ]
+            ),
+            exchange_output=True,
+        )
+        t2_aiaa = self._select_t2_block(
+            t2,
+            self.act_hole,
+            self.inact_hole,
+            self.act_particle,
+            self.act_particle,
+        )
         Imbej += self._df_mbej(self.Lov_ia, self.Lov_aa, t2_aiaa)
         Imbje += self._df_mbej(
             self.Lov_ia, self.Lov_aa, t2_aiaa, exchange_output=True
@@ -1370,26 +1413,24 @@ class screened:
         Imbej += self._df_mbej(
             self.Lov_aa,
             self.Lov_ai,
-            t2[
-                numpy.ix_(
-                    self.act_hole,
-                    self.act_hole,
-                    self.act_particle,
-                    self.inact_particle,
-                )
-            ],
+            self._select_t2_block(
+                t2,
+                self.act_hole,
+                self.act_hole,
+                self.act_particle,
+                self.inact_particle,
+            ),
         )
         Imbje += self._df_mbej(
             self.Lov_aa,
             self.Lov_ai,
-            t2[
-                numpy.ix_(
-                    self.act_hole,
-                    self.act_hole,
-                    self.inact_particle,
-                    self.act_particle,
-                )
-            ],
+            self._select_t2_block(
+                t2,
+                self.act_hole,
+                self.act_hole,
+                self.inact_particle,
+                self.act_particle,
+            ),
             exchange_output=True,
         )
         return Imbje, Imbej, Imnij
@@ -1474,7 +1515,12 @@ class screened:
        (M0_base, Moo_base, Mvo_base), (M0_full, Moo_full, Mvo_full) = (
            self._build_M_t1_intermediates_pair(t1)
        )
+
+       time_start = time.time()
+
        Mvo_t2 = self._build_Mvo_t2_blocks(t2)
+
+       print(f"Time for building Mvo_t2 blocks: {time.time() - time_start:.4f} s")
 
        joo_ai, joo_ia, jvv_ai = self._build_t1_transform_J_blocks_rest(
            t1, Moo_full, Mvo_full
