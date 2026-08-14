@@ -1040,16 +1040,18 @@ class MPCC_LL:
                     dtype=Y.dtype,
                 )
                 residual_history = []
-                correction, info = scipy.sparse.linalg.gmres(
+                # Use lgmres (pure Python) instead of gmres: the Fortran-backed
+                # gmres overflows its 32-bit workspace-size check once `size`
+                # grows large, regardless of the tol/atol kwargs used.
+                correction, info = scipy.sparse.linalg.lgmres(
                     operator,
                     rhs,
                     x0=x0,
-                    rtol=min(1.0e-6, tol),
-                    atol=tol,
-                    restart=min(size, 50),
+#                    tol=min(1.0e-6, tol),
+                    tol=1.0e-8, 
+                    inner_m=min(size, 50),
                     maxiter=count_tol,
                     callback=residual_history.append,
-                    callback_type="pr_norm",
                 )
                 Δt2_o, Δt2_v = split(correction)
                 res_o, res_v = boundary_residual(Δt2_o, Δt2_v)
@@ -1746,15 +1748,17 @@ class MPCC_LL:
                 dtype=t2_ll.dtype,
             )
             residual_history = []
-            correction, info = scipy.sparse.linalg.gmres(
+            # Use lgmres (pure Python) instead of gmres: the Fortran-backed
+            # gmres overflows its 32-bit workspace-size check once the system
+            # size grows large, regardless of the tol/atol kwargs used.
+            correction, info = scipy.sparse.linalg.lgmres(
                 operator,
                 rhs,
-                rtol=min(1.0e-8, tol),
-                atol=tol,
-                restart=min(nonactive.size, 50),
+#               tol=min(1.0e-8, tol),
+                tol=1.0e-8,
+                inner_m=min(nonactive.size, 50),
                 maxiter=count_tol,
                 callback=residual_history.append,
-                callback_type="pr_norm",
             )
             Δt2.ravel()[nonactive] += correction
             acc = np.linalg.norm(pack(t2_error_residual(Δt2) / self._eris.D))
