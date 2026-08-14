@@ -360,8 +360,8 @@ class MPCC_HL:
           print(f"It {count}; residual {res:.6e}")
 
           # NOTE Checking CCSD correlation energy convergence, remove later
-          e_cc = self.get_cc_energy(t1full, t2full, t1, t2)
-          print(f'    CCSD correlation energy: {e_cc}')
+          #e_cc = self.get_cc_energy(t1full, t2full, t1, t2)
+          #print(f'    CCSD correlation energy: {e_cc}')
 
       del adiis
 

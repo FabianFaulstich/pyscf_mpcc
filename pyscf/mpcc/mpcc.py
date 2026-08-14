@@ -69,7 +69,9 @@ class MPCC(lib.StreamObject):
 
                # NOTE can we remove the t2 dependence? 
                # YES, remove t2!
+               time_start = time()
                t1_act_tmp, t2_act_tmp = self.highlevel.kernel(imds, t1, t2)
+               print(f'MPCC: High-level kernel calculated in {time() - time_start:.4f} seconds')
 #              t1_act_tmp, t2_act_tmp = self.highlevel.kernel(t1, t2)
                del imds
 
