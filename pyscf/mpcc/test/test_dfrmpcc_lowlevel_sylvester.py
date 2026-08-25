@@ -31,6 +31,8 @@ def make_lowlevel_fixture():
     ll = MPCC_LL.__new__(MPCC_LL)
     ll._eris = eris
     ll.frags = []
+    ll.ll_active_t2_tol = 1.0e-6
+    ll.ll_active_t2_max_its = 1000
 
     return ll, eris, rng
 
@@ -104,7 +106,7 @@ def sylvester_laplace_matrix_factors_expm_reference(Jvo, Foo, Fvv, quad):
         Gv = scipy.linalg.expm(-exponent * Fvv)
         Go = scipy.linalg.expm(exponent * Foo.T)
         factors[:, idx] = np.sqrt(weight) * np.einsum(
-            "ac,Lck,ki->Lai", Gv, Jvo, Go
+            "ac,Lck,ki->Lai", Gv, Jvo, Go, optimize=True
         )
     return factors
 
@@ -726,6 +728,50 @@ class LaplaceSylvesterSolverTest(unittest.TestCase):
 
 
 class SylvesterLaplacePhysicalTest(unittest.TestCase):
+    def test_ozone_matrix_factors_match_direct_expm(self):
+        # Use the geometry from ozone_pes.py with a compact basis so this
+        # molecular regression test remains inexpensive.
+        mol = gto.M(
+            atom="O; O 1 1.5; O 2 1.5 1 142.76",
+            basis="sto-3g",
+            verbose=0,
+        )
+        mf = scf.RHF(mol).density_fit()
+        mf.conv_tol = 1.0e-10
+        mf.kernel()
+        self.assertTrue(mf.converged)
+
+        # Rotate within the occupied and virtual spaces.  This preserves the
+        # RHF reference while giving non-diagonal Foo and Fvv matrices, as in
+        # the localized-orbital calculation in ozone_pes.py.
+        rng = np.random.default_rng(20)
+        nocc = mol.nelec[0]
+        nvir = mol.nao - nocc
+        occupied_rotation, _ = np.linalg.qr(rng.normal(size=(nocc, nocc)))
+        virtual_rotation, _ = np.linalg.qr(rng.normal(size=(nvir, nvir)))
+        rotation = scipy.linalg.block_diag(occupied_rotation, virtual_rotation)
+
+        eris = df_eri.ERIs(mf, mf.mo_coeff @ rotation)
+        ll = dfrmpcc_lowlevel.MPCC_LL(mf, eris, [])
+        Jvo, Foo, Fvv, _ = ll.get_sylvester_intermediates(
+            np.zeros((nocc, nvir))
+        )
+        quad = laplace_quadrature.LaplaceQuadrature(
+            exponents=np.array([0.05, 0.2, 0.8]),
+            weights=np.array([0.2, 0.5, 0.7]),
+            ymin=0.01,
+            ymax=100.0,
+        )
+
+        factors = ll.get_sylvester_laplace_matrix_factors(Jvo, Foo, Fvv, quad)
+        factors_ref = sylvester_laplace_matrix_factors_expm_reference(
+            Jvo, Foo, Fvv, quad
+        )
+
+        np.testing.assert_allclose(
+            factors, factors_ref, rtol=1.0e-11, atol=1.0e-12
+        )
+
     def test_physical_factorized_laplace_kernel_matches_dense_one_step(self):
         root = laplace_minimax_root()
         if root is None:
