@@ -260,7 +260,15 @@ class MPCC_HL:
         npair_particle = len(part_e)
         v_plus = numpy.empty((npair_out, npair_particle), dtype=dtype)
         v_minus = numpy.empty_like(v_plus)
-        panel_size = 16
+        naux = factors.shape[0]
+        itemsize = numpy.dtype(dtype).itemsize
+        # cache constraint: left_panel (panel_size × nparticle × naux) targets ~16 MB L3
+        _panel_cache = max(1, (16 << 20) // max(1, nparticle * naux * itemsize))
+        # memory constraint: interaction tensor (panel_size × nparticle × nout × nparticle) targets ~256 MB
+        _panel_mem = max(1, (256 << 20) // max(1, nparticle * nout * nparticle * itemsize))
+        # BLAS floor: keep M-dimension (panel_size × nparticle) >= 64
+        _min_panel = max(1, -(-64 // max(1, nparticle)))
+        panel_size = max(_min_panel, min(nout, _panel_cache, _panel_mem))
         for a_start in range(0, nout, panel_size):
             a_stop = min(nout, a_start + panel_size)
             left_panel = factors[:, a_start:a_stop, :].reshape(
