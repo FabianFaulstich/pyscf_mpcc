@@ -214,6 +214,124 @@ class MPCC_HL:
 
         return R1
 
+    def _ppl_contraction_symmetric(self, factors, t2):
+        """Evaluate the active-space PPL term in dense packed-pair form.
+
+        The symmetric and antisymmetric combinations follow Eqs. (38)-(43) of
+        J. Chem. Theory Comput. 2021, 17, 4799-4822.  All packed pair matrices
+        are constructed and contracted at once because the high-level active
+        space is expected to be small.
+        """
+        nhole = t2.shape[0]
+        nparticle = factors.shape[2]
+        nout = factors.shape[1]
+        dtype = numpy.result_type(factors, t2)
+        result_shape = (nhole, nhole, nout, nout)
+        if nhole == 0 or nparticle == 0 or nout == 0:
+            return numpy.zeros(result_shape, dtype=dtype)
+
+        hole_i, hole_j = numpy.tril_indices(nhole)
+        out_a, out_b = numpy.tril_indices(nout)
+        part_e, part_f = numpy.tril_indices(nparticle)
+
+        direct = t2[
+            hole_i[:, None],
+            hole_j[:, None],
+            part_e[None, :],
+            part_f[None, :],
+        ]
+        exchange = t2[
+            hole_i[:, None],
+            hole_j[:, None],
+            part_f[None, :],
+            part_e[None, :],
+        ]
+        t_minus = direct - exchange
+        off_diagonal_ef = part_e != part_f
+        exchange[:, off_diagonal_ef] += direct[:, off_diagonal_ef]
+        exchange[:, ~off_diagonal_ef] = direct[:, ~off_diagonal_ef]
+        t_plus = exchange
+        del direct
+
+        # Assemble all packed interactions in fixed-width panels.  The panels
+        # are used to expose large matrix products to BLAS; they are not a
+        # low-memory fallback, and the complete V+ and V- matrices remain live.
+        npair_out = len(out_a)
+        npair_particle = len(part_e)
+        v_plus = numpy.empty((npair_out, npair_particle), dtype=dtype)
+        v_minus = numpy.empty_like(v_plus)
+        panel_size = 16
+        for a_start in range(0, nout, panel_size):
+            a_stop = min(nout, a_start + panel_size)
+            left_panel = factors[:, a_start:a_stop, :].reshape(
+                factors.shape[0], -1
+            )
+            right_panel = factors[:, :a_stop, :].reshape(
+                factors.shape[0], -1
+            )
+            interaction = lib.dot(left_panel.T, right_panel).reshape(
+                a_stop - a_start,
+                nparticle,
+                a_stop,
+                nparticle,
+            )
+
+            for a in range(a_start, a_stop):
+                pair_start = a * (a + 1) // 2
+                pair_stop = (a + 1) * (a + 2) // 2
+                row = interaction[a - a_start, :, : a + 1, :].transpose(
+                    1, 0, 2
+                )
+                direct = row[:, part_e, part_f]
+                exchange = row[:, part_f, part_e]
+                v_plus[pair_start:pair_stop] = direct + exchange
+                v_minus[pair_start:pair_stop] = direct - exchange
+
+            del left_panel, right_panel, interaction
+
+        sigma_plus = lib.dot(t_plus, v_plus.T)
+        sigma_plus *= 0.5
+        sigma_minus = lib.dot(t_minus, v_minus.T)
+        sigma_minus *= 0.5
+        del t_plus, t_minus, v_plus, v_minus
+
+        residual_ab = sigma_plus + sigma_minus
+        residual_ba = sigma_plus - sigma_minus
+        result = numpy.zeros(result_shape, dtype=dtype)
+        result[
+            hole_i[:, None],
+            hole_j[:, None],
+            out_a[None, :],
+            out_b[None, :],
+        ] = residual_ab
+
+        off_diagonal_ab = out_a != out_b
+        if numpy.any(off_diagonal_ab):
+            result[
+                hole_i[:, None],
+                hole_j[:, None],
+                out_b[None, off_diagonal_ab],
+                out_a[None, off_diagonal_ab],
+            ] = residual_ba[:, off_diagonal_ab]
+
+        off_diagonal_ij = hole_i != hole_j
+        if numpy.any(off_diagonal_ij):
+            result[
+                hole_j[off_diagonal_ij, None],
+                hole_i[off_diagonal_ij, None],
+                out_b[None, :],
+                out_a[None, :],
+            ] = residual_ab[off_diagonal_ij]
+            if numpy.any(off_diagonal_ab):
+                result[
+                    hole_j[off_diagonal_ij, None],
+                    hole_i[off_diagonal_ij, None],
+                    out_a[None, off_diagonal_ab],
+                    out_b[None, off_diagonal_ab],
+                ] = residual_ba[off_diagonal_ij][:, off_diagonal_ab]
+
+        return result
+
     def R2_residue_active(self, imds, t1, t2, Joo, Jvv, Jvo, Fov, Fvv, Foo):
  
         Jvo = Jvo[0]
@@ -231,9 +349,7 @@ class MPCC_HL:
         #factorized part of the residue:
         R2 += lib.einsum("Lai, Lbj -> ijab", Jvo, Jvo)
         #PPL 
-        Waebf = lib.einsum("Lae, Lbf -> abef", Jvv, Jvv)
-        R2 += lib.einsum("abef, ijef -> ijab", Waebf, t2)
-        del Waebf
+        R2 += self._ppl_contraction_symmetric(Jvv, t2)
         
         #HHL
         Wijmn = lib.einsum("Lmi, Lnj -> mnij", Joo, Joo) + Imnij
@@ -254,12 +370,12 @@ class MPCC_HL:
         #N3V3 terms:
 
         W_jebm = lib.einsum("Lmj, Lbe -> mbje", Joo, Jvv) - Imbje 
-        R2_tmp -= lib.einsum("mbje, imae -> ijab", W_jebm, t2) # em should be ii, ia, ai types
+        R2_tmp -= lib.einsum("mbje, imae -> ijab", W_jebm, t2)
 
         W_jema = lib.einsum("Lmj, Lae -> maje", Joo, Jvv) - Imbje*0.5
-        R2_tmp -= lib.einsum("maje, imeb -> ijab", W_jema, t2) # em should be ii, ia, ai types
+        R2_tmp -= lib.einsum("maje, imeb -> ijab", W_jema, t2)
 
-        R2_tmp -= lib.einsum("mbej, imae -> ijab", Imbej, t2) #should it not be antisym?
+        R2_tmp -= lib.einsum("mbej, imae -> ijab", Imbej, t2)
 
         #symmetrize R2_tmp:
         R2 += (R2_tmp + R2_tmp.transpose(1, 0, 3, 2))
@@ -272,11 +388,11 @@ class MPCC_HL:
 
         #I_mn^ij 
         Vnemf = lib.einsum("Lne, Lmf -> nmef", self.Lov_aa, self.Lov_aa)
-        Imnij = lib.einsum("mnef, ijef -> mnij", Vnemf, t2) #ef should be ii, ia, ai types
+        Imnij = lib.einsum("mnef, ijef -> mnij", Vnemf, t2) #hh ladder
         #I^je_bm
-        Imbej = lib.einsum("nmef, jnbf -> mbej", Vnemf, t2)
+        Imbej = lib.einsum("nmef, jnbf -> mbej", Vnemf, t2) #exchange
         #I^je_mb
-        Imbje = lib.einsum("nmef, jnfb -> mbje", Vnemf, t2) # #nf should be ii, ia, ai types
+        Imbje = lib.einsum("nmef, jnfb -> mbje", Vnemf, t2) #hp ladder
 
         return Imbje, Imbej, Imnij
     

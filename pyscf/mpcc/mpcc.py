@@ -99,6 +99,7 @@ class MPCC(lib.StreamObject):
             e_mpcc = self.lowlevel.get_energy(t1, t2)
             e_diff = abs(e_mpcc - e_mpcc_prev)
             e_mpcc_prev = e_mpcc
+            self.lowlevel._macro_e_diff = e_diff
             print(f"It {count}; Energy {e_mpcc:.6e}; Energy difference {e_diff:.6e}")
 
         return e_mpcc+self._scf.e_tot
