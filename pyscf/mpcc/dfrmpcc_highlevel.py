@@ -1,3 +1,5 @@
+import copy
+
 from pyscf import df
 from pyscf import lib
 import numpy
@@ -30,7 +32,7 @@ class MPCC_HL:
 
     @property
     def naux(self):
-        return self.with_df.get_naoaux()
+        return self.Loo_aa.shape[0]
 
     @property
     def act_hole(self):
@@ -59,19 +61,29 @@ class MPCC_HL:
     def set_fragment(self, frag):
         """Update the fragment and refresh fragment-dependent integral blocks."""
         self.frag = frag
-        self._set_integral_blocks()
+        active_eris = self._eris.get_active_eris(frag)
+        self.Loo_aa = active_eris.Loo
+        self.Lvv_aa = active_eris.Lvv
+        self.Lov_aa = active_eris.Lov
+        self._aux_transform = active_eris.aux_transform
 
-        # at this point we will classify integralsi: 
+    def _project_screened_aux(self, tensor):
+        """Convert a completed screened intermediate to the active NAF basis."""
+        if self._aux_transform is None:
+            return numpy.array(tensor).copy()
+        return numpy.tensordot(
+            self._aux_transform.T, numpy.asarray(tensor), axes=(1, 0)
+        )
 
-    def _set_integral_blocks(self):
-
-        act_hole = self.act_hole
-        act_particle = self.act_particle
-        naux_idx = numpy.arange(self.naux)
-        
-        self.Loo_aa = self._eris.Loo[numpy.ix_(naux_idx, act_hole, act_hole)]
-        self.Lvv_aa = self._eris.Lvv[numpy.ix_(naux_idx, act_particle, act_particle)]
-        self.Lov_aa = self._eris.Lov[numpy.ix_(naux_idx, act_hole, act_particle)]
+    def _prepare_screened_imds(self, imds):
+        """Project fixed screened J intermediates once per macro iteration."""
+        if self._aux_transform is None:
+            return imds
+        projected = copy.copy(imds)
+        projected.Joo = self._project_screened_aux(imds.Joo)
+        projected.Jvv = self._project_screened_aux(imds.Jvv)
+        projected.Jvo = self._project_screened_aux(imds.Jvo)
+        return projected
 
 
     def clear_integral_blocks(self):
@@ -79,6 +91,7 @@ class MPCC_HL:
         self.Loo_aa = None
         self.Lvv_aa = None
         self.Lov_aa = None
+        self._aux_transform = None
 
     def t1_transform(self, imds, t1, M, Moo, Mvo, Mvo_t2):
         #fetch the 3-center integrals in MO basis
@@ -97,11 +110,11 @@ class MPCC_HL:
         Joo_aa += Moo_aa
 
 #      JVV  (active-active, active-inactive)
-        Jvv_aa = numpy.array(imds.Jvv).copy()      
+        Jvv_aa = numpy.array(imds.Jvv).copy()
         Jvv_aa -= lib.einsum("Lkb,ka->Lab", self.Lov_aa, t1)
 
 #      JOV (active-active)
-        Jvo_aa  = numpy.array(imds.Jvo).copy()
+        Jvo_aa = numpy.array(imds.Jvo).copy()
 
 #       Jvo_aa += lib.einsum("Lac,ic->Lia", self.Lvv_aa, t1)
         Jvo_aa += Mvo_aa
@@ -453,6 +466,8 @@ class MPCC_HL:
 
 
     def kernel(self, imds, t1full, t2full):
+
+      imds = self._prepare_screened_imds(imds)
 
       #we have to extract the active only amplitudes from the full amplitudes:
 

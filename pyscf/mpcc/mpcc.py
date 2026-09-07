@@ -16,13 +16,31 @@ class MPCC(lib.StreamObject):
             raise ValueError(f'No local orbitals provided!')
 
 
-        self.eris = eri.ERIs(mf, self.lo_coeff)
         self.frags = kwargs.get('frag')
         self.count_tol = kwargs.get('count_tol', 100)
         if self.frags is None:
             raise ValueError("Missing required keyword argument 'frag' in kwargs.")
 
+        self.naf_threshold = kwargs.get('naf_threshold')
+        if self.naf_threshold is not None and len(self.frags) != 1:
+            raise ValueError(
+                "NAF compression currently supports exactly one MPCC fragment"
+            )
+        self.eris = eri.ERIs(
+            mf,
+            self.lo_coeff,
+            active_spaces=self.frags,
+            naf_threshold=self.naf_threshold,
+        )
+
         print('MPCC fragments:', self.frags)
+        if self.naf_threshold is not None:
+            active_eris = self.eris.get_active_eris(self.frags[0])
+            print(
+                "MPCC active NAF rank: "
+                f"{active_eris.naux}/{active_eris.original_naux} "
+                f"({100.0 * active_eris.compression:.1f}% reduction)"
+            )
 
         self.lowlevel = lowlevel.MPCC_LL(mf, self.eris, self.frags, **kwargs)
         self.screened = screened.screened(mf, self.eris, self.frags[0], **kwargs)
