@@ -17,6 +17,7 @@ dense ladder operator to ``t2``.
 """
 
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 import scipy.special
@@ -27,30 +28,24 @@ from pyscf.lib import logger
 from pyscf.sylvester_cc import dfrpa, laplace_quadrature
 
 
+class _IterationIntermediates(NamedTuple):
+    """Arrays shared by the singles and doubles solves in one iteration."""
+
+    X: np.ndarray
+    Xoo: np.ndarray
+    Xvo: np.ndarray
+    Xvo_t2: np.ndarray
+    Foo: np.ndarray
+    Fvv: np.ndarray
+    Fov: np.ndarray
+    Fov_t1_oo: np.ndarray
+    Fov_t1_vv: np.ndarray
+
+
 class DFRPASylvester(dfrpa.DFRPA):
     """Canonical-RHF DFRPA with optional perturbative ladder energy."""
 
     def __init__(self, mf, eris, **kwargs):
-        retired_xvo_options = tuple(
-            name
-            for name in (
-                "ll_xvo_t2_mode",
-                "ll_exchange_screen_tol",
-                "ll_exchange_screen_mode",
-                "ll_exchange_q_block_size",
-                "ll_exchange_rank_block_size",
-                "ll_exchange_check_interval",
-                "ll_exchange_screen_refresh",
-            )
-            if name in kwargs
-        )
-        if retired_xvo_options:
-            names = ", ".join(retired_xvo_options)
-            raise ValueError(
-                f"retired Xvo_t2 option(s): {names}; DFRPASylvester now "
-                "uses only the transient-dense Xvo_t2 contraction"
-            )
-
         # The Sylvester model continues to use the historical ladder-free
         # DFRPA equations unless a ladder mode is explicitly requested.
         kwargs.setdefault("ladder_mode", None)
@@ -85,7 +80,6 @@ class DFRPASylvester(dfrpa.DFRPA):
         if not 0.0 <= self.ll_laplace_interval_margin < 1.0:
             raise ValueError("ll_laplace_interval_margin must be in [0, 1)")
 
-#       self._validate_canonical_orbitals()
         self._quadrature_t1 = None
         self._quadrature_t2 = None
         self._Y = None
@@ -104,27 +98,6 @@ class DFRPASylvester(dfrpa.DFRPA):
         if self._xvo_t2_timing is None:
             return None
         return dict(self._xvo_t2_timing)
-
-    def _validate_canonical_orbitals(self):
-        """Reject occupied/virtual rotations of the canonical RHF orbitals."""
-        foo_offdiag = self._eris.foo - np.diag(np.diag(self._eris.foo))
-        fvv_offdiag = self._eris.fvv - np.diag(np.diag(self._eris.fvv))
-        scale = max(
-            1.0,
-            float(np.linalg.norm(self._eris.foo)),
-            float(np.linalg.norm(self._eris.fvv)),
-        )
-        error = max(
-            float(np.linalg.norm(foo_offdiag)),
-            float(np.linalg.norm(fvv_offdiag)),
-            float(np.linalg.norm(self._eris.fov)),
-        )
-        if error > self.ll_canonical_tol * scale:
-            raise ValueError(
-                "DFRPASylvester requires canonical RHF orbitals; the MO Fock "
-                f"matrix is not diagonal (relative off-diagonal norm "
-                f"{error / scale:.3e})."
-            )
 
     def kernel(self, t1=None, t2=None):
         """Solve the coupled equations and return dense ``(t1, t2)``."""
@@ -157,8 +130,16 @@ class DFRPASylvester(dfrpa.DFRPA):
 
         self.converged = False
         for iteration in range(1, self.ll_max_its + 1):
-            Y_target = self.solve_doubles(t1, Y, quad_t2)
-            t1_target = self.solve_singles(t1, Y_target, quad_t1)
+            # Use a simultaneous fixed-point update: both equations are
+            # evaluated at the same current (t1, Y), so every common
+            # intermediate, including Xvo_t2, is constructed only once.
+            intermediates = self.get_iteration_intermediates(t1, Y)
+            Y_target = self.solve_doubles(
+                t1, Y, quad_t2, intermediates=intermediates
+            )
+            t1_target = self.solve_singles(
+                t1, Y, quad_t1, intermediates=intermediates
+            )
 
             delta_t1 = t1_target - t1
             delta_Y = Y_target - Y
@@ -300,11 +281,36 @@ class DFRPASylvester(dfrpa.DFRPA):
                 f"gaps [{interval[0]:.6e}, {interval[1]:.6e}]"
             )
 
-    def get_X_factorized(self, t1, Y):
+    def get_X_t1(self, t1):
+        """Build the X intermediates that are independent of doubles."""
         Xvo = lib.einsum("Lab,ib->Lai", self._eris.Lvv, t1)
-        Xvo_t2 = self.get_Xvo_t2(Y)
         Xoo = lib.einsum("Lia,ja->Lij", self._eris.Lov, t1)
         X = 2.0 * lib.einsum("Lia,ia->L", self._eris.Lov, t1)
+        return X, Xoo, Xvo
+
+    def get_iteration_intermediates(self, t1, Y):
+        """Build all arrays shared by the two simultaneous amplitude solves."""
+        X, Xoo, Xvo = self.get_X_t1(t1)
+        Xvo_t2 = self.get_Xvo_t2(Y)
+        Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
+        Foo, Fvv = self.add_t2_to_fock(Fvv, Foo, Xvo_t2)
+        Fov_t1_oo = lib.einsum("ic,jc->ij", Fov, t1)
+        Fov_t1_vv = lib.einsum("lb,la->ab", Fov, t1)
+        return _IterationIntermediates(
+            X,
+            Xoo,
+            Xvo,
+            Xvo_t2,
+            Foo,
+            Fvv,
+            Fov,
+            Fov_t1_oo,
+            Fov_t1_vv,
+        )
+
+    def get_X_factorized(self, t1, Y):
+        X, Xoo, Xvo = self.get_X_t1(t1)
+        Xvo_t2 = self.get_Xvo_t2(Y)
         return X, Xoo, Xvo, Xvo_t2
 
     def get_Xvo_t2(self, Y):
@@ -399,14 +405,19 @@ class DFRPASylvester(dfrpa.DFRPA):
         energy -= lib.einsum("ijab,ijba", t2, ladder_res)
         return energy.real
 
-    def solve_doubles(self, t1, Y, quad):
-        X, Xoo, Xvo, Xvo_t2 = self.get_X_factorized(t1, Y)
-        _, Jvo = self.get_J_factorized(Xoo, Xvo, Xvo_t2, t1)
-        Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
-        Foo, Fvv = self.add_t2_to_fock(Fvv, Foo, Xvo_t2)
+    def solve_doubles(self, t1, Y, quad, intermediates=None):
+        """Solve doubles, optionally reusing all iteration intermediates."""
+        if intermediates is None:
+            intermediates = self.get_iteration_intermediates(t1, Y)
+        _, Jvo = self.get_J_factorized(
+            intermediates.Xoo,
+            intermediates.Xvo,
+            intermediates.Xvo_t2,
+            t1,
+        )
 
-        Foo_dressed = Foo + lib.einsum("ic,jc->ij", Fov, t1)
-        Fvv_dressed = Fvv - lib.einsum("lb,la->ab", Fov, t1)
+        Foo_dressed = intermediates.Foo + intermediates.Fov_t1_oo
+        Fvv_dressed = intermediates.Fvv - intermediates.Fov_t1_vv
         self._validate_dressed_gaps(Foo_dressed, Fvv_dressed, quad, 2, "doubles")
         return self.get_sylvester_laplace_matrix_factors(
             Jvo, Foo_dressed, Fvv_dressed, quad
@@ -432,14 +443,20 @@ class DFRPASylvester(dfrpa.DFRPA):
         result += lib.einsum("Rij,Raj->ai", exchange, Y_flat)
         return result
 
-    def solve_singles(self, t1, Y, quad):
-        X, Xoo, Xvo, Xvo_t2 = self.get_X_factorized(t1, Y)
-        Foo, Fvv, Fov = self.get_F(t1, X, Xoo, Xvo)
-        Foo, Fvv = self.add_t2_to_fock(Fvv, Foo, Xvo_t2)
+    def solve_singles(self, t1, Y, quad, intermediates=None):
+        """Solve singles, optionally reusing all iteration intermediates."""
+        if intermediates is None:
+            intermediates = self.get_iteration_intermediates(t1, Y)
 
-        Foo_dressed = Foo + 0.5 * lib.einsum("ic,jc->ij", Fov, t1)
-        Fvv_dressed = Fvv - 0.5 * lib.einsum("lb,la->ab", Fov, t1)
-        omega0 = self.get_omega0_factorized(X, Xvo, Xvo_t2, Fov, Y)
+        Foo_dressed = intermediates.Foo + 0.5 * intermediates.Fov_t1_oo
+        Fvv_dressed = intermediates.Fvv - 0.5 * intermediates.Fov_t1_vv
+        omega0 = self.get_omega0_factorized(
+            intermediates.X,
+            intermediates.Xvo,
+            intermediates.Xvo_t2,
+            intermediates.Fov,
+            Y,
+        )
         self._validate_dressed_gaps(Foo_dressed, Fvv_dressed, quad, 1, "singles")
         return self.solve_singles_laplace(
             omega0, Foo_dressed, Fvv_dressed, quad
