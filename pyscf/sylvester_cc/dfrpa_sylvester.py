@@ -46,6 +46,26 @@ class DFRPASylvester(dfrpa.DFRPA):
     """Canonical-RHF DFRPA with optional perturbative ladder energy."""
 
     def __init__(self, mf, eris, **kwargs):
+        retired_xvo_options = tuple(
+            name
+            for name in (
+                "ll_xvo_t2_mode",
+                "ll_exchange_screen_tol",
+                "ll_exchange_screen_mode",
+                "ll_exchange_q_block_size",
+                "ll_exchange_rank_block_size",
+                "ll_exchange_check_interval",
+                "ll_exchange_screen_refresh",
+            )
+            if name in kwargs
+        )
+        if retired_xvo_options:
+            names = ", ".join(retired_xvo_options)
+            raise ValueError(
+                f"retired Xvo_t2 option(s): {names}; DFRPASylvester now "
+                "uses only the transient-dense Xvo_t2 contraction"
+            )
+
         # The Sylvester model continues to use the historical ladder-free
         # DFRPA equations unless a ladder mode is explicitly requested.
         kwargs.setdefault("ladder_mode", None)
@@ -468,12 +488,13 @@ class DFRPASylvester(dfrpa.DFRPA):
 
     def solve_singles_laplace(self, omega0, Foo, Fvv, quad):
         """Return ``T1.T`` from the factorized Laplace Sylvester inverse."""
+        Foo_action, Fvv_action = self._balanced_fock_pair(Foo, Fvv)
         exp_v = self._chebyshev_exponentials(
-            Fvv, -np.asarray(quad.exponents), self.ll_chebyshev_tol,
+            Fvv_action, -np.asarray(quad.exponents), self.ll_chebyshev_tol,
             self.ll_chebyshev_max_degree,
         )
         exp_o = self._chebyshev_exponentials(
-            Foo, np.asarray(quad.exponents), self.ll_chebyshev_tol,
+            Foo_action, np.asarray(quad.exponents), self.ll_chebyshev_tol,
             self.ll_chebyshev_max_degree,
         )
         result = np.zeros_like(omega0)
@@ -483,12 +504,13 @@ class DFRPASylvester(dfrpa.DFRPA):
 
     def get_sylvester_laplace_matrix_factors(self, Jvo, Foo, Fvv, quad):
         """Apply actual (possibly nonsymmetric) dressed Fock exponentials."""
+        Foo_action, Fvv_action = self._balanced_fock_pair(Foo, Fvv)
         exp_v = self._chebyshev_exponentials(
-            Fvv, -np.asarray(quad.exponents), self.ll_chebyshev_tol,
+            Fvv_action, -np.asarray(quad.exponents), self.ll_chebyshev_tol,
             self.ll_chebyshev_max_degree,
         )
         exp_o = self._chebyshev_exponentials(
-            Foo, np.asarray(quad.exponents), self.ll_chebyshev_tol,
+            Foo_action, np.asarray(quad.exponents), self.ll_chebyshev_tol,
             self.ll_chebyshev_max_degree,
         )
 
@@ -503,6 +525,26 @@ class DFRPASylvester(dfrpa.DFRPA):
                 "ab,Lbi,ij->Laj", left, Jvo, right
             )
         return factors
+
+    @classmethod
+    def _balanced_fock_pair(cls, Foo, Fvv):
+        """Apply a cancelling common shift that makes both actions contractive.
+
+        A scalar shift leaves ``exp(-a*Fvv) B exp(a*Foo)`` unchanged when it
+        is applied to both Fock blocks.  Placing zero halfway between the
+        occupied and virtual numerical ranges avoids large intermediate
+        exponentials when ghost functions create a wide virtual spectrum.
+        """
+        _, upper_o = cls._symmetric_spectral_bounds(Foo)
+        lower_v, _ = cls._symmetric_spectral_bounds(Fvv)
+        shift = 0.5 * (upper_o + lower_v)
+        Foo_action = np.asarray(Foo) - shift * np.eye(
+            Foo.shape[0], dtype=np.asarray(Foo).dtype
+        )
+        Fvv_action = np.asarray(Fvv) - shift * np.eye(
+            Fvv.shape[0], dtype=np.asarray(Fvv).dtype
+        )
+        return Foo_action, Fvv_action
 
     @classmethod
     def _chebyshev_exponentials(cls, matrix, scales, tol, max_degree):
@@ -550,11 +592,16 @@ class DFRPASylvester(dfrpa.DFRPA):
 
     @staticmethod
     def _chebyshev_exp_coefficients(scale, center, radius, tol, max_degree):
-        prefactor = np.exp(scale * center)
         beta = scale * radius
-        coefficients = [prefactor * scipy.special.iv(0, beta)]
+        # ive(n, beta) = exp(-abs(beta)) * iv(n, beta).  Combining the
+        # exponential factors before evaluation avoids the 0*inf NaNs caused
+        # by wide ghost-orbital spectra and large Laplace exponents.
+        prefactor = np.exp(scale * center + abs(beta))
+        coefficients = [prefactor * scipy.special.ive(0, beta)]
         for degree in range(1, max_degree + 1):
-            coefficient = 2.0 * prefactor * scipy.special.iv(degree, beta)
+            coefficient = (
+                2.0 * prefactor * scipy.special.ive(degree, beta)
+            )
             coefficients.append(coefficient)
             if abs(coefficient) <= tol * max(1.0, abs(coefficients[0])):
                 return np.asarray(coefficients)
