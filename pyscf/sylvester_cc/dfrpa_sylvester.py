@@ -118,10 +118,7 @@ class DFRPASylvester(dfrpa.DFRPA):
                     f"t1 must have shape {(self.nocc, self.nvir)}, got {t1.shape}"
                 )
 
-        Y = np.zeros(
-            (self._eris.Lvo.shape[0], quad_t2.nlap, self.nvir, self.nocc),
-            dtype=dtype,
-        )
+        Y = self.initialize_Y(quad_t2)
 
         adiis = None
         if self.diis:
@@ -421,6 +418,13 @@ class DFRPASylvester(dfrpa.DFRPA):
         self._validate_dressed_gaps(Foo_dressed, Fvv_dressed, quad, 2, "doubles")
         return self.get_sylvester_laplace_matrix_factors(
             Jvo, Foo_dressed, Fvv_dressed, quad
+        )
+
+    def initialize_Y(self, quad):
+        """initialize doubles, optionally reusing all iteration intermediates."""
+        self._validate_dressed_gaps(self._eris.foo, self._eris.fvv, quad, 2, "doubles")
+        return self.get_sylvester_laplace_matrix_factors(
+            self._eris.Lvo, self._eris.foo, self._eris.fvv, quad
         )
 
     def get_omega0_factorized(self, X, Xvo, Xvo_t2, Fov, Y):
