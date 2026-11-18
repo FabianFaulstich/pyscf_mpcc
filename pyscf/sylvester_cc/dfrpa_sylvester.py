@@ -14,6 +14,9 @@ Passing ``ladder_mode="perturbative"`` leaves the Sylvester iterations
 ladder-free and adds the full ladder energy correction after convergence.  Its
 ladder residual is assembled from the stored factors without applying the
 dense ladder operator to ``t2``.
+
+Passing ``ladder_mode="exchange_perturbative"`` additionally evaluates the
+nonlinear exchange energy from the converged factors.
 """
 
 from pathlib import Path
@@ -70,10 +73,15 @@ class DFRPASylvester(dfrpa.DFRPA):
         # DFRPA equations unless a ladder mode is explicitly requested.
         kwargs.setdefault("ladder_mode", None)
         super().__init__(mf, eris, **kwargs)
-        if self.ladder_mode not in (None, "perturbative"):
+        if self.ladder_mode not in (
+            None,
+            "perturbative",
+            "exchange_perturbative",
+        ):
             raise ValueError(
-                "DFRPASylvester supports ladder_mode=None or "
-                "ladder_mode='perturbative'"
+                "DFRPASylvester supports ladder_mode=None, "
+                "ladder_mode='perturbative', or "
+                "ladder_mode='exchange_perturbative'"
             )
 
         self.verbose = getattr(mf, "verbose", logger.NOTE)
@@ -421,6 +429,53 @@ class DFRPASylvester(dfrpa.DFRPA):
         energy = 2.0 * lib.einsum("ijab,ijab", t2, ladder_res)
         energy -= lib.einsum("ijab,ijba", t2, ladder_res)
         return energy.real
+
+    def non_linear_exchange(self, Y):
+        """Evaluate nonlinear exchange from flattened converged factors.
+
+        The auxiliary and Laplace indices of ``Y`` are flattened into one
+        rank index.  Each pair of factor contractions replaces one dense
+        ``t2`` occurrence, and the final spin-adapted energy is contracted
+        directly with two more factor pairs.  No dense ``t2`` or rank-squared
+        intermediate is formed.  The leading rank-dependent cost is
+        ``O(rank * nocc**2 * nvir**2)``.
+        """
+        Y = self._flatten_factors(Y)
+
+        interaction = lib.einsum(
+            "Lne,Lmf->nmef", self._eris.Lov, self._eris.Lov
+        )
+
+        # interaction * t2[j,n,b,f]
+        tmp_Rme = lib.einsum("nmef,Rfn->Rme", interaction, Y)
+        del interaction
+        tmp_mbej = -lib.einsum("Rme,Rbj->mbej", tmp_Rme, Y)
+        del tmp_Rme
+
+        # -tmp_mbej * t2[i,m,a,e]
+        tmp_Sbj = lib.einsum("mbej,Sem->Sbj", tmp_mbej, Y)
+        del tmp_mbej
+        tmp_ijab = lib.einsum("Sbj,Sai->ijab", tmp_Sbj, Y)
+        del tmp_Sbj
+
+        # Pair symmetry gives exchange_res = 2*tmp_ijab.  Contract the
+        # spin-adapted outer amplitude directly from its factors:
+        #   E = 4<t2,tmp> - 2<t2.swapaxes(2,3),tmp>.
+        direct_Rjb = lib.einsum("ijab,Rai->Rjb", tmp_ijab, Y)
+        direct = lib.einsum("Rjb,Rbj->", direct_Rjb, Y)
+        del direct_Rjb
+        exchange_Rja = lib.einsum("ijab,Rbi->Rja", tmp_ijab, Y)
+        exchange = lib.einsum("Rja,Raj->", exchange_Rja, Y)
+        return (-4.0 * direct + 2.0 * exchange).real
+
+    def _exchange_pert_energy(self, t2):
+        del t2
+        if self._Y is None:
+            raise RuntimeError(
+                "factorized nonlinear exchange requires converged Y "
+                "factors; call kernel() first"
+            )
+        return self.non_linear_exchange(self._Y)
 
     def solve_doubles(self, t1, Y, quad, intermediates=None):
         """Solve doubles, optionally reusing all iteration intermediates."""
