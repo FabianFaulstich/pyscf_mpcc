@@ -11,7 +11,8 @@ class DFRPA:
     ``Jvv`` to an externally selected active-particle space.  ``full``
     evaluates the complete ladder self-consistently.  ``perturbative``
     converges the ladder-free amplitudes and adds the full-ladder energy
-    correction only after convergence.
+    correction only after convergence.  ``exchange_perturbative`` also adds
+    the nonlinear exchange correction to the perturbative ladder energy.
     """
 
     def __init__(self, mf, eris, **kwargs):
@@ -34,10 +35,11 @@ class DFRPA:
             "active_jvv",
             "full",
             "perturbative",
+            "exchange_perturbative",
         ):
             raise ValueError(
                 "ladder_mode must be None, 'active_jvv', 'full', or "
-                "'perturbative'"
+                "'perturbative', or 'exchange_perturbative'"
             )
         self.ladder_mode = ladder_mode
 
@@ -58,9 +60,14 @@ class DFRPA:
         self.frozen = getattr(eris, "frozen", None)
         self._e_corr = None
         self._e_ladder_pert = 0.0
+        self._e_exchange_pert = 0.0
         self.converged = False
         self.iterations = 0
         self.residual = np.inf
+
+    @property
+    def e_corr(self):
+        return self._e_corr
 
     @property
     def e_tot(self):
@@ -94,6 +101,11 @@ class DFRPA:
     def e_ladder_pert(self):
         """Most recently evaluated perturbative ladder correction."""
         return float(self._e_ladder_pert)
+
+    @property
+    def e_exchange_pert(self):
+        """Most recently evaluated nonlinear exchange correction."""
+        return float(self._e_exchange_pert)
 
     @staticmethod
     def _validate_active_indices(indices, size, name):
@@ -300,7 +312,11 @@ class DFRPA:
     def ladder_contraction(self, t2, Joo, Jvv):
         if self.ladder_mode is None:
             return np.zeros_like(t2)
-        if self.ladder_mode in ("full", "perturbative"):
+        if self.ladder_mode in (
+            "full",
+            "perturbative",
+            "exchange_perturbative",
+        ):
             return self.ladder_contraction_full(t2, Joo, Jvv)
 
         result = self.ladder_contraction_active_jvv(
@@ -346,6 +362,24 @@ class DFRPA:
         energy -= lib.einsum("ijab,ijba", t2, ladder_res)
         return energy.real
 
+
+    def non_linear_exchange(self, t2):
+        """Return the post-convergence nonlinear exchange correction."""
+        Vnemf = lib.einsum("Lne, Lmf -> nmef", self._eris.Lov, self._eris.Lov)
+        Imbej = lib.einsum("nmef, jnbf -> mbej", Vnemf, t2)
+        del Vnemf
+        tmp = -lib.einsum("mbej, imae -> ijab", Imbej, t2)
+        del Imbej
+        exchange_res = tmp + tmp.transpose(1, 0, 3, 2)
+        energy = 2.0 * lib.einsum("ijab,ijab", t2, exchange_res)
+        energy -= lib.einsum("ijab,ijba", t2, exchange_res)
+        return energy.real
+
+    def _exchange_pert_energy(self, t2):
+        """Hook allowing factorized solvers to supply their own amplitudes."""
+        return self.non_linear_exchange(t2)
+
+
     def _full_ladder_intermediates(self, t1):
         """Build full ``Joo`` and ``Jvv`` only for the energy correction."""
         Xoo = lib.einsum("Lia,ja->Lij", self._eris.Lov, t1)
@@ -368,8 +402,15 @@ class DFRPA:
         energy += 2.0 * lib.einsum("ijab,iajb", tau, eris_ovov)
         energy -= lib.einsum("ijab,ibja", tau, eris_ovov)
         self._e_ladder_pert = 0.0
-        if self.ladder_mode == "perturbative":
+        self._e_exchange_pert = 0.0
+        if self.ladder_mode in (
+            "perturbative",
+            "exchange_perturbative",
+        ):
             Joo, Jvv = self._full_ladder_intermediates(t1)
             self._e_ladder_pert = self.ladder_pert_energy(t2, Joo, Jvv)
             energy += self._e_ladder_pert
+        if self.ladder_mode == "exchange_perturbative":
+            self._e_exchange_pert = self._exchange_pert_energy(t2)
+            energy += self._e_exchange_pert
         return energy.real
